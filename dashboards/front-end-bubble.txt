@@ -654,7 +654,7 @@
               action: call-service
               service: button.press
               target:
-                entity_id: button.mm75dxb_start_air_conditioner
+                entity_id: button.r5_start_air_conditioner
           styles: .bubble-icon-container{color:green !important;}
         - type: custom:bubble-card
           card_type: button
@@ -663,7 +663,10 @@
           icon: mdi:fan-off
           button_action:
             tap_action:
-              action: none
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.r5_stop_air_conditioner
           styles: .bubble-icon-container{color:red !important;}
     - type: custom:bubble-card
       card_type: pop-up

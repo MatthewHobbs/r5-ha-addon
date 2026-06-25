@@ -46,9 +46,10 @@ project (minus the legacy `_api`/`_mi` suffixes):
 - Last charge: `…_last_charge_start/end`, `…_start_soc/end_soc`, `…_duration_min`,
   `…_recovered_pct/recovered_kwh`, `…_average_power`, `…_type`.
 - Health: `binary_sensor.r5_api_auth_failure`, `…_data_stale`, `…_plug_suspect`.
-- Actions: **Start Charging**, **Flash Lights**, and **Sound Horn** buttons
-  (`button.r5_start_charging` / `button.r5_flash_lights` / `button.r5_sound_horn`) — all
-  native, so no official Renault integration is needed for these tiles.
+- Actions (5 native buttons — **no official Renault integration required**):
+  **Start Charging**, **Flash Lights**, **Sound Horn**, **Start Air Conditioner**,
+  **Stop Air Conditioner** (`button.r5_start_charging` / `…_flash_lights` /
+  `…_sound_horn` / `…_start_air_conditioner` / `…_stop_air_conditioner`).
 
 ### Cabin temperature
 
@@ -56,12 +57,15 @@ The R5's HVAC endpoint populates `internalTemperature`, but often only shortly a
 HVAC/preconditioning activity — so `sensor.r5_cabin_temperature` may read unavailable
 between sessions. That's expected.
 
-### What's native vs. not
+### Self-contained — no official Renault integration
 
-**Native** (the add-on sends these directly via `renault-api`): Start Charging, Flash
-Lights, Sound Horn. **Not offered:** charge-stop (the platform doesn't support it) and
-HVAC start/stop + heated-seat presets — those still require the official Renault
-integration (or Topolino's automations) if you want them.
+Every control on the dashboards is sent **natively** by the add-on: Start Charging, Flash
+Lights, Sound Horn, HVAC Start and HVAC Stop. You do **not** need the official Renault
+integration installed. The only thing the platform doesn't expose is **charge-stop**, so
+there's no charge-stop button. (HVAC-stop works but, per the platform, can be flaky.)
+
+The optional **test-mode** preview and **pretty-location** sensor are separate HA helper
+packages (not the official integration) — install them only if you want those extras.
 
 ### Kamereon account id
 
