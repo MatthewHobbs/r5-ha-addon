@@ -51,7 +51,7 @@ STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
 # Device name "R5" is deliberate: HA builds entity_ids from slug(device + entity name) and
 # ignores object_id, so this yields sensor.r5_<name> (what the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 
 _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
 
@@ -473,16 +473,22 @@ async def run_command(cmd):
 
 
 # --- Debug API dump (set debug_dump: true on the Configuration page) ----------------
-# Read-only endpoints tried when dumping everything the API exposes for this car.
+# Vehicle-telemetry endpoints only. Deliberately excludes get_location (GPS),
+# get_contracts and get_notification_settings — those carry location / contact / account
+# PII with no sensor-mapping diagnostic value.
 _DEBUG_METHODS = [
     "get_details", "get_battery_status", "get_battery_soc", "get_cockpit",
-    "get_hvac_status", "get_hvac_settings", "get_location", "get_charge_schedule",
-    "get_charge_mode", "get_charging_settings", "get_tyre_pressure", "get_lock_status",
-    "get_res_state", "get_contracts", "get_notification_settings",
+    "get_hvac_status", "get_hvac_settings", "get_charge_schedule", "get_charge_mode",
+    "get_charging_settings", "get_tyre_pressure", "get_lock_status", "get_res_state",
 ]
-# Keys masked regardless of value — identifiers / contact info (not telemetry).
-_DEBUG_REDACT_KEYS = {"registrationnumber", "vin", "tcucode", "radiocode", "siret",
-                      "msisdn", "phonenumber", "phone", "email", "firstname", "lastname"}
+# Keys masked regardless of value type — identifiers / contact / location fields.
+_DEBUG_REDACT_KEYS = {
+    "registrationnumber", "vin", "tcucode", "radiocode", "siret", "msisdn", "phonenumber",
+    "phone", "mobile", "email", "firstname", "lastname", "gigyaid", "personid", "accountid",
+    "iccid", "imei", "contractid", "address", "postcode", "zipcode", "city", "country",
+    "gpslatitude", "gpslongitude", "latitude", "longitude",
+}
+_DEBUG_STATE = {"dumped": False}
 
 
 def debug_enabled():
@@ -490,9 +496,7 @@ def debug_enabled():
 
 
 def _debug_redact(obj, secrets):
-    """Recursively scrub identifiers + configured VIN/account/username from a payload.
-    Telemetry (battery, GPS, etc.) is kept — only IDs/contact fields and secret values
-    are masked, so the dump shows the data without leaking who/which car it is."""
+    """Mask identifiers (by key, any value type) + configured secret values; keep telemetry."""
     if isinstance(obj, dict):
         return {k: ("***" if k.lower() in _DEBUG_REDACT_KEYS else _debug_redact(v, secrets))
                 for k, v in obj.items()}
@@ -502,11 +506,14 @@ def _debug_redact(obj, secrets):
         for s in secrets:
             if s and s in obj:
                 obj = obj.replace(s, "***")
+        return obj
+    if any(s and s == str(obj) for s in secrets):   # secret value held as a number (e.g. id)
+        return "***"
     return obj
 
 
 async def dump_api(vehicle):
-    """DEBUG: fetch every readable endpoint, redact IDs/secrets, log the lot. Never fatal."""
+    """DEBUG: fetch the telemetry endpoints, mask IDs/secrets, log the lot. Never fatal."""
     secrets = [v for v in (cfg("R5_VIN"), cfg("R5_ACCOUNT_ID"), cfg("R5_USERNAME")) if v]
     out = {}
     for meth in _DEBUG_METHODS:
@@ -515,20 +522,34 @@ async def dump_api(vehicle):
             continue
         try:
             res = await fn()
-            raw = res if isinstance(res, dict) else getattr(res, "raw_data", None)
-            out[meth] = _debug_redact(raw if raw is not None else str(res), secrets)
+            if isinstance(res, dict):
+                raw = res
+            elif isinstance(res, list):
+                raw = [getattr(x, "raw_data", x) for x in res]
+            else:
+                raw = getattr(res, "raw_data", None) or {"_repr": str(res)}
+            out[meth] = _debug_redact(raw, secrets)
         except Exception as err:  # noqa: BLE001
             out[meth] = {"_error": f"{type(err).__name__}: {err}"}
-    LOG.info("API DEBUG DUMP (secrets/IDs redacted):\n%s",
-             json.dumps(out, indent=2, default=str, ensure_ascii=False))
+    LOG.warning("API DEBUG DUMP — may contain personal data; redaction is best-effort, do NOT "
+                "paste publicly. One-shot per restart; turn debug_dump off when done.\n%s",
+                json.dumps(out, indent=2, default=str, ensure_ascii=False))
+
+
+async def maybe_dump_api(vehicle):
+    """Run the debug dump once per restart when debug_dump is on (not every poll)."""
+    if debug_enabled() and not _DEBUG_STATE["dumped"]:
+        _DEBUG_STATE["dumped"] = True
+        await dump_api(vehicle)
 
 
 def detect_plug_suspect(state, plug, mileage, soc, charging):
-    """Connected-but-driven / Disconnected-but-charging detection. Returns 'on'/'off'."""
-    prev = state.get("plug_prev")
-    if plug == 1 and (prev != 1 or "plug_base_ts" not in state):
+    """Connected-but-driven / Disconnected-but-charging detection. `plug` is a PlugState
+    (matches the rest of the poll). Returns 'on'/'off'. State stores a JSON-safe string."""
+    plugged = plug == PlugState.PLUGGED
+    if plugged and (state.get("plug_prev") != "plugged" or "plug_base_ts" not in state):
         state.update(plug_base_mileage=mileage, plug_base_soc=soc, plug_base_ts=now_ts())
-    state["plug_prev"] = plug
+    state["plug_prev"] = "plugged" if plugged else "unplugged"
 
     drove = False
     bts, bkm, bsoc = state.get("plug_base_ts"), state.get("plug_base_mileage"), state.get("plug_base_soc")
@@ -536,7 +557,7 @@ def detect_plug_suspect(state, plug, mileage, soc, charging):
         age = now_ts() - bts
         if PLUG_MIN_AGE <= age <= PLUG_MAX_AGE:
             drove = (mileage - bkm >= PLUG_KM_DELTA) and (bsoc - soc >= PLUG_SOC_DROP)
-    stuck = (plug == 1 and drove) or (plug == 0 and charging)
+    stuck = (plugged and drove) or (plug == PlugState.UNPLUGGED and charging)
     return "on" if stuck else "off"
 
 
@@ -587,7 +608,8 @@ async def resolve_account(client):
     person = await client.get_person()
     for account in person.accounts:
         if account.accountType == "MYRENAULT":
-            LOG.info("Auto-discovered account id: %s", account.accountId)
+            LOG.info("Auto-discovered MYRENAULT account")
+            LOG.debug("Account id: %s", account.accountId)
             return account.accountId
     raise RuntimeError("No MYRENAULT account found and R5_ACCOUNT_ID not set")
 
@@ -675,10 +697,9 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
 
     data.update(update_charge_session(state, battery, capacity_kwh, charging))
     data["charging"] = "on" if charging else "off"
-    data["plug_suspect"] = detect_plug_suspect(state, battery.plugStatus, mileage,
-                                                battery.batteryLevel, charging)
-    if debug_enabled():
-        await dump_api(vehicle)
+    data["plug_suspect"] = detect_plug_suspect(state, plug, mileage,
+                                               battery.batteryLevel, charging)
+    await maybe_dump_api(vehicle)
     return data, location_attrs
 
 
@@ -698,6 +719,10 @@ async def main():
     stale_secs = int(cfg("R5_STALE_HOURS", "6") or "6") * 3600
 
     _LOOP = asyncio.get_running_loop()
+    stop = asyncio.Event()
+    for sig in (signal.SIGTERM, signal.SIGINT):   # honour shutdown during startup too
+        _LOOP.add_signal_handler(sig, stop.set)
+
     state = load_state()
     vsession = VehicleSession(locale)
     supported = await detect_supported(vsession)
@@ -705,10 +730,7 @@ async def main():
     publish_discovery(client, supported, dist_unit)
     await deploy.run_deploy()  # optional dashboard auto-deploy; never fatal
 
-    stop = asyncio.Event()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        _LOOP.add_signal_handler(sig, stop.set)
-
+    fails = 0
     while not stop.is_set():
         try:
             data, location_attrs = await poll_once(vsession, state, capacity, supported, dist_unit)
@@ -721,11 +743,13 @@ async def main():
                 client.publish(TRACKER_STATE_TOPIC, "online", retain=True)
             client.publish(AVAIL_TOPIC, "online", retain=True)
             save_state(state)
+            fails = 0
             LOG.info("Published: %s%% battery, plug=%s, charging=%s, suspect=%s",
-                     data.get("battery_level"), data.get("plug_status"),
+                     data.get("battery_level"), data.get("charger_plug_status"),
                      data.get("charging"), data.get("plug_suspect"))
         except Exception as err:  # noqa: BLE001
-            LOG.error("Poll failed: %s", err)
+            fails += 1
+            LOG.error("Poll failed (%d in a row): %s", fails, err)
             await vsession.invalidate()   # next cycle re-authenticates (self-heal)
             last_ok = state.get("last_success", 0)
             stale = (now_ts() - last_ok) > stale_secs if last_ok else True
@@ -735,8 +759,10 @@ async def main():
                 "data_stale": "on" if stale else "off",
             }), retain=True)
             client.publish(AVAIL_TOPIC, "online", retain=True)
+        # exponential backoff on repeated failures (avoid a re-auth storm), capped at 30 min
+        delay = interval if fails == 0 else min(interval * 2 ** (fails - 1), 1800)
         try:
-            await asyncio.wait_for(stop.wait(), timeout=interval)
+            await asyncio.wait_for(stop.wait(), timeout=delay)
         except asyncio.TimeoutError:
             pass
 
