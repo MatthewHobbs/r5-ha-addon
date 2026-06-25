@@ -7,11 +7,13 @@ A290 add-on this is ported from (R5 E-Tech and A290 share the CMF-BEV / KCM plat
 
 Read endpoints: battery-status, cockpit, HVAC, location, ev/settings (preconditioning),
 ev/soc-levels, plus optional charge-mode and tyre-pressure (gated on supports_endpoint).
-Command buttons: Start Charging (KCM instant-charge), Flash Lights, Sound Horn, and HVAC
-Start/Stop — all sent natively via renault-api, so the **official Renault integration is
-not required at all**. HVAC-start targets the car's configured preconditioning temperature
-(falling back to 21°C). Plug stuck-detection + charge-session tracking + health sensors
-persist to /data/state.json.
+Command buttons (ACTION_BUTTONS): Start Charging (KCM instant-charge), Flash Lights, Sound
+Horn, and HVAC Start/Stop — all sent natively via renault-api, so the **official Renault
+integration is not required at all**. Each button is gated on supports_endpoint(), so a
+control the platform forbids is never shown (all five are supported on the R5). HVAC-start
+targets the car's configured preconditioning temperature (falling back to 21°C). One cached
+login is reused across polls (VehicleSession) rather than re-authenticating every cycle.
+Plug stuck-detection + charge-session tracking + health sensors persist to /data/state.json.
 
 Platform caveats (R5 E-Tech / CMF-BEV, KCM): batteryCapacity is always 0 (we use the
 configured capacity); chargingStatus is a float ChargeState (0.0/0.2/1.0/-1.0/… — decoded
@@ -43,18 +45,14 @@ STATE_TOPIC = f"{NODE}/state"
 ATTR_TOPIC = f"{NODE}/location/attributes"
 TRACKER_STATE_TOPIC = f"{NODE}/location/state"
 AVAIL_TOPIC = f"{NODE}/availability"
-CMD_CHARGE_START = f"{NODE}/cmd/charge_start"
-CMD_HORN = f"{NODE}/cmd/horn"
-CMD_LIGHTS = f"{NODE}/cmd/lights"
-CMD_HVAC_START = f"{NODE}/cmd/hvac_start"
-CMD_HVAC_STOP = f"{NODE}/cmd/hvac_stop"
+CMD_PREFIX = f"{NODE}/cmd/"          # button commands: renault_5/cmd/<suffix>
 STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
 
 # Device name "R5" (not "Renault 5") is deliberate: HA derives entity_ids from
 # slug(device_name + " " + entity_name), ignoring the MQTT object_id — so this yields
 # sensor.r5_<name> (the modernised Topolino naming the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
 
@@ -135,6 +133,21 @@ OPTIONAL_ENDPOINTS = {
                  "r5_tyre_pressure_rl", "r5_tyre_pressure_rr"],
 }
 
+# Command buttons, keyed by MQTT command-topic suffix (renault_5/cmd/<key>) ->
+# (object_id, discovery node-segment, friendly name, icon, the renault-api action endpoint).
+# Each button is published only when supports_endpoint(<endpoint>) is true — gated exactly
+# like the optional sensors above, so a control the platform forbids is never shown and any
+# retained config is cleared. On the R5 (R5E1VE) all five resolve to supported endpoints
+# (incl. charge-start, which routes via ev/settings); the gating is a safety net and keeps
+# parity with the A290 add-on, where charge-start is forbidden and therefore hidden.
+ACTION_BUTTONS = {
+    "charge_start": ("r5_charge_start", "charge_start", "Start Charging", "mdi:ev-station", "actions/charge-start"),
+    "lights":       ("r5_flash_lights", "flash_lights", "Flash Lights", "mdi:car-light-high", "actions/lights-start"),
+    "horn":         ("r5_sound_horn", "sound_horn", "Sound Horn", "mdi:bullhorn", "actions/horn-start"),
+    "hvac_start":   ("r5_start_air_conditioner", "start_air_conditioner", "Start Air Conditioner", "mdi:air-conditioner", "actions/hvac-start"),
+    "hvac_stop":    ("r5_stop_air_conditioner", "stop_air_conditioner", "Stop Air Conditioner", "mdi:fan-off", "actions/hvac-stop"),
+}
+
 # Sensor object_ids a previous version published but no longer ships. Their retained
 # discovery config is cleared on startup so upgraded installs don't keep a dead entity.
 RETIRED_SENSORS = []
@@ -212,13 +225,10 @@ def save_state(state):
 
 
 def _on_message(client, userdata, msg):
-    if _LOOP is None:
-        return
-    coro = {CMD_CHARGE_START: do_charge_start, CMD_HORN: do_horn, CMD_LIGHTS: do_lights,
-            CMD_HVAC_START: do_hvac_start, CMD_HVAC_STOP: do_hvac_stop}.get(msg.topic)
-    if coro is not None:
-        LOG.info("Received command: %s", msg.topic)
-        asyncio.run_coroutine_threadsafe(coro(), _LOOP)
+    if _LOOP is not None and msg.topic.startswith(CMD_PREFIX):
+        cmd = msg.topic[len(CMD_PREFIX):]
+        LOG.info("Received command: %s", cmd)
+        asyncio.run_coroutine_threadsafe(run_command(cmd), _LOOP)
 
 
 def mqtt_connect():
@@ -229,8 +239,7 @@ def mqtt_connect():
     client.on_message = _on_message
     LOG.info("Connecting to MQTT %s:%s", cfg("MQTT_HOST"), cfg("MQTT_PORT", "1883"))
     client.connect(cfg("MQTT_HOST"), int(cfg("MQTT_PORT", "1883") or "1883"), keepalive=60)
-    for topic in (CMD_CHARGE_START, CMD_HORN, CMD_LIGHTS, CMD_HVAC_START, CMD_HVAC_STOP):
-        client.subscribe(topic)
+    client.subscribe(f"{CMD_PREFIX}#")   # all button commands
     client.loop_start()
     return client
 
@@ -275,22 +284,24 @@ def publish_discovery(client, supported_eps, dist_unit):
                "state_topic": TRACKER_STATE_TOPIC, "json_attributes_topic": ATTR_TOPIC,
                "availability_topic": AVAIL_TOPIC, "source_type": "gps", "device": DEVICE}
     client.publish(f"{DISCOVERY_PREFIX}/device_tracker/{NODE}/location/config", json.dumps(tracker), retain=True)
-    # Command buttons (entity_id = slug(device + name), e.g. button.r5_flash_lights).
-    # Flash Lights / Sound Horn are supported on this platform, so the add-on provides
-    # them natively — no official Renault integration needed for these tiles.
-    buttons = [
-        ("Start Charging", "r5_charge_start", "charge_start", CMD_CHARGE_START, "mdi:ev-station"),
-        ("Flash Lights", "r5_flash_lights", "flash_lights", CMD_LIGHTS, "mdi:car-light-high"),
-        ("Sound Horn", "r5_sound_horn", "sound_horn", CMD_HORN, "mdi:bullhorn"),
-        ("Start Air Conditioner", "r5_start_air_conditioner", "start_ac", CMD_HVAC_START, "mdi:air-conditioner"),
-        ("Stop Air Conditioner", "r5_stop_air_conditioner", "stop_ac", CMD_HVAC_STOP, "mdi:fan-off"),
-    ]
-    for name, oid, node, cmd, icon in buttons:
-        conf = {"name": name, "object_id": oid, "unique_id": oid, "command_topic": cmd,
-                "availability_topic": AVAIL_TOPIC, "icon": icon, "device": DEVICE}
-        client.publish(f"{DISCOVERY_PREFIX}/button/{NODE}/{node}/config", json.dumps(conf), retain=True)
-    LOG.info("Published discovery: %d sensors (%d unsupported cleared), %d binary_sensors, device_tracker, %d buttons",
-             published, len(skip), len(BINARY_SENSORS), len(buttons))
+    # Command buttons (entity_id = slug(device + name), e.g. button.r5_flash_lights), each
+    # gated on supports_endpoint(<endpoint>): published when supported, otherwise the
+    # retained config is cleared so a forbidden control never lingers. All five are
+    # supported on the R5, so the add-on provides them natively — no official Renault
+    # integration needed for these tiles.
+    shipped = []
+    for cmd_suffix, (oid, node, name, icon, ep) in ACTION_BUTTONS.items():
+        topic = f"{DISCOVERY_PREFIX}/button/{NODE}/{node}/config"
+        if ep in supported_eps:
+            conf = {"name": name, "object_id": oid, "unique_id": oid,
+                    "command_topic": f"{CMD_PREFIX}{cmd_suffix}", "availability_topic": AVAIL_TOPIC,
+                    "icon": icon, "device": DEVICE}
+            client.publish(topic, json.dumps(conf), retain=True)
+            shipped.append(node)
+        else:
+            client.publish(topic, "", retain=True)
+    LOG.info("Published discovery: %d sensors (%d unsupported cleared), %d binary_sensors, device_tracker, buttons=%s",
+             published, len(skip), len(BINARY_SENSORS), shipped or "none")
 
 
 KM_TO_MI = 0.621371
@@ -355,67 +366,124 @@ async def _login_vehicle(websession, locale):
     return await account.get_api_vehicle(cfg("R5_VIN"))
 
 
-async def detect_supported(locale):
-    """Return the set of optional endpoint names this car exposes (assume all on error)."""
+class VehicleSession:
+    """One logged-in renault-api vehicle + its aiohttp session, reused across polls.
+
+    Earlier versions logged in (full Gigya auth) on *every* poll — ~288 logins/day at the
+    default 300 s interval, which risks Renault-side throttling. Here the websession and
+    vehicle are created once and reused; renault-api refreshes its own access tokens as
+    they expire. ``invalidate()`` drops the cached login (closing the socket) so the next
+    ``vehicle()`` re-authenticates — the poll loop calls it after any failed poll so a
+    stale token or a dropped connection always self-heals on the following cycle.
+
+    Owned solely by the poll loop (detect_supported + poll_once). Button presses keep their
+    own short-lived login in run_command, so there's no concurrent use of this session.
+    """
+
+    def __init__(self, locale):
+        self.locale = locale
+        self._websession = None
+        self._vehicle = None
+
+    async def vehicle(self):
+        if self._vehicle is None:
+            self._websession = aiohttp.ClientSession()
+            try:
+                self._vehicle = await _login_vehicle(self._websession, self.locale)
+            except Exception:
+                await self.invalidate()   # never leak a half-open session
+                raise
+            LOG.info("Logged in to the Renault API (session cached for reuse)")
+        return self._vehicle
+
+    async def invalidate(self):
+        """Drop the cached login so the next vehicle() re-authenticates."""
+        if self._websession is not None:
+            try:
+                await self._websession.close()
+            except Exception:  # noqa: BLE001
+                pass
+        self._websession = None
+        self._vehicle = None
+
+    async def close(self):
+        """Release the session at shutdown."""
+        await self.invalidate()
+
+
+async def _supports(vehicle, ep):
+    """supports_endpoint() is async in renault-api 0.5.x; tolerate a sync return too."""
+    res = vehicle.supports_endpoint(ep)
+    return (await res) if inspect.isawaitable(res) else res
+
+
+async def detect_supported(vsession):
+    """Probe which optional endpoints this car exposes (reusing the cached login).
+
+    Returns a set of endpoint names. The GET data endpoints (OPTIONAL_ENDPOINTS) default
+    to supported if detection fails — they're read-only and harmless if empty. The action
+    endpoints behind ACTION_BUTTONS default to *unsupported* so a platform that forbids one
+    never gets a dead control button.
+    """
     supported = set(OPTIONAL_ENDPOINTS)
+    action_eps = {ep for _oid, _node, _name, _icon, ep in ACTION_BUTTONS.values()}
     try:
-        async with aiohttp.ClientSession() as websession:
-            vehicle = await _login_vehicle(websession, locale)
-            for ep in list(OPTIONAL_ENDPOINTS):
-                try:
-                    res = vehicle.supports_endpoint(ep)
-                    ok = (await res) if inspect.isawaitable(res) else res
-                    if not ok:
-                        supported.discard(ep)
-                except Exception as err:  # noqa: BLE001
-                    LOG.warning("supports_endpoint(%s) check failed: %s", ep, err)
+        vehicle = await vsession.vehicle()
+        for ep in list(OPTIONAL_ENDPOINTS):
+            try:
+                if not await _supports(vehicle, ep):
+                    supported.discard(ep)
+            except Exception as err:  # noqa: BLE001
+                LOG.warning("supports_endpoint(%s) check failed: %s", ep, err)
+        for ep in sorted(action_eps):
+            try:
+                if await _supports(vehicle, ep):
+                    supported.add(ep)
+            except Exception as err:  # noqa: BLE001
+                LOG.warning("supports_endpoint(%s) check failed: %s", ep, err)
         LOG.info("Supported optional endpoints: %s", sorted(supported))
     except Exception as err:  # noqa: BLE001
-        LOG.warning("Endpoint-support detection failed (publishing all): %s", err)
+        await vsession.invalidate()   # don't keep a half-broken login
+        LOG.warning("Endpoint-support detection failed (publishing sensors, hiding action buttons): %s", err)
     return supported
 
 
-async def _send_action(label, action):
-    """Log in and invoke a one-shot vehicle action (charge-start / horn / lights)."""
+async def _hvac_start_action(vehicle):
+    """set_ac_start needs a target temp; use the car's configured preconditioning
+    temperature (what the dashboard shows as "Desired Temp"), falling back to 21°C."""
+    temp = 21.0
+    try:
+        p = _find_precond(await vehicle.get_charge_schedule())
+        temp = float(p.get("preconditioningTemperature") or 21)
+    except Exception:  # noqa: BLE001
+        pass
+    await vehicle.set_ac_start(temp)
+
+
+# Command-topic suffix -> coroutine taking the logged-in vehicle. Keys match ACTION_BUTTONS.
+COMMAND_ACTIONS = {
+    "charge_start": lambda v: v.set_charge_start(),
+    "horn":         lambda v: v.start_horn(),
+    "lights":       lambda v: v.start_lights(),
+    "hvac_start":   _hvac_start_action,
+    "hvac_stop":    lambda v: v.set_ac_stop(),
+}
+
+
+async def run_command(cmd):
+    """Dispatch an MQTT button press to its renault-api action; never fatal."""
+    action = COMMAND_ACTIONS.get(cmd)
+    if action is None:
+        LOG.warning("Ignoring unknown command: %s", cmd)
+        return
     locale = cfg("R5_LOCALE", "en_GB")
     try:
         async with aiohttp.ClientSession() as websession:
             vehicle = await _login_vehicle(websession, locale)
             await action(vehicle)
-        LOG.info("%s sent", label)
+        LOG.info("Command '%s' sent", cmd)
     except Exception as err:  # noqa: BLE001
-        LOG.error("%s failed: %s", label, err)
-
-
-async def do_charge_start():
-    # KCM instant-charge (library routes set_charge_start via ev/settings on this car).
-    await _send_action("Charge-start (KCM instant charge)", lambda v: v.set_charge_start())
-
-
-async def do_horn():
-    await _send_action("Sound-horn", lambda v: v.start_horn())
-
-
-async def do_lights():
-    await _send_action("Flash-lights", lambda v: v.start_lights())
-
-
-async def do_hvac_start():
-    # set_ac_start needs a target temp; use the car's configured preconditioning
-    # temperature (what the dashboard shows as "Desired Temp"), falling back to 21°C.
-    async def _start(v):
-        temp = 21.0
-        try:
-            p = _find_precond(await v.get_charge_schedule())
-            temp = float(p.get("preconditioningTemperature") or 21)
-        except Exception:  # noqa: BLE001
-            pass
-        await v.set_ac_start(temp)
-    await _send_action("HVAC-start", _start)
-
-
-async def do_hvac_stop():
-    await _send_action("HVAC-stop", lambda v: v.set_ac_stop())
+        LOG.error("Command '%s' failed: %s", cmd, err)
 
 
 def detect_plug_suspect(state, plug, mileage, soc, charging):
@@ -487,95 +555,95 @@ async def resolve_account(client):
     raise RuntimeError("No MYRENAULT account found and R5_ACCOUNT_ID not set")
 
 
-async def poll_once(locale, state, capacity_kwh, supported_eps, dist_unit):
-    async with aiohttp.ClientSession() as websession:
-        vehicle = await _login_vehicle(websession, locale)
-        battery = await vehicle.get_battery_status()
-        plug = battery.get_plug_status()                 # decode once (label + flap)
-        charging = is_charging(battery)                  # single source of truth
-        data = {
-            "battery_level": battery.batteryLevel,
-            "battery_autonomy": _dist(battery.batteryAutonomy, dist_unit),
-            "battery_temperature": battery.batteryTemperature,
-            "charging_rate": _num(getattr(battery, "chargingInstantaneousPower", None)),
-            "charging_remaining_time": getattr(battery, "chargingRemainingTime", None),
-            "available_energy": _num(getattr(battery, "batteryAvailableEnergy", None)),
-            "charger_plug_status": _enum_label(plug, PLUG_STATUS_LABELS, getattr(battery, "plugStatus", None)),
-            "charging_flap_status": "Open: Plugged In" if plug == PlugState.PLUGGED else "Closed",
-            # Headline matches the Charging binary sensor: when actively charging (incl.
-            # the power-based fallback) show "Charging"; otherwise the precise ChargeState.
-            "charger_status": "Charging" if charging else charging_status_label(battery),
-            "battery_last_activity": getattr(battery, "timestamp", None) or iso(now_ts()),
-            "drive_side": "RHD" if locale.lower() in RHD_LOCALES else "LHD",
-        }
-        mileage = None   # keep raw km for plug-suspect distance maths
+async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
+    vehicle = await vsession.vehicle()       # cached login, reused across polls
+    locale = vsession.locale
+    battery = await vehicle.get_battery_status()
+    plug = battery.get_plug_status()                 # decode once (label + flap)
+    charging = is_charging(battery)                  # single source of truth
+    data = {
+        "battery_level": battery.batteryLevel,
+        "battery_autonomy": _dist(battery.batteryAutonomy, dist_unit),
+        "battery_temperature": battery.batteryTemperature,
+        "charging_rate": _num(getattr(battery, "chargingInstantaneousPower", None)),
+        "charging_remaining_time": getattr(battery, "chargingRemainingTime", None),
+        "available_energy": _num(getattr(battery, "batteryAvailableEnergy", None)),
+        "charger_plug_status": _enum_label(plug, PLUG_STATUS_LABELS, getattr(battery, "plugStatus", None)),
+        "charging_flap_status": "Open: Plugged In" if plug == PlugState.PLUGGED else "Closed",
+        # Headline matches the Charging binary sensor: when actively charging (incl.
+        # the power-based fallback) show "Charging"; otherwise the precise ChargeState.
+        "charger_status": "Charging" if charging else charging_status_label(battery),
+        "battery_last_activity": getattr(battery, "timestamp", None) or iso(now_ts()),
+        "drive_side": "RHD" if locale.lower() in RHD_LOCALES else "LHD",
+    }
+    mileage = None   # keep raw km for plug-suspect distance maths
+    try:
+        mileage = getattr(await vehicle.get_cockpit(), "totalMileage", None)
+        data["vehicle_mileage"] = _dist(mileage, dist_unit)
+    except Exception as err:  # noqa: BLE001
+        LOG.warning("cockpit unavailable: %s", err)
+    try:
+        hvac = await vehicle.get_hvac_status()
+        data["external_temperature"] = getattr(hvac, "externalTemperature", None)
+        # Unlike the A290, the R5's HVAC endpoint does populate internalTemperature —
+        # though often only shortly after HVAC/preconditioning activity, so it can be
+        # absent (HA shows the entity unavailable when null).
+        data["cabin_temperature"] = getattr(hvac, "internalTemperature", None)
+        data["hvac_status"] = str(getattr(hvac, "hvacStatus", ""))
+        data["hvac_soc_threshold"] = getattr(hvac, "socThreshold", None)
+        data["hvac_last_activity"] = getattr(hvac, "lastUpdateTime", None)
+    except Exception as err:  # noqa: BLE001
+        LOG.warning("hvac unavailable: %s", err)
+    try:
+        sched = await vehicle.get_charge_schedule()   # KCM ev/settings (preconditioning)
+        p = _find_precond(sched)
+        data["preconditioning_temperature"] = p.get("preconditioningTemperature")
+        data["heated_steering_wheel"] = _bool_on(p.get("preconditioningHeatedStrgWheel"))
+        left = p.get("preconditioningHeatedLeftSeat")
+        right = p.get("preconditioningHeatedRightSeat")
+        rhd = locale.lower() in RHD_LOCALES
+        data["heated_seat_driver"] = _bool_on(right if rhd else left)
+        data["heated_seat_passenger"] = _bool_on(left if rhd else right)
+    except Exception as err:  # noqa: BLE001
+        LOG.warning("ev/settings unavailable: %s", err)
+    try:
+        soc_lvl = await vehicle.get_battery_soc()
+        data["soc_max_target"] = getattr(soc_lvl, "socTarget", None)
+        data["soc_min_target"] = getattr(soc_lvl, "socMin", None)
+    except Exception as err:  # noqa: BLE001
+        LOG.warning("battery_soc unavailable: %s", err)
+    if "pressure" in supported_eps:
         try:
-            mileage = getattr(await vehicle.get_cockpit(), "totalMileage", None)
-            data["vehicle_mileage"] = _dist(mileage, dist_unit)
+            tp = await vehicle.get_tyre_pressure()
+            data["tyre_pressure_fl"] = getattr(tp, "flPressure", None)
+            data["tyre_pressure_fr"] = getattr(tp, "frPressure", None)
+            data["tyre_pressure_rl"] = getattr(tp, "rlPressure", None)
+            data["tyre_pressure_rr"] = getattr(tp, "rrPressure", None)
         except Exception as err:  # noqa: BLE001
-            LOG.warning("cockpit unavailable: %s", err)
+            LOG.warning("tyre_pressure unavailable: %s", err)
+    if "charge-mode" in supported_eps:
         try:
-            hvac = await vehicle.get_hvac_status()
-            data["external_temperature"] = getattr(hvac, "externalTemperature", None)
-            # Unlike the A290, the R5's HVAC endpoint does populate internalTemperature —
-            # though often only shortly after HVAC/preconditioning activity, so it can be
-            # absent (HA shows the entity unavailable when null).
-            data["cabin_temperature"] = getattr(hvac, "internalTemperature", None)
-            data["hvac_status"] = str(getattr(hvac, "hvacStatus", ""))
-            data["hvac_soc_threshold"] = getattr(hvac, "socThreshold", None)
-            data["hvac_last_activity"] = getattr(hvac, "lastUpdateTime", None)
+            cm = await vehicle.get_charge_mode()
+            data["charge_mode"] = str(getattr(cm, "chargeMode", "") or "")
         except Exception as err:  # noqa: BLE001
-            LOG.warning("hvac unavailable: %s", err)
-        try:
-            sched = await vehicle.get_charge_schedule()   # KCM ev/settings (preconditioning)
-            p = _find_precond(sched)
-            data["preconditioning_temperature"] = p.get("preconditioningTemperature")
-            data["heated_steering_wheel"] = _bool_on(p.get("preconditioningHeatedStrgWheel"))
-            left = p.get("preconditioningHeatedLeftSeat")
-            right = p.get("preconditioningHeatedRightSeat")
-            rhd = locale.lower() in RHD_LOCALES
-            data["heated_seat_driver"] = _bool_on(right if rhd else left)
-            data["heated_seat_passenger"] = _bool_on(left if rhd else right)
-        except Exception as err:  # noqa: BLE001
-            LOG.warning("ev/settings unavailable: %s", err)
-        try:
-            soc_lvl = await vehicle.get_battery_soc()
-            data["soc_max_target"] = getattr(soc_lvl, "socTarget", None)
-            data["soc_min_target"] = getattr(soc_lvl, "socMin", None)
-        except Exception as err:  # noqa: BLE001
-            LOG.warning("battery_soc unavailable: %s", err)
-        if "pressure" in supported_eps:
-            try:
-                tp = await vehicle.get_tyre_pressure()
-                data["tyre_pressure_fl"] = getattr(tp, "flPressure", None)
-                data["tyre_pressure_fr"] = getattr(tp, "frPressure", None)
-                data["tyre_pressure_rl"] = getattr(tp, "rlPressure", None)
-                data["tyre_pressure_rr"] = getattr(tp, "rrPressure", None)
-            except Exception as err:  # noqa: BLE001
-                LOG.warning("tyre_pressure unavailable: %s", err)
-        if "charge-mode" in supported_eps:
-            try:
-                cm = await vehicle.get_charge_mode()
-                data["charge_mode"] = str(getattr(cm, "chargeMode", "") or "")
-            except Exception as err:  # noqa: BLE001
-                LOG.warning("charge_mode unavailable: %s", err)
+            LOG.warning("charge_mode unavailable: %s", err)
 
-        location_attrs = None
-        try:
-            loc = await vehicle.get_location()
-            data["gps_last_activity"] = getattr(loc, "lastUpdateTime", None)
-            lat, lon = getattr(loc, "gpsLatitude", None), getattr(loc, "gpsLongitude", None)
-            if lat is not None and lon is not None:
-                location_attrs = {"latitude": lat, "longitude": lon, "gps_accuracy": 10,
-                                  "last_update": getattr(loc, "lastUpdateTime", None)}
-        except Exception as err:  # noqa: BLE001
-            LOG.warning("location unavailable: %s", err)
+    location_attrs = None
+    try:
+        loc = await vehicle.get_location()
+        data["gps_last_activity"] = getattr(loc, "lastUpdateTime", None)
+        lat, lon = getattr(loc, "gpsLatitude", None), getattr(loc, "gpsLongitude", None)
+        if lat is not None and lon is not None:
+            location_attrs = {"latitude": lat, "longitude": lon, "gps_accuracy": 10,
+                              "last_update": getattr(loc, "lastUpdateTime", None)}
+    except Exception as err:  # noqa: BLE001
+        LOG.warning("location unavailable: %s", err)
 
-        data.update(update_charge_session(state, battery, capacity_kwh, charging))
-        data["charging"] = "on" if charging else "off"
-        data["plug_suspect"] = detect_plug_suspect(state, battery.plugStatus, mileage,
-                                                    battery.batteryLevel, charging)
-        return data, location_attrs
+    data.update(update_charge_session(state, battery, capacity_kwh, charging))
+    data["charging"] = "on" if charging else "off"
+    data["plug_suspect"] = detect_plug_suspect(state, battery.plugStatus, mileage,
+                                                battery.batteryLevel, charging)
+    return data, location_attrs
 
 
 async def main():
@@ -595,7 +663,8 @@ async def main():
 
     _LOOP = asyncio.get_running_loop()
     state = load_state()
-    supported = await detect_supported(locale)
+    vsession = VehicleSession(locale)
+    supported = await detect_supported(vsession)
     client = mqtt_connect()
     publish_discovery(client, supported, dist_unit)
     await deploy.run_deploy()  # optional dashboard auto-deploy; never fatal
@@ -606,7 +675,7 @@ async def main():
 
     while not stop.is_set():
         try:
-            data, location_attrs = await poll_once(locale, state, capacity, supported, dist_unit)
+            data, location_attrs = await poll_once(vsession, state, capacity, supported, dist_unit)
             state["last_success"] = now_ts()
             data["api_auth_failure"] = "off"
             data["data_stale"] = "off"
@@ -621,6 +690,9 @@ async def main():
                      data.get("charging"), data.get("plug_suspect"))
         except Exception as err:  # noqa: BLE001
             LOG.error("Poll failed: %s", err)
+            # Drop the cached login so the next cycle re-authenticates — recovers from an
+            # expired token or a dropped connection rather than reusing a broken session.
+            await vsession.invalidate()
             last_ok = state.get("last_success", 0)
             stale = (now_ts() - last_ok) > stale_secs if last_ok else True
             auth = any(s in str(err).lower() for s in ("login", "password", "credential", "401", "403"))
@@ -635,6 +707,7 @@ async def main():
             pass
 
     LOG.info("Shutting down")
+    await vsession.close()
     client.publish(AVAIL_TOPIC, "offline", retain=True)
     client.loop_stop()
     client.disconnect()

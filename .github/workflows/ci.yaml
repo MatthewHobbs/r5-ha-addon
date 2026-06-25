@@ -44,6 +44,22 @@ jobs:
         with:
           path: ./renault_5
 
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: python3 -m pip install --quiet -r renault_5/app/requirements.txt pytest
+
+      - name: pytest
+        run: python3 -m pytest renault_5/tests -q
+
   security:
     name: Security
     runs-on: ubuntu-latest

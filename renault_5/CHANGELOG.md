@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.0
+
+Ports the A290 add-on's reliability/maintainability improvements so the two stay in sync.
+No entity, command-topic or config change — existing dashboards are unaffected.
+
+- **Gate every control button on `supports_endpoint()`** (the new `ACTION_BUTTONS` table).
+  A button is published only when the car supports its action endpoint, and any retained
+  config is cleared otherwise — so a control the platform forbids never lingers. All five
+  (charge-start/horn/lights/HVAC start+stop) are supported on the R5, so this is a safety
+  net; it also keeps parity with the A290, where charge-start is forbidden and hidden.
+- **Reuse one cached login across polls** (`VehicleSession`) instead of a full Gigya
+  re-auth every cycle (~288/day at the default interval). Tokens are refreshed by
+  `renault-api`; the cached login is dropped after any failed poll so it self-heals.
+- **MQTT command handling is now generic** — a single `renault_5/cmd/#` subscription
+  dispatches presses via `COMMAND_ACTIONS`. Same entity IDs and command topics as before.
+- **Add a `pytest` suite (`renault_5/tests/`) and a CI Tests job**; pin `paho-mqtt==2.1.0`
+  and `PyYAML==6.0.3` (were `>=`) for reproducible builds.
+
 ## 0.1.0
 
 - Initial release. A maintained MQTT data layer for the **Renault 5 E-Tech**, ported
