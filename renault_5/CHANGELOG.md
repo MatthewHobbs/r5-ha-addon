@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- **Pick your car's trim/colour from a dropdown** — new `car_render` option (default
+  Pop Yellow Techno). When the add-on auto-deploys a dashboard it serves the matching
+  render from the repo CDN, so there's nothing to copy or hand-edit. All 22 R5 renders
+  (Evolution / Iconic / Roland Garros / Techno × colours) are selectable; change it and
+  re-deploy (`redeploy_dashboard: true`) to update. Manual installs can still swap the
+  images by hand — see [`dashboards/CUSTOMISING.md`](../dashboards/CUSTOMISING.md).
+
 ## 0.3.0
 
 - **Refresh Location button** (`button.r5_refresh_location`) — the R5 supports

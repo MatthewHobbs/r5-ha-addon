@@ -34,10 +34,29 @@ IMG_MAP = {
 }
 
 
+# Trim folders under Images/Models — R5_CAR_RENDER (e.g. "midnight-blue-iconic") picks one.
+_RENDER_TRIMS = (("roland-garros", "Roland%20Garros"), ("evolution", "Evolution"),
+                 ("iconic", "Iconic"), ("techno", "Techno"))
+
+
+def _selected_render():
+    """Repo path for the chosen trim/colour render (R5_CAR_RENDER), or None for the default."""
+    stem = os.environ.get("R5_CAR_RENDER", "").strip().lower()
+    for key, trim in _RENDER_TRIMS:
+        if key in stem:
+            return f"Images/Models/{trim}/{stem}.png"
+    return None
+
+
 def _cdnify(text):
-    """Rewrite /local/backgrounds/<file> -> jsDelivr CDN URL."""
+    """Rewrite /local/backgrounds/<file> -> jsDelivr CDN URL. The car render
+    (r5_background / r5_side) follows the R5_CAR_RENDER trim/colour selection."""
+    render = _selected_render()
+
     def repl(m):
         name = m.group(1)
+        if render and name in ("r5_background.png", "r5_side.png"):
+            return f"{CDN}/{render}"
         path = IMG_MAP.get(name)
         if not path:
             LOG.warning("No CDN mapping for /local/backgrounds/%s — left as-is", name)

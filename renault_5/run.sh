@@ -37,5 +37,6 @@ export R5_DEBUG_DUMP="$(bashio::config 'debug_dump')"
 export R5_DEPLOY_DASHBOARD="$(bashio::config 'deploy_dashboard')"
 export R5_DASHBOARD_URL_PATH="$(bashio::config 'dashboard_url_path')"
 export R5_REDEPLOY_DASHBOARD="$(bashio::config 'redeploy_dashboard')"
+export R5_CAR_RENDER="$(bashio::config 'car_render')"
 
 exec python3 -u /app/main.py

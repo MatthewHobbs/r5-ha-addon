@@ -341,3 +341,17 @@ def test_debug_enabled_reads_env(monkeypatch):
     assert main.debug_enabled() is True
     monkeypatch.setenv("R5_DEBUG_DUMP", "false")
     assert main.debug_enabled() is False
+
+
+# dashboard car-render selection (deploy.py) ----------------------------------
+
+def test_selected_render_resolves_trim_folder(monkeypatch):
+    import deploy
+    monkeypatch.setenv("R5_CAR_RENDER", "midnight-blue-iconic")
+    assert deploy._selected_render() == "Images/Models/Iconic/midnight-blue-iconic.png"
+    monkeypatch.setenv("R5_CAR_RENDER", "matte-grey-roland-garros")
+    assert deploy._selected_render() == "Images/Models/Roland%20Garros/matte-grey-roland-garros.png"
+    monkeypatch.setenv("R5_CAR_RENDER", "pop-yellow-techno-black-roof")
+    assert deploy._selected_render() == "Images/Models/Techno/pop-yellow-techno-black-roof.png"
+    monkeypatch.delenv("R5_CAR_RENDER", raising=False)
+    assert deploy._selected_render() is None
