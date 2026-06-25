@@ -999,6 +999,25 @@
               mushroom-state-info$: .container{--card-secondary-color:#FFFF00;}.primary{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:12px !important;letter-spacing:0.3px;font-weight:400;}.secondary{font-family:system-ui,sans-serif !important;font-size:11px !important;opacity:0.75;}@media(max-width:600px){.primary{font-family:system-ui,sans-serif !important;font-size:12px !important;}.secondary{font-family:system-ui,sans-serif !important;font-size:11px !important;}}
               .: ha-card{background:none !important;box-shadow:none !important;border:none !important;}
         - type: custom:mushroom-entity-card
+          entity: sensor.r5_gps_last_activity
+          name: Refresh Location
+          icon: mdi:crosshairs-gps
+          secondary_info: state
+          tap_action:
+            action: call-service
+            service: button.press
+            target:
+              entity_id: button.r5_refresh_location
+          double_tap_action:
+            action: none
+          hold_action:
+            action: none
+          card_mod:
+            style:
+              mushroom-shape-icon$: .shape{--icon-size:55px;--icon-symbol-size:28px;}
+              mushroom-state-info$: .container{--card-secondary-color:#FFFF00;}.primary{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:12px !important;letter-spacing:0.3px;font-weight:400;}.secondary{font-family:system-ui,sans-serif !important;font-size:11px !important;opacity:0.75;}@media(max-width:600px){.primary{font-family:system-ui,sans-serif !important;font-size:12px !important;}.secondary{font-family:system-ui,sans-serif !important;font-size:11px !important;}}
+              .: ha-state-icon{color:#FFFF00;}ha-card{background:none !important;box-shadow:none !important;border:none !important;}
+        - type: custom:mushroom-entity-card
           entity: sensor.r5_test_charge
           name: Run Test Charge
           icon: mdi:run
