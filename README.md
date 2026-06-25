@@ -1,10 +1,13 @@
 # Renault 5 — Home Assistant add-on + dashboards
 
 [![CI](https://github.com/MatthewHobbs/r5-ha-addon/actions/workflows/ci.yaml/badge.svg)](https://github.com/MatthewHobbs/r5-ha-addon/actions/workflows/ci.yaml)
-[![coverage ≥90%](https://img.shields.io/badge/coverage-%E2%89%A590%25-brightgreen)](https://github.com/MatthewHobbs/r5-ha-addon/actions/workflows/ci.yaml)
-[![Home Assistant add-on](https://img.shields.io/badge/Home%20Assistant-add--on-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/addons/)
-[![arch](https://img.shields.io/badge/arch-aarch64%20%7C%20amd64-blue)](renault_5/config.yaml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FMatthewHobbs%2Fr5-ha-addon%2Fmain%2Frenault_5%2Fconfig.yaml&query=%24.version&label=version&color=41BDF5)](renault_5/config.yaml)
+[![Coverage](https://img.shields.io/badge/coverage-%E2%89%A590%25-brightgreen)](https://github.com/MatthewHobbs/r5-ha-addon/actions/workflows/ci.yaml)
+[![License: MIT](https://img.shields.io/github/license/MatthewHobbs/r5-ha-addon?color=blue)](LICENSE)
+[![Home Assistant Add-on](https://img.shields.io/badge/Home%20Assistant-Add--on-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/addons/)
+[![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-informational)](renault_5/config.yaml)
+
+[![Open your Home Assistant instance and add this add-on repository.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FMatthewHobbs%2Fr5-ha-addon)
 
 A maintained Home Assistant add-on for the **Renault 5 E-Tech**, continuing the work
 of [**Topolino65/renault-5-dashboard-view**](https://github.com/Topolino65/renault-5-dashboard-view)
@@ -93,7 +96,39 @@ key needed.
   `…_flash_lights`, `…_sound_horn`, `…_start_air_conditioner`, `…_stop_air_conditioner`,
   `…_refresh_location` — each gated on what the platform supports.
 - **Debug:** set `debug_dump: true` to log every readable API endpoint (secrets redacted)
-  to the add-on Log.
+  to the add-on Log — the safe way to inspect the API (unlike `log_level: debug`, which the
+  library uses to print access tokens).
+
+## Renault 5 API support
+
+What the Renault 5 E-Tech (model `R5E1VE`) exposes through the Renault/Kamereon API. The
+add-on probes `supports_endpoint()` at startup and only publishes what's available, so a
+control the platform forbids is never shown.
+
+| Feature | Endpoint | Renault 5 |
+| --- | --- | --- |
+| Battery / charge / plug status | `battery-status` | ✅ |
+| Mileage | `cockpit` | ✅ |
+| HVAC + outside temperature | `hvac-status` | ✅ |
+| Charge target / min SoC | `soc-levels` | ✅ |
+| Preconditioning + heated seats | `ev/settings` (`charge-schedule`) | ✅ |
+| GPS location | `location` | ✅ |
+| Start charging | `actions/charge-start` | ✅ (KCM via-settings) |
+| Sound horn | `actions/horn-start` | ✅ |
+| Flash lights | `actions/lights-start` | ✅ |
+| Start / stop climate | `actions/hvac-start` · `hvac-stop` | ✅ |
+| Refresh location | `actions/refresh-location` | ✅ |
+| Stop charging | `actions/charge-stop` | ❌ not exposed — stop at the charger |
+| Tyre pressure (TPMS) | `pressure` | ❌ forbidden |
+| Charge mode | `charge-mode` | ❌ forbidden |
+
+✅ supported · ❌ Renault forbids it (or doesn't expose it) on the R5
+
+> Unlike the [Alpine A290](https://github.com/MatthewHobbs/a290-ha-addon) this is ported
+> from — where Renault forbids remote charge-start — the **R5 ships a genuine Start
+> Charging button and a genuine Refresh Location**. Set `debug_dump: true` to log the
+> decoded response of every readable endpoint (secrets redacted) if Renault changes what
+> the platform exposes.
 
 ## Credits
 
