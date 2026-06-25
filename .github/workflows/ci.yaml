@@ -37,7 +37,7 @@ jobs:
       - name: Ruff (Python)
         uses: astral-sh/ruff-action@eaf0ecdd668ceea36159ff9d91882c9795d89b49 # v3.4.0
         with:
-          src: renault_5/app
+          src: renault_5/app renault_5/tests
 
       - name: Home Assistant add-on linter
         uses: frenck/action-addon-linter@de232482c564942a796a4427d3624f0d6c6e36e8 # v2.16.0
@@ -58,7 +58,7 @@ jobs:
         run: python3 -m pip install --quiet -r renault_5/app/requirements.txt pytest pytest-cov
 
       - name: pytest
-        run: python3 -m pytest renault_5/tests -q --cov=renault_5/app --cov-report=term-missing --cov-fail-under=50
+        run: python3 -m pytest renault_5/tests -q --cov=renault_5/app --cov-report=term-missing --cov-fail-under=90
 
   security:
     name: Security

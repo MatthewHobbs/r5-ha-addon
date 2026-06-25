@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.0
+
+Quality + documentation pass.
+
+- **Test coverage raised to ~99%** (was 54%): a new `test_runtime.py` exercises the poll
+  loop (success + failure branches), the MQTT plumbing and reconnect callbacks, command
+  dispatch + debounce, the debug dump, account resolution, every `poll_once` degradation
+  path, and the whole dashboard-deploy WebSocket flow. CI now enforces a **90% floor**
+  (`--cov-fail-under=90`) and lints the tests too, so no commit can silently regress below it.
+- **Docs corrected against the running add-on.** Home Assistant derives entity_ids from the
+  device name + friendly name (the discovery `object_id` is ignored), so DOCS.md now lists
+  the real ids — `device_tracker.r5_location` (not `renault_5_location`),
+  `sensor.r5_outside_temperature`, `…_last_charge_duration` / `…_soc_recovered` /
+  `…_energy_recovered`, and `binary_sensor.r5_plug_state_suspect` — verified against the
+  live A290 entity registry. README's HACS-card matrix is fixed (Browser Mod is
+  standard-only; Button Card is needed by both) and the test-mode entity names corrected.
+- **README shields** — CI status, the enforced coverage floor, Home Assistant add-on,
+  supported architectures, and MIT licence.
+
 ## 0.6.0
 
 Review-panel P1/P2 follow-ups (reliability + supply-chain hygiene).

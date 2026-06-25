@@ -222,7 +222,7 @@ def test_buttons_published_when_supported():
     c = StubClient()
     all_eps = {ep for _oid, _node, _name, _icon, ep in main.ACTION_BUTTONS.values()}
     main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS) | all_eps, "km")
-    for _cmd, (oid, node, name, icon, _ep) in main.ACTION_BUTTONS.items():
+    for _cmd, (oid, node, name, _icon, _ep) in main.ACTION_BUTTONS.items():
         conf = json.loads(c.pub[f"homeassistant/button/{main.NODE}/{node}/config"])
         assert conf["name"] == name
         assert conf["object_id"] == oid

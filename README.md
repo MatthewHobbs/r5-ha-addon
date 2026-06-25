@@ -1,6 +1,12 @@
 # Renault 5 — Home Assistant add-on + dashboards
 
-A maintained Home Assistant integration for the **Renault 5 E-Tech**, continuing the work
+[![CI](https://github.com/MatthewHobbs/r5-ha-addon/actions/workflows/ci.yaml/badge.svg)](https://github.com/MatthewHobbs/r5-ha-addon/actions/workflows/ci.yaml)
+[![coverage ≥90%](https://img.shields.io/badge/coverage-%E2%89%A590%25-brightgreen)](https://github.com/MatthewHobbs/r5-ha-addon/actions/workflows/ci.yaml)
+[![Home Assistant add-on](https://img.shields.io/badge/Home%20Assistant-add--on-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/addons/)
+[![arch](https://img.shields.io/badge/arch-aarch64%20%7C%20amd64-blue)](renault_5/config.yaml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+A maintained Home Assistant add-on for the **Renault 5 E-Tech**, continuing the work
 of [**Topolino65/renault-5-dashboard-view**](https://github.com/Topolino65/renault-5-dashboard-view)
 — full credit to Topolino65 for the original dashboards, assets and design.
 
@@ -43,10 +49,10 @@ The dashboards are built from custom Lovelace cards. Install **HACS** first, the
 | Card (HACS name) | Used by | Required? |
 | --- | --- | --- |
 | **card-mod** (`thomasloven/lovelace-card-mod`) | styling/fonts on **both** dashboards | ✅ Required (both) |
-| **Mushroom** (`piitaya/lovelace-mushroom`) | most tiles on **both** dashboards | ✅ Required (both) |
-| **Button Card** (`custom-cards/button-card`) | tiles on the **standard** dashboard | ✅ Standard |
-| **Browser Mod** (`nielsfaber/browser_mod`) | the tap-to-open diagnostic pop-ups | ✅ Both (pop-ups) |
-| **Bubble Card** (`Clooos/Bubble-Card`) | the **Bubble** dashboard only | ◻️ Bubble only |
+| **Mushroom** (`piitaya/lovelace-mushroom`) | most **standard** tiles; a few on Bubble | ✅ Required (both) |
+| **Button Card** (`custom-cards/button-card`) | tiles on the **standard** dashboard (one on Bubble) | ✅ Required (both) |
+| **Browser Mod** (`nielsfaber/browser_mod`) | the tap-to-open diagnostic pop-ups on the **standard** dashboard | ✅ Standard (pop-ups) |
+| **Bubble Card** (`Clooos/Bubble-Card`) | the **Bubble** dashboard (incl. its own pop-ups) | ◻️ Bubble only |
 
 The car's location uses Home Assistant's **built-in `map` card** — no map plugin or API
 key needed.
@@ -54,8 +60,9 @@ key needed.
 ### Optional (not required to run)
 
 - **Test-mode preview** — the charge-simulation panels (`input_boolean.r5_test_mode`,
-  `sensor.test_*`). A small HA helper/template package; without it those tiles read
-  *unavailable*. (Port from the upstream `Packages/`/`Templates/`/`Helpers/`.)
+  `sensor.r5_test_*`, `binary_sensor.r5_test_show_panel`, `button.r5_test_charge_run`).
+  A small HA helper/template package; without it those tiles read *unavailable*. (Port
+  from the upstream `Packages/`/`Templates/`/`Helpers/`.)
 - **Pretty location** — `sensor.r5_pretty_location` ("Driveway / Home / town"), a template
   sensor with an optional [`places`](https://github.com/custom-components/places)
   integration. Without it the location card shows the raw tracker.
@@ -80,7 +87,7 @@ key needed.
 - **Sensors:** battery level/autonomy/temperature, charge rate/remaining/flap/plug/status,
   cabin + outside temperature, HVAC status/threshold, preconditioning, SoC min/max,
   mileage, last-charge stats, GPS/HVAC/battery last-activity, and health
-  (`api_auth_failure`, `data_stale`, `plug_suspect`).
+  (`api_auth_failure`, `data_stale`, `plug_state_suspect`).
 - **Location:** `device_tracker.r5_location`.
 - **Native controls (no official Renault integration):** `button.r5_start_charging`,
   `…_flash_lights`, `…_sound_horn`, `…_start_air_conditioner`, `…_stop_air_conditioner`,
