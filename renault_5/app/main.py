@@ -7,8 +7,10 @@ A290 add-on this is ported from (R5 E-Tech and A290 share the CMF-BEV / KCM plat
 
 Read endpoints: battery-status, cockpit, HVAC, location, ev/settings (preconditioning),
 ev/soc-levels, plus optional charge-mode and tyre-pressure (gated on supports_endpoint).
-Charge control: an MQTT "Start Charging" button (library kcm-settings charge-start) plus
-plug stuck-detection. Charge-session tracking + health sensors persist to /data/state.json.
+Command buttons: Start Charging (KCM instant-charge), Flash Lights and Sound Horn — all
+native (the R5 supports actions/horn-start + actions/lights-start), so no official Renault
+integration is needed for these. Plug stuck-detection + charge-session tracking + health
+sensors persist to /data/state.json.
 
 Platform caveats (R5 E-Tech / CMF-BEV, KCM): batteryCapacity is always 0 (we use the
 configured capacity); chargingStatus is a float ChargeState (0.0/0.2/1.0/-1.0/… — decoded
@@ -41,6 +43,8 @@ ATTR_TOPIC = f"{NODE}/location/attributes"
 TRACKER_STATE_TOPIC = f"{NODE}/location/state"
 AVAIL_TOPIC = f"{NODE}/availability"
 CMD_CHARGE_START = f"{NODE}/cmd/charge_start"
+CMD_HORN = f"{NODE}/cmd/horn"
+CMD_LIGHTS = f"{NODE}/cmd/lights"
 STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
 
 # Device name "R5" (not "Renault 5") is deliberate: HA derives entity_ids from
@@ -205,9 +209,12 @@ def save_state(state):
 
 
 def _on_message(client, userdata, msg):
-    if msg.topic == CMD_CHARGE_START and _LOOP is not None:
-        LOG.info("Received charge-start command")
-        asyncio.run_coroutine_threadsafe(do_charge_start(), _LOOP)
+    if _LOOP is None:
+        return
+    coro = {CMD_CHARGE_START: do_charge_start, CMD_HORN: do_horn, CMD_LIGHTS: do_lights}.get(msg.topic)
+    if coro is not None:
+        LOG.info("Received command: %s", msg.topic)
+        asyncio.run_coroutine_threadsafe(coro(), _LOOP)
 
 
 def mqtt_connect():
@@ -218,7 +225,8 @@ def mqtt_connect():
     client.on_message = _on_message
     LOG.info("Connecting to MQTT %s:%s", cfg("MQTT_HOST"), cfg("MQTT_PORT", "1883"))
     client.connect(cfg("MQTT_HOST"), int(cfg("MQTT_PORT", "1883") or "1883"), keepalive=60)
-    client.subscribe(CMD_CHARGE_START)
+    for topic in (CMD_CHARGE_START, CMD_HORN, CMD_LIGHTS):
+        client.subscribe(topic)
     client.loop_start()
     return client
 
@@ -263,12 +271,20 @@ def publish_discovery(client, supported_eps, dist_unit):
                "state_topic": TRACKER_STATE_TOPIC, "json_attributes_topic": ATTR_TOPIC,
                "availability_topic": AVAIL_TOPIC, "source_type": "gps", "device": DEVICE}
     client.publish(f"{DISCOVERY_PREFIX}/device_tracker/{NODE}/location/config", json.dumps(tracker), retain=True)
-    button = {"name": "Start Charging", "object_id": "r5_charge_start", "unique_id": "r5_charge_start",
-              "command_topic": CMD_CHARGE_START, "availability_topic": AVAIL_TOPIC,
-              "icon": "mdi:ev-station", "device": DEVICE}
-    client.publish(f"{DISCOVERY_PREFIX}/button/{NODE}/charge_start/config", json.dumps(button), retain=True)
-    LOG.info("Published discovery: %d sensors (%d unsupported cleared), %d binary_sensors, device_tracker, charge-start button",
-             published, len(skip), len(BINARY_SENSORS))
+    # Command buttons (entity_id = slug(device + name), e.g. button.r5_flash_lights).
+    # Flash Lights / Sound Horn are supported on this platform, so the add-on provides
+    # them natively — no official Renault integration needed for these tiles.
+    buttons = [
+        ("Start Charging", "r5_charge_start", "charge_start", CMD_CHARGE_START, "mdi:ev-station"),
+        ("Flash Lights", "r5_flash_lights", "flash_lights", CMD_LIGHTS, "mdi:car-light-high"),
+        ("Sound Horn", "r5_sound_horn", "sound_horn", CMD_HORN, "mdi:bullhorn"),
+    ]
+    for name, oid, node, cmd, icon in buttons:
+        conf = {"name": name, "object_id": oid, "unique_id": oid, "command_topic": cmd,
+                "availability_topic": AVAIL_TOPIC, "icon": icon, "device": DEVICE}
+        client.publish(f"{DISCOVERY_PREFIX}/button/{NODE}/{node}/config", json.dumps(conf), retain=True)
+    LOG.info("Published discovery: %d sensors (%d unsupported cleared), %d binary_sensors, device_tracker, %d buttons",
+             published, len(skip), len(BINARY_SENSORS), len(buttons))
 
 
 KM_TO_MI = 0.621371
@@ -353,16 +369,29 @@ async def detect_supported(locale):
     return supported
 
 
-async def do_charge_start():
-    """KCM instant-charge (library routes set_charge_start via ev/settings on this car)."""
+async def _send_action(label, action):
+    """Log in and invoke a one-shot vehicle action (charge-start / horn / lights)."""
     locale = cfg("R5_LOCALE", "en_GB")
     try:
         async with aiohttp.ClientSession() as websession:
             vehicle = await _login_vehicle(websession, locale)
-            await vehicle.set_charge_start()
-        LOG.info("Charge-start sent (KCM instant charge)")
+            await action(vehicle)
+        LOG.info("%s sent", label)
     except Exception as err:  # noqa: BLE001
-        LOG.error("Charge-start failed: %s", err)
+        LOG.error("%s failed: %s", label, err)
+
+
+async def do_charge_start():
+    # KCM instant-charge (library routes set_charge_start via ev/settings on this car).
+    await _send_action("Charge-start (KCM instant charge)", lambda v: v.set_charge_start())
+
+
+async def do_horn():
+    await _send_action("Sound-horn", lambda v: v.start_horn())
+
+
+async def do_lights():
+    await _send_action("Flash-lights", lambda v: v.start_lights())
 
 
 def detect_plug_suspect(state, plug, mileage, soc, charging):
