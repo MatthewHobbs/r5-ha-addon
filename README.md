@@ -23,6 +23,15 @@ E-Tech and Alpine A290 share the CMF-BEV / KCM platform).
 Every control is sent **natively** by the add-on (charge, lights, horn, HVAC, refresh
 location) — **you do not need the official Renault integration**.
 
+> [!IMPORTANT]
+> **Untested on an actual Renault 5 — I don't own one.** I drive an **Alpine A290**, and
+> this add-on is back-ported from the [A290 add-on](https://github.com/MatthewHobbs/a290-ha-addon),
+> which *does* work on my car. The R5 E-Tech and A290 share the CMF-BEV / KCM platform, so
+> this **should** work on an R5 — but I can't verify it on real hardware. Please give it a
+> go and **[open an issue](https://github.com/MatthewHobbs/r5-ha-addon/issues)** to let me
+> know whether it does or doesn't. I'm very happy to work with an R5 owner to fix anything
+> that doesn't.
+
 ## What's here
 
 - **The add-on:** [`renault_5/`](renault_5/) — the MQTT data layer + control buttons.
