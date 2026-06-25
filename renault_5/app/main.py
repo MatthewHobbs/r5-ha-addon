@@ -48,9 +48,8 @@ AVAIL_TOPIC = f"{NODE}/availability"
 CMD_PREFIX = f"{NODE}/cmd/"          # button commands: renault_5/cmd/<suffix>
 STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
 
-# Device name "R5" (not "Renault 5") is deliberate: HA derives entity_ids from
-# slug(device_name + " " + entity_name), ignoring the MQTT object_id — so this yields
-# sensor.r5_<name> (the modernised Topolino naming the dashboards expect).
+# Device name "R5" is deliberate: HA builds entity_ids from slug(device + entity name) and
+# ignores object_id, so this yields sensor.r5_<name> (what the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
 VERSION = "0.4.0"
 
@@ -108,9 +107,7 @@ BINARY_SENSORS = {
     "r5_data_stale":            ("Data Stale", "problem"),
 }
 
-# Icons for entities that would otherwise fall back to HA's generic sensor icon
-# (mdi:eye) — i.e. text/status sensors with no device_class. Cards without an
-# explicit icon: inherit these.
+# Icons for text/status sensors that would otherwise fall back to HA's generic mdi:eye.
 ICONS = {
     "r5_charger_plug_status":   "mdi:power-plug",
     "r5_charger_status":        "mdi:battery-charging",
@@ -124,22 +121,15 @@ ICONS = {
     "r5_heated_seat_passenger": "mdi:car-seat-heater",
 }
 
-# Optional endpoints that some models (e.g. A5E1AE / A290) don't expose. Their
-# discovery + polling is gated on vehicle.supports_endpoint() so we never ship
-# perpetually-empty entities.
+# Optional endpoints some models don't expose — gated on supports_endpoint().
 OPTIONAL_ENDPOINTS = {
     "charge-mode": ["r5_charge_mode"],
     "pressure": ["r5_tyre_pressure_fl", "r5_tyre_pressure_fr",
                  "r5_tyre_pressure_rl", "r5_tyre_pressure_rr"],
 }
 
-# Command buttons, keyed by MQTT command-topic suffix (renault_5/cmd/<key>) ->
-# (object_id, discovery node-segment, friendly name, icon, the renault-api action endpoint).
-# Each button is published only when supports_endpoint(<endpoint>) is true — gated exactly
-# like the optional sensors above, so a control the platform forbids is never shown and any
-# retained config is cleared. On the R5 (R5E1VE) all five resolve to supported endpoints
-# (incl. charge-start, which routes via ev/settings); the gating is a safety net and keeps
-# parity with the A290 add-on, where charge-start is forbidden and therefore hidden.
+# suffix (renault_5/cmd/<key>) -> (object_id, node-segment, name, icon, action endpoint).
+# Published only when supports_endpoint() is true, so a forbidden control is never shown.
 ACTION_BUTTONS = {
     "charge_start": ("r5_charge_start", "charge_start", "Start Charging", "mdi:ev-station", "actions/charge-start"),
     "lights":       ("r5_flash_lights", "flash_lights", "Flash Lights", "mdi:car-light-high", "actions/lights-start"),
@@ -154,10 +144,8 @@ ACTION_BUTTONS = {
 RETIRED_SENSORS = []
 
 HOME_POWER_MAX_KW = 7.4
-# Friendly labels for the library's ChargeState/PlugState enums. The API returns
-# chargingStatus as a float (0.0, 0.2, 1.0, -1.0, …) that renault-api decodes via
-# ChargeState; we map every member so sub-states never surface as raw numbers. The
-# dashboards key on "Charging"/"Connected"/"Disconnected", so those are preserved.
+# Friendly labels for the ChargeState/PlugState enums (every member mapped, so float
+# sub-states never surface raw). Dashboards key on "Charging"/"Connected"/"Disconnected".
 CHARGE_STATUS_LABELS = {
     ChargeState.NOT_IN_CHARGE: "Not Charging",
     ChargeState.WAITING_FOR_A_PLANNED_CHARGE: "Waiting (Planned)",
@@ -285,11 +273,7 @@ def publish_discovery(client, supported_eps, dist_unit):
                "state_topic": TRACKER_STATE_TOPIC, "json_attributes_topic": ATTR_TOPIC,
                "availability_topic": AVAIL_TOPIC, "source_type": "gps", "device": DEVICE}
     client.publish(f"{DISCOVERY_PREFIX}/device_tracker/{NODE}/location/config", json.dumps(tracker), retain=True)
-    # Command buttons (entity_id = slug(device + name), e.g. button.r5_flash_lights), each
-    # gated on supports_endpoint(<endpoint>): published when supported, otherwise the
-    # retained config is cleared so a forbidden control never lingers. All five are
-    # supported on the R5, so the add-on provides them natively — no official Renault
-    # integration needed for these tiles.
+    # Buttons gated on supports_endpoint(): published when supported, else cleared.
     shipped = []
     for cmd_suffix, (oid, node, name, icon, ep) in ACTION_BUTTONS.items():
         topic = f"{DISCOVERY_PREFIX}/button/{NODE}/{node}/config"
@@ -609,11 +593,11 @@ async def resolve_account(client):
 
 
 async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
-    vehicle = await vsession.vehicle()       # cached login, reused across polls
+    vehicle = await vsession.vehicle()
     locale = vsession.locale
     battery = await vehicle.get_battery_status()
-    plug = battery.get_plug_status()                 # decode once (label + flap)
-    charging = is_charging(battery)                  # single source of truth
+    plug = battery.get_plug_status()
+    charging = is_charging(battery)
     data = {
         "battery_level": battery.batteryLevel,
         "battery_autonomy": _dist(battery.batteryAutonomy, dist_unit),
@@ -623,8 +607,7 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
         "available_energy": _num(getattr(battery, "batteryAvailableEnergy", None)),
         "charger_plug_status": _enum_label(plug, PLUG_STATUS_LABELS, getattr(battery, "plugStatus", None)),
         "charging_flap_status": "Open: Plugged In" if plug == PlugState.PLUGGED else "Closed",
-        # Headline matches the Charging binary sensor: when actively charging (incl.
-        # the power-based fallback) show "Charging"; otherwise the precise ChargeState.
+        # Match the Charging binary sensor: "Charging" when active, else the ChargeState.
         "charger_status": "Charging" if charging else charging_status_label(battery),
         "battery_last_activity": getattr(battery, "timestamp", None) or iso(now_ts()),
         "drive_side": "RHD" if locale.lower() in RHD_LOCALES else "LHD",
@@ -638,9 +621,7 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
     try:
         hvac = await vehicle.get_hvac_status()
         data["external_temperature"] = getattr(hvac, "externalTemperature", None)
-        # Unlike the A290, the R5's HVAC endpoint does populate internalTemperature —
-        # though often only shortly after HVAC/preconditioning activity, so it can be
-        # absent (HA shows the entity unavailable when null).
+        # internalTemperature is populated but often only after HVAC activity (else null).
         data["cabin_temperature"] = getattr(hvac, "internalTemperature", None)
         data["hvac_status"] = str(getattr(hvac, "hvacStatus", ""))
         data["hvac_soc_threshold"] = getattr(hvac, "socThreshold", None)
@@ -745,9 +726,7 @@ async def main():
                      data.get("charging"), data.get("plug_suspect"))
         except Exception as err:  # noqa: BLE001
             LOG.error("Poll failed: %s", err)
-            # Drop the cached login so the next cycle re-authenticates — recovers from an
-            # expired token or a dropped connection rather than reusing a broken session.
-            await vsession.invalidate()
+            await vsession.invalidate()   # next cycle re-authenticates (self-heal)
             last_ok = state.get("last_success", 0)
             stale = (now_ts() - last_ok) > stale_secs if last_ok else True
             auth = any(s in str(err).lower() for s in ("login", "password", "credential", "401", "403"))
