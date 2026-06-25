@@ -22,8 +22,8 @@ these add-on entities.
 | `stale_hours` | Mark data stale after this many hours without a successful poll (default 6). |
 | `log_level` | `info` normally; `debug` for troubleshooting. |
 | `debug_dump` | `true` logs every readable API endpoint to the add-on Log **once per restart** (IDs/secrets/location redacted, best-effort). It may still contain personal data — do not paste the log publicly. Off by default. |
-| `deploy_dashboard` | `none` (default), `standard`, or `bubble`. Auto-installs that dashboard for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. |
-| `dashboard_url_path` | URL slug for the deployed dashboard (default `renault-5`). |
+| `deploy_dashboard` | `none` (default), `standard`, `bubble`, or `both`. Auto-installs the chosen dashboard(s) for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. With `both`, the standard dashboard lands at `dashboard_url_path` and the bubble one at the same path with `-bubble` appended. |
+| `dashboard_url_path` | URL slug for the deployed dashboard (default `renault-5`). With `deploy_dashboard: both` the bubble dashboard is installed at `<this>-bubble` (e.g. `renault-5-bubble`). |
 | `redeploy_dashboard` | `true` re-pushes the dashboard config on next start. Default `false`. |
 | `car_render` | The trim/colour render shown on the dashboard (e.g. `midnight-blue-iconic`), used when auto-deploying. Default `pop-yellow-techno`. See [Customising](../dashboards/CUSTOMISING.md). |
 

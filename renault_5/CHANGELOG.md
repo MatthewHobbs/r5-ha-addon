@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0
+
+- **`deploy_dashboard: both`** — deploy the standard *and* Bubble dashboards in one go. The
+  standard dashboard lands at `dashboard_url_path`; the Bubble one at the same path with
+  `-bubble` appended (e.g. `renault-5-bubble`). Each is still create-once (left alone unless
+  `redeploy_dashboard: true`), and the Zen Dots font resource is registered once per run.
+  Brings the R5 add-on to parity with the Alpine A290.
+
 ## 0.7.0
 
 Quality + documentation pass.
