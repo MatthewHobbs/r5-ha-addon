@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0
+
+- **Refresh Location button** (`button.r5_refresh_location`) — the R5 supports
+  `actions/refresh-location`, so the add-on now asks the car to push a fresh GPS fix.
+  Gated like the other controls; appears only where the platform supports it.
+- **Debug mode** — set `debug_dump: true` on the Configuration page and each poll logs
+  the **full raw payload of every readable API endpoint** (details, battery, soc, cockpit,
+  hvac, location, charge-schedule, charge-mode, charging-settings, tyre-pressure,
+  lock-status, res-state, contracts, notifications) to the add-on **Log**. Identifiers
+  (VIN, account id, registration, contact fields) and your configured username are
+  redacted; telemetry is kept. Turn it off when you're done — it's verbose.
+
 ## 0.2.0
 
 Ports the A290 add-on's reliability/maintainability improvements so the two stay in sync.

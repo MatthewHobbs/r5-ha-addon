@@ -21,6 +21,7 @@ these add-on entities.
 | `battery_capacity_kwh` | `52` or `40`. Must be set — the API reports capacity as 0; used to derive charge-session energy. |
 | `stale_hours` | Mark data stale after this many hours without a successful poll (default 6). |
 | `log_level` | `info` normally; `debug` for troubleshooting. |
+| `debug_dump` | `true` logs the full raw payload of every readable API endpoint to the add-on Log each poll (IDs/secrets redacted). Verbose — turn off when done. |
 | `deploy_dashboard` | `none` (default), `standard`, or `bubble`. Auto-installs that dashboard for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. |
 | `dashboard_url_path` | URL slug for the deployed dashboard (default `renault-5`). |
 | `redeploy_dashboard` | `true` re-pushes the dashboard config on next start. Default `false`. |
@@ -46,10 +47,12 @@ project (minus the legacy `_api`/`_mi` suffixes):
 - Last charge: `…_last_charge_start/end`, `…_start_soc/end_soc`, `…_duration_min`,
   `…_recovered_pct/recovered_kwh`, `…_average_power`, `…_type`.
 - Health: `binary_sensor.r5_api_auth_failure`, `…_data_stale`, `…_plug_suspect`.
-- Actions (5 native buttons — **no official Renault integration required**):
+- Actions (6 native buttons — **no official Renault integration required**):
   **Start Charging**, **Flash Lights**, **Sound Horn**, **Start Air Conditioner**,
-  **Stop Air Conditioner** (`button.r5_start_charging` / `…_flash_lights` /
-  `…_sound_horn` / `…_start_air_conditioner` / `…_stop_air_conditioner`).
+  **Stop Air Conditioner**, **Refresh Location** (`button.r5_start_charging` /
+  `…_flash_lights` / `…_sound_horn` / `…_start_air_conditioner` /
+  `…_stop_air_conditioner` / `…_refresh_location`). Each is gated on
+  `supports_endpoint()`, so it only appears where the platform allows it.
 
 ### Cabin temperature
 
