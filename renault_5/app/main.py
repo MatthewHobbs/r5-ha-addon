@@ -51,7 +51,7 @@ STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
 # Device name "R5" is deliberate: HA builds entity_ids from slug(device + entity name) and
 # ignores object_id, so this yields sensor.r5_<name> (what the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
 _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
 
@@ -207,8 +207,10 @@ def load_state():
 def save_state(state):
     try:
         os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
-        with open(STATE_FILE, "w") as fh:
+        tmp = STATE_FILE + ".tmp"
+        with open(tmp, "w") as fh:
             json.dump(state, fh)
+        os.replace(tmp, STATE_FILE)   # atomic: a kill mid-write never corrupts the state file
     except OSError as err:
         LOG.warning("Could not persist state: %s", err)
 
@@ -220,15 +222,32 @@ def _on_message(client, userdata, msg):
         asyncio.run_coroutine_threadsafe(run_command(cmd), _LOOP)
 
 
+def _on_connect(client, userdata, flags, reason_code, properties=None):
+    # Runs on the initial connect *and* every reconnect: re-subscribe + re-announce online.
+    if reason_code == 0:
+        LOG.info("MQTT connected")
+        client.subscribe(f"{CMD_PREFIX}#")
+        client.publish(AVAIL_TOPIC, "online", retain=True)
+    else:
+        LOG.warning("MQTT connect refused: %s", reason_code)
+
+
+def _on_disconnect(client, userdata, flags, reason_code, properties=None):
+    if reason_code != 0:
+        LOG.warning("MQTT disconnected (%s) — reconnecting", reason_code)
+
+
 def mqtt_connect():
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="renault_5_addon")
     if cfg("MQTT_USER"):
         client.username_pw_set(cfg("MQTT_USER"), cfg("MQTT_PASS"))
     client.will_set(AVAIL_TOPIC, "offline", retain=True)
     client.on_message = _on_message
+    client.on_connect = _on_connect
+    client.on_disconnect = _on_disconnect
+    client.reconnect_delay_set(min_delay=1, max_delay=120)   # bounded backoff on broker drop
     LOG.info("Connecting to MQTT %s:%s", cfg("MQTT_HOST"), cfg("MQTT_PORT", "1883"))
-    client.connect(cfg("MQTT_HOST"), int(cfg("MQTT_PORT", "1883") or "1883"), keepalive=60)
-    client.subscribe(f"{CMD_PREFIX}#")   # all button commands
+    client.connect(cfg("MQTT_HOST"), int(cfg("MQTT_PORT", "1883") or "1883"), keepalive=30)
     client.loop_start()
     return client
 
@@ -456,12 +475,20 @@ COMMAND_ACTIONS = {
 }
 
 
+COMMAND_DEBOUNCE_S = 5
+_last_command = {}
+
+
 async def run_command(cmd):
     """Dispatch an MQTT button press to its renault-api action; never fatal."""
     action = COMMAND_ACTIONS.get(cmd)
     if action is None:
         LOG.warning("Ignoring unknown command: %s", cmd)
         return
+    if now_ts() - _last_command.get(cmd, 0) < COMMAND_DEBOUNCE_S:
+        LOG.info("Ignoring repeated '%s' within %ds (debounce)", cmd, COMMAND_DEBOUNCE_S)
+        return
+    _last_command[cmd] = now_ts()
     locale = cfg("R5_LOCALE", "en_GB")
     try:
         async with aiohttp.ClientSession() as websession:
@@ -733,6 +760,7 @@ async def main():
     fails = 0
     while not stop.is_set():
         try:
+            t0 = time.monotonic()
             data, location_attrs = await poll_once(vsession, state, capacity, supported, dist_unit)
             state["last_success"] = now_ts()
             data["api_auth_failure"] = "off"
@@ -744,9 +772,10 @@ async def main():
             client.publish(AVAIL_TOPIC, "online", retain=True)
             save_state(state)
             fails = 0
-            LOG.info("Published: %s%% battery, plug=%s, charging=%s, suspect=%s",
-                     data.get("battery_level"), data.get("charger_plug_status"),
-                     data.get("charging"), data.get("plug_suspect"))
+            LOG.info("Published in %.1fs: %s%% battery, plug=%s, charging=%s, suspect=%s",
+                     time.monotonic() - t0, data.get("battery_level"),
+                     data.get("charger_plug_status"), data.get("charging"),
+                     data.get("plug_suspect"))
         except Exception as err:  # noqa: BLE001
             fails += 1
             LOG.error("Poll failed (%d in a row): %s", fails, err)

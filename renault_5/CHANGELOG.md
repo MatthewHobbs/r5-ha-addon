@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.0
+
+Review-panel P1/P2 follow-ups (reliability + supply-chain hygiene).
+
+- **Atomic state file** — `state.json` is written to a temp file then `os.replace()`d, so a
+  kill mid-write never corrupts charge-session history.
+- **MQTT resilience** — `on_connect`/`on_disconnect` callbacks re-subscribe and re-announce
+  `online` after a broker restart (it went silently stale before); bounded reconnect backoff
+  (1–120 s) and a 30 s keepalive.
+- **Command debounce** — a repeated button press within 5 s is ignored, so a double-tap can't
+  fire the car action twice.
+- **Deploy hardening** — the dashboard WebSocket calls have a per-receive timeout (an
+  unexpected frame can't hang the deploy); the dashboard fetch ref is now `R5_ADDON_REF`
+  (default `main`) so it can be pinned to a release tag for a reproducible deploy.
+- **Supply chain** — every GitHub Action in CI is pinned to a commit SHA (was mutable tags).
+- **Observability** — the per-poll log now reports how long the poll took.
+- **CI** — added a coverage gate (`--cov-fail-under=50`) so coverage can't silently regress.
+
 ## 0.5.0
 
 Review-panel fixes (security / privacy / reliability / QA) before first release.

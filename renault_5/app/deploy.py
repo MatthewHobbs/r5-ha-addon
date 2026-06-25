@@ -10,6 +10,7 @@ It is **create-once**: if the dashboard url_path already exists it is left alone
 (so user edits are never clobbered) unless `redeploy_dashboard` is true. Every
 failure here is non-fatal — the data poller runs regardless.
 """
+import asyncio
 import logging
 import os
 import re
@@ -20,8 +21,11 @@ import yaml
 LOG = logging.getLogger("renault_5.deploy")
 
 REPO = "MatthewHobbs/r5-ha-addon"
-RAW = f"https://raw.githubusercontent.com/{REPO}/main/dashboards"
-CDN = f"https://cdn.jsdelivr.net/gh/{REPO}@main/dashboards"
+# Pin to the add-on's release tag (set by main.py before run_deploy) for a reproducible
+# dashboard; falls back to the default below for an untagged/dev checkout.
+REF = os.environ.get("R5_ADDON_REF", "main")
+RAW = f"https://raw.githubusercontent.com/{REPO}/{REF}/dashboards"
+CDN = f"https://cdn.jsdelivr.net/gh/{REPO}@{REF}/dashboards"
 FONT_URL = "https://fonts.googleapis.com/css2?family=Zen+Dots&display=swap"
 DASHBOARDS = {"standard": "front-end.txt", "bubble": "front-end-bubble.txt"}
 
@@ -88,7 +92,8 @@ class _WS:
         payload["id"] = self._id
         await self._ws.send_json(payload)
         while True:
-            msg = await self._ws.receive_json()
+            # Per-receive timeout so an unexpected event/close frame can't hang the deploy.
+            msg = await asyncio.wait_for(self._ws.receive_json(), timeout=15)
             if msg.get("id") == self._id and msg.get("type") == "result":
                 if not msg.get("success", False):
                     raise RuntimeError(f"{payload['type']} failed: {msg.get('error')}")
