@@ -20,25 +20,17 @@ import yaml
 LOG = logging.getLogger("renault_5.deploy")
 
 REPO = "MatthewHobbs/r5-ha-addon"
-RAW = f"https://raw.githubusercontent.com/{REPO}/main/YAML"
-CDN = f"https://cdn.jsdelivr.net/gh/{REPO}@main"
+RAW = f"https://raw.githubusercontent.com/{REPO}/main/dashboards"
+CDN = f"https://cdn.jsdelivr.net/gh/{REPO}@main/dashboards"
 FONT_URL = "https://fonts.googleapis.com/css2?family=Zen+Dots&display=swap"
 DASHBOARDS = {"standard": "front-end.txt", "bubble": "front-end-bubble.txt"}
 
-# /local/backgrounds/<file> -> repo path (the dashboards flatten everything under
-# /local/backgrounds/, but the repo keeps them in typed subfolders).
+# /local/backgrounds/<file> -> repo path (the dashboards reference images as
+# /local/backgrounds/<file>; the repo keeps them in typed subfolders under dashboards/).
 IMG_MAP = {
-    "renault_5_background.png": "Images/Background/renault_5_background.png",
-    "renault_5_side.png": "Images/Background/renault_5_side.png",
-    "renault_5_tornado_grey.png": "Images/Background/renault_5_tornado_grey.png",
-    "card-background.jpg": "Images/Background/card-background.jpg",
+    "r5_background.png": "Images/Background/r5_background.png",
+    "r5_side.png": "Images/Background/r5_side.png",
     "charge-indicator.png": "Images/Charging/charge-indicator.png",
-    "map-marker-black.png": "Images/Map%20Markers/map-marker-black.png",
-    "map-marker-grey.png": "Images/Map%20Markers/map-marker-grey.png",
-    "map-marker-pop-green.png": "Images/Map%20Markers/map-marker-pop-green.png",
-    "map-marker-pop-yellow.png": "Images/Map%20Markers/map-marker-pop-yellow.png",
-    "map-marker-white.png": "Images/Map%20Markers/map-marker-white.png",
-    "rmap-marker-midnight-blue.png": "Images/Map%20Markers/rmap-marker-midnight-blue.png",
 }
 
 
