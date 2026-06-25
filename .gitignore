@@ -15,3 +15,8 @@ venv/
 secrets.yaml
 .env
 *.local
+
+# Test / coverage artifacts
+.coverage
+htmlcov/
+.pytest_cache/

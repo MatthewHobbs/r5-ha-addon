@@ -25,6 +25,7 @@ these add-on entities.
 | `deploy_dashboard` | `none` (default), `standard`, or `bubble`. Auto-installs that dashboard for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. |
 | `dashboard_url_path` | URL slug for the deployed dashboard (default `renault-5`). |
 | `redeploy_dashboard` | `true` re-pushes the dashboard config on next start. Default `false`. |
+| `car_render` | The trim/colour render shown on the dashboard (e.g. `midnight-blue-iconic`), used when auto-deploying. Default `pop-yellow-techno`. See [Customising](../dashboards/CUSTOMISING.md). |
 
 ## Requirements
 

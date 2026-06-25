@@ -1,51 +1,50 @@
 # Customising your R5 (trim & colour)
 
 The dashboards show a render of a Renault 5. By default it's the **Pop Yellow Techno**.
-This guide shows how to swap it for the render that matches **your** car's trim and colour
-(unlike the Alpine A290, the R5 ships in several trims/colours). All renders are included
-in [`Images/Models/`](Images/Models).
+Here's how to match **your** car's trim and colour (unlike the Alpine A290, the R5 ships
+in several trims/colours). All renders are included in [`Images/Models/`](Images/Models).
+
+## Easiest — the `car_render` dropdown (auto-deploy)
+
+If the add-on installs the dashboard for you (`deploy_dashboard: standard|bubble`), you
+don't need to touch any files:
+
+1. **Settings → Add-ons → Renault 5 → Configuration → `car_render`** — pick your trim/colour
+   (e.g. `midnight-blue-iconic`).
+2. Set **`redeploy_dashboard: true`** and **Restart** the add-on so the dashboard
+   re-deploys with your render. (Set it back to `false` afterwards if you want your manual
+   dashboard edits protected.)
+
+That's it — the matching render is served straight from the CDN, nothing to copy or edit.
 
 ## Available renders
 
-Files are named **`<colour>-<trim>.png`** inside `Images/Models/<Trim>/`:
+Files are named **`<colour>-<trim>.png`** inside `Images/Models/<Trim>/` — and those
+file-name stems are exactly the `car_render` dropdown values:
 
-| Trim | Colours (file name) |
+| Trim | Colours (`car_render` value) |
 | --- | --- |
 | **Evolution** | `artic-white-evolution`, `black-evolution`, `pop-green-evolution`, `pop-yellow-evolution` |
 | **Iconic** | `artic-white-iconic`, `black-iconic`, `black-iconic-titanium`, `midnight-blue-iconic`, `pop-yellow-iconic` |
 | **Roland Garros** | `artic-white-roland-garros`, `black-roland-garros`, `matte-grey-roland-garros`, `midnight-blue-roland-garros` |
-| **Techno** | `artic-white-techno` (+ `-black-roof`), `black-techno` (+ `black-techno-red-trim`), `midnight-blue-techno`, `pop-green-techno` (+ `-black-roof`), `pop-yellow-techno` (+ `-black-roof`) |
+| **Techno** | `artic-white-techno`, `artic-white-techno-black-roof`, `black-techno`, `black-techno-red-trim`, `midnight-blue-techno`, `pop-green-techno`, `pop-green-techno-black-roof`, `pop-yellow-techno`, `pop-yellow-techno-black-roof` |
 
-The dashboards reference the car render as **`r5_background.png`** (the main image) and
-**`r5_side.png`** (a smaller side tile on the Bubble dashboard).
+## Manual install — swap the image files
 
-## Option A — you copied the images into `/config/www/backgrounds/` (manual install)
+If you copied the images into `/config/www/backgrounds/` yourself (rather than using
+auto-deploy), the dashboards reference the render as **`r5_background.png`** (main image)
+and **`r5_side.png`** (the Bubble side tile):
 
 1. Pick your render, e.g. `Models/Iconic/midnight-blue-iconic.png`.
-2. Using the **File Editor** add-on or **Samba**, copy it into `/config/www/backgrounds/`
-   **twice**, renamed to `r5_background.png` and `r5_side.png`.
-3. Hard-refresh the dashboard (Ctrl/Cmd-Shift-R). Done — no YAML editing needed.
-
-## Option B — the add-on auto-deployed the dashboard (`deploy_dashboard`)
-
-The render is served from this repo's CDN (Pop Yellow Techno by default), so swap it by
-editing the deployed dashboard:
-
-1. Open the dashboard → **⋮ → Edit Dashboard → ⋮ → Raw configuration editor**.
-2. Find each **`/local/backgrounds/r5_background.png`** (and `r5_side.png`) and replace it
-   with your render's CDN URL:
-   ```
-   https://cdn.jsdelivr.net/gh/MatthewHobbs/r5-ha-addon@main/dashboards/Images/Models/<Trim>/<colour>-<trim>.png
-   ```
-   e.g. `…/Models/Roland%20Garros/midnight-blue-roland-garros.png`
-   (URL-encode the space in **Roland Garros** as `%20`).
-3. **Save.** (Re-running `deploy_dashboard` won't overwrite your edits — it's create-once.)
+2. With the **File Editor** add-on or **Samba**, copy it into `/config/www/backgrounds/`
+   **twice**, renamed `r5_background.png` and `r5_side.png`.
+3. Hard-refresh the dashboard (Ctrl/Cmd-Shift-R). No YAML editing needed.
 
 ## Optional — a colour-matched map marker
 
-The dashboards use Home Assistant's built-in `map` card (a plain pin). If you'd like the
-car-coloured marker the original project used, add this to `configuration.yaml` and
-restart, picking the marker that matches your colour:
+The dashboards use Home Assistant's built-in `map` card (a plain pin). For the car-coloured
+marker the original project used, add this to `configuration.yaml` and restart, picking the
+marker that matches your colour:
 
 ```yaml
 homeassistant:

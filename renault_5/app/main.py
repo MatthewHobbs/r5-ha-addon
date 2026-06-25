@@ -52,7 +52,7 @@ STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
 # slug(device_name + " " + entity_name), ignoring the MQTT object_id — so this yields
 # sensor.r5_<name> (the modernised Topolino naming the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
 
