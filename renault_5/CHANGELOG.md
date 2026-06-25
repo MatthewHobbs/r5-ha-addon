@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.5.0
+
+Review-panel fixes (security / privacy / reliability / QA) before first release.
+
+- **Privacy: `debug_dump` hardened.** Dropped the location, contracts and notification-settings
+  endpoints from the dump (location/contact/account PII, no diagnostic value); the redactor now
+  masks identifiers held as numbers and recurses lists; expanded the masked-key set
+  (gigyaId/personId/iccid/imei/contractId/account/postcode/city/GPS); it now runs **once per
+  restart** (not every poll) and the log line warns it may contain personal data — don't paste
+  it publicly. The auto-discovered account id is no longer logged at INFO.
+- **Reliability: exponential backoff** on consecutive poll failures (capped at 30 min) instead of
+  a flat-interval re-auth loop; signal handlers are registered **before** the blocking startup
+  work so shutdown is honoured during boot.
+- **Correctness:** `detect_plug_suspect` now takes the decoded `PlugState` (was a raw int that
+  would silently break on a library type change); fixed the success-log line that always printed
+  `None` for plug status (`plug_status` → `charger_plug_status`).
+- **Tests:** added a `poll_once` integration test (every sensor key is produced; graceful
+  degradation when an endpoint fails) and redaction edge cases (numeric ids, secret-as-number,
+  lists). 44 pass.
+
 ## 0.4.0
 
 - **Pick your car's trim/colour from a dropdown** — new `car_render` option (default

@@ -8,7 +8,7 @@ import json
 
 import main
 import pytest
-from renault_api.kamereon.enums import ChargeState
+from renault_api.kamereon.enums import ChargeState, PlugState
 
 
 class Battery:
@@ -147,25 +147,25 @@ def test_rapid_charge_is_classified_public(monkeypatch):
 # plug stuck-detection
 # --------------------------------------------------------------------------- #
 def test_plug_suspect_disconnected_but_charging():
-    assert main.detect_plug_suspect({}, plug=0, mileage=1000, soc=50, charging=True) == "on"
+    assert main.detect_plug_suspect({}, plug=PlugState.UNPLUGGED, mileage=1000, soc=50, charging=True) == "on"
 
 
 def test_plug_suspect_connected_but_driven(monkeypatch):
     clock = {"t": 1000.0}
     monkeypatch.setattr(main, "now_ts", lambda: clock["t"])
     state = {}
-    assert main.detect_plug_suspect(state, plug=1, mileage=1000, soc=50, charging=False) == "off"
+    assert main.detect_plug_suspect(state, plug=PlugState.PLUGGED, mileage=1000, soc=50, charging=False) == "off"
     clock["t"] = 1000.0 + 3600
-    assert main.detect_plug_suspect(state, plug=1, mileage=1005, soc=46, charging=False) == "on"
+    assert main.detect_plug_suspect(state, plug=PlugState.PLUGGED, mileage=1005, soc=46, charging=False) == "on"
 
 
 def test_plug_suspect_quiet_when_genuinely_plugged(monkeypatch):
     clock = {"t": 1000.0}
     monkeypatch.setattr(main, "now_ts", lambda: clock["t"])
     state = {}
-    main.detect_plug_suspect(state, plug=1, mileage=1000, soc=50, charging=False)
+    main.detect_plug_suspect(state, plug=PlugState.PLUGGED, mileage=1000, soc=50, charging=False)
     clock["t"] = 1000.0 + 3600
-    assert main.detect_plug_suspect(state, plug=1, mileage=1000, soc=50, charging=False) == "off"
+    assert main.detect_plug_suspect(state, plug=PlugState.PLUGGED, mileage=1000, soc=50, charging=False) == "off"
 
 
 # --------------------------------------------------------------------------- #
@@ -328,10 +328,21 @@ def test_debug_redact_masks_ids_and_secrets_but_keeps_telemetry():
     assert out["vin"] == "***"                       # id key masked
     assert out["registrationNumber"] == "***"        # plate masked
     assert out["batteryLevel"] == 80                 # telemetry kept
-    assert out["gpsLatitude"] == 51.5                # telemetry kept
+    assert out["gpsLatitude"] == "***"               # location masked (it's PII, not telemetry)
     assert out["owner"]["firstName"] == "***"        # contact field masked
     assert out["owner"]["note"] == "car *** here"    # secret value scrubbed in-string
     assert out["programs"][0]["tcuCode"] == "***"    # nested list+id masked
+
+
+def test_debug_redact_masks_non_string_id_and_numeric_secret():
+    # an identifier held as a number must still be masked (key-based, any type)
+    out = main._debug_redact({"vin": 12345, "iccid": 999, "batteryLevel": 80}, [])
+    assert out["vin"] == "***" and out["iccid"] == "***" and out["batteryLevel"] == 80
+    # a configured secret value that comes back as a number is masked by value
+    assert main._debug_redact({"acc": 7788}, ["7788"]) == {"acc": "***"}
+    # list of dicts (the get_* list-returning shape) is recursed
+    out2 = main._debug_redact([{"contractId": "C1"}, {"ok": 1}], [])
+    assert out2[0]["contractId"] == "***" and out2[1]["ok"] == 1
 
 
 def test_debug_enabled_reads_env(monkeypatch):
@@ -355,3 +366,103 @@ def test_selected_render_resolves_trim_folder(monkeypatch):
     assert deploy._selected_render() == "Images/Models/Techno/pop-yellow-techno-black-roof.png"
     monkeypatch.delenv("R5_CAR_RENDER", raising=False)
     assert deploy._selected_render() is None
+
+
+# poll_once integration — the published-data contract -------------------------
+
+class _FakeBattery:
+    batteryLevel = 80
+    batteryAutonomy = 200
+    batteryTemperature = 18
+    chargingInstantaneousPower = 0.0
+    chargingRemainingTime = None
+    batteryAvailableEnergy = 40.0
+    plugStatus = 0
+    timestamp = "2026-01-01T00:00:00Z"
+
+    def get_plug_status(self):
+        return PlugState.UNPLUGGED
+
+    def get_charging_status(self):
+        return ChargeState.NOT_IN_CHARGE
+
+
+def _obj(**attrs):
+    return type("Obj", (), attrs)()
+
+
+class _FakeVehicle:
+    """Returns minimal objects for every endpoint poll_once touches; `fail` raises one."""
+
+    def __init__(self, fail=()):
+        self._fail = set(fail)
+
+    def _maybe(self, name):
+        if name in self._fail:
+            raise RuntimeError(f"{name} boom")
+
+    async def get_battery_status(self):
+        self._maybe("battery")
+        return _FakeBattery()
+
+    async def get_cockpit(self):
+        self._maybe("cockpit")
+        return _obj(totalMileage=12345)
+
+    async def get_hvac_status(self):
+        self._maybe("hvac")
+        return _obj(externalTemperature=9, internalTemperature=20, hvacStatus="off",
+                    socThreshold=30, lastUpdateTime="t")
+
+    async def get_charge_schedule(self):
+        self._maybe("sched")
+        return {"preconditioningTemperature": 21, "preconditioningHeatedStrgWheel": True,
+                "preconditioningHeatedLeftSeat": False, "preconditioningHeatedRightSeat": True}
+
+    async def get_battery_soc(self):
+        self._maybe("soc")
+        return _obj(socTarget=80, socMin=20)
+
+    async def get_tyre_pressure(self):
+        return _obj(flPressure=2.4, frPressure=2.4, rlPressure=2.4, rrPressure=2.4)
+
+    async def get_charge_mode(self):
+        return _obj(chargeMode="always")
+
+    async def get_location(self):
+        self._maybe("loc")
+        return _obj(gpsLatitude=51.5, gpsLongitude=-0.1, lastUpdateTime="t")
+
+
+class _FakeSession:
+    locale = "en_GB"
+
+    def __init__(self, vehicle):
+        self._v = vehicle
+
+    async def vehicle(self):
+        return self._v
+
+
+def _poll(vehicle, supported, monkeypatch):
+    import asyncio
+    monkeypatch.delenv("R5_DEBUG_DUMP", raising=False)
+    monkeypatch.setattr(main, "now_ts", lambda: 1000.0)
+    return asyncio.run(main.poll_once(_FakeSession(vehicle), {}, 52.0, supported, "mi"))
+
+
+def test_poll_once_produces_every_core_sensor_key(monkeypatch):
+    data, _loc = _poll(_FakeVehicle(), {"charge-mode", "pressure"}, monkeypatch)
+    produced = set(data)
+    # every published sensor key (minus r5_) except last_charge_* (needs a completed session)
+    core = {obj.removeprefix("r5_") for obj in main.SENSORS if "last_charge" not in obj}
+    assert core - produced == set(), f"poll_once did not produce: {core - produced}"
+    # the key the success-log line reads must exist (regression guard for the log-key bug)
+    assert "charger_plug_status" in data
+    assert data["charging"] == "off" and "plug_suspect" in data
+
+
+def test_poll_once_degrades_when_one_endpoint_fails(monkeypatch):
+    data, _loc = _poll(_FakeVehicle(fail={"hvac"}), {"charge-mode", "pressure"}, monkeypatch)
+    assert "cabin_temperature" not in data and "hvac_status" not in data   # hvac skipped
+    assert "battery_level" in data and "charger_plug_status" in data       # rest survive

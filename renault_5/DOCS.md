@@ -21,7 +21,7 @@ these add-on entities.
 | `battery_capacity_kwh` | `52` or `40`. Must be set — the API reports capacity as 0; used to derive charge-session energy. |
 | `stale_hours` | Mark data stale after this many hours without a successful poll (default 6). |
 | `log_level` | `info` normally; `debug` for troubleshooting. |
-| `debug_dump` | `true` logs the full raw payload of every readable API endpoint to the add-on Log each poll (IDs/secrets redacted). Verbose — turn off when done. |
+| `debug_dump` | `true` logs every readable API endpoint to the add-on Log **once per restart** (IDs/secrets/location redacted, best-effort). It may still contain personal data — do not paste the log publicly. Off by default. |
 | `deploy_dashboard` | `none` (default), `standard`, or `bubble`. Auto-installs that dashboard for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. |
 | `dashboard_url_path` | URL slug for the deployed dashboard (default `renault-5`). |
 | `redeploy_dashboard` | `true` re-pushes the dashboard config on next start. Default `false`. |
