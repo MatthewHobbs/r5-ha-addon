@@ -22,7 +22,8 @@ location) — **you do not need the official Renault integration**.
   (`front-end.txt`) and a **Bubble Card** dashboard (`front-end-bubble.txt`), both fed by
   the add-on. The add-on can install either for you (`deploy_dashboard: standard|bubble`),
   or copy them in manually. Assets (R5 renders, map markers, Zen Dots font) live under
-  `dashboards/`.
+  `dashboards/`. To show the render matching your trim/colour, see
+  **[Customising your R5](dashboards/CUSTOMISING.md)**.
 
 ## Requirements
 
