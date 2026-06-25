@@ -46,7 +46,9 @@ project (minus the legacy `_api`/`_mi` suffixes):
 - Last charge: `…_last_charge_start/end`, `…_start_soc/end_soc`, `…_duration_min`,
   `…_recovered_pct/recovered_kwh`, `…_average_power`, `…_type`.
 - Health: `binary_sensor.r5_api_auth_failure`, `…_data_stale`, `…_plug_suspect`.
-- Action: a **Start Charging** button.
+- Actions: **Start Charging**, **Flash Lights**, and **Sound Horn** buttons
+  (`button.r5_start_charging` / `button.r5_flash_lights` / `button.r5_sound_horn`) — all
+  native, so no official Renault integration is needed for these tiles.
 
 ### Cabin temperature
 
@@ -54,10 +56,12 @@ The R5's HVAC endpoint populates `internalTemperature`, but often only shortly a
 HVAC/preconditioning activity — so `sensor.r5_cabin_temperature` may read unavailable
 between sessions. That's expected.
 
-### Charge stop / HVAC control
+### What's native vs. not
 
-Only **Start Charging** is offered by the add-on (parity with the A290). Charge-stop and
-HVAC start/stop, which Topolino's project drove via direct API POSTs, are not yet ported.
+**Native** (the add-on sends these directly via `renault-api`): Start Charging, Flash
+Lights, Sound Horn. **Not offered:** charge-stop (the platform doesn't support it) and
+HVAC start/stop + heated-seat presets — those still require the official Renault
+integration (or Topolino's automations) if you want them.
 
 ### Kamereon account id
 
