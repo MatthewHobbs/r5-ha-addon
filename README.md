@@ -29,9 +29,10 @@ location) — **you do not need the official Renault integration**.
   See [`renault_5/DOCS.md`](renault_5/DOCS.md) for the full entity/option list.
 - **The dashboards:** [`dashboards/`](dashboards/) — a **standard** dashboard
   (`front-end.txt`) and a **Bubble Card** dashboard (`front-end-bubble.txt`), both fed by
-  the add-on. The add-on can install either for you (`deploy_dashboard: standard|bubble`),
-  or copy them in manually. Assets (R5 renders, map markers, Zen Dots font) live under
-  `dashboards/`. To show the render matching your trim/colour, see
+  the add-on. The add-on can install either — or **both** — for you
+  (`deploy_dashboard: standard|bubble|both`), or copy them in manually. Assets (R5 renders,
+  map markers, Zen Dots font) live under `dashboards/`. To show the render matching your
+  trim/colour, see
   **[Customising your R5](dashboards/CUSTOMISING.md)**.
 
 ## Requirements
@@ -81,9 +82,11 @@ key needed.
    under an **R5** device within a minute.
 3. **Install the HACS cards** above (do this *before* deploying a dashboard, or it renders
    as "custom element doesn't exist").
-4. **Get a dashboard:** set `deploy_dashboard: standard` or `bubble` and restart the add-on
-   (it installs the dashboard + assets via CDN, nothing to copy), **or** copy
-   `dashboards/front-end*.txt` into a new dashboard's raw config manually.
+4. **Get a dashboard:** set `deploy_dashboard` to `standard`, `bubble`, or `both` and
+   restart the add-on (it installs the dashboard + assets via CDN, nothing to copy), **or**
+   copy `dashboards/front-end*.txt` into a new dashboard's raw config manually. With `both`,
+   the standard dashboard lands at `dashboard_url_path` and the bubble one at that path with
+   `-bubble` appended (e.g. `renault-5-bubble`).
 
 ## What it provides
 

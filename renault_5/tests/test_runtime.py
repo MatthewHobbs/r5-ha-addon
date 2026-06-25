@@ -663,6 +663,8 @@ class _FakeWS:
         self.saved = None
         self.created_dashboard = None
         self.created_resource = None
+        self.created_paths = []
+        self.saved_paths = []
         self._dashboards = list(dashboards)
         self._resources = list(resources)
         self._auth_ok_type = "auth_ok"
@@ -692,9 +694,11 @@ class _FakeWS:
             result = self._dashboards
         elif t == "lovelace/dashboards/create":
             self.created_dashboard = self._last
+            self.created_paths.append(self._last.get("url_path"))
             result = {"id": "dash"}
         elif t == "lovelace/config/save":
             self.saved = self._last
+            self.saved_paths.append(self._last.get("url_path"))
         return {"id": self._last.get("id"), "type": "result", "success": True, "result": result}
 
 
@@ -752,6 +756,28 @@ def test_run_deploy_creates_dashboard_and_rewrites_assets(monkeypatch):
     txt = json.dumps(ws.saved["config"])
     assert "cdn.jsdelivr.net/gh/MatthewHobbs/r5-ha-addon@main/dashboards/Images/Background/r5_background.png" in txt
     assert "/local/backgrounds/unmapped.png" in txt  # unmapped reference left untouched
+
+
+def test_deploy_targets():
+    assert deploy._deploy_targets("standard", "renault-5") == [("standard", "renault-5", "Renault 5")]
+    assert deploy._deploy_targets("bubble", "renault-5") == [("bubble", "renault-5", "Renault 5")]
+    assert deploy._deploy_targets("both", "renault-5") == [
+        ("standard", "renault-5", "Renault 5"),
+        ("bubble", "renault-5-bubble", "Renault 5 (Bubble)"),
+    ]
+
+
+def test_run_deploy_both_installs_two_dashboards(monkeypatch):
+    _deploy_env(monkeypatch, R5_DEPLOY_DASHBOARD="both")
+    ws = _FakeWS(dashboards=[], resources=[])
+    _FakeCS.text = _DASH_YAML
+    _FakeCS.ws = ws
+    monkeypatch.setattr(deploy.aiohttp, "ClientSession", _FakeCS)
+    asyncio.run(deploy.run_deploy())
+    # standard at the configured path, bubble at <path>-bubble
+    assert ws.created_paths == ["renault-5", "renault-5-bubble"]
+    assert ws.saved_paths == ["renault-5", "renault-5-bubble"]
+    assert ws.created_resource is not None          # font registered once for the run
 
 
 def test_run_deploy_render_override_and_redeploy(monkeypatch):
