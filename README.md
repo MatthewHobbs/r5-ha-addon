@@ -12,14 +12,15 @@ no scripts, no `secrets.yaml`, credentials entered once on the add-on's config p
 It is ported from the [Alpine A290 add-on](https://github.com/MatthewHobbs/a290-ha-addon)
 (the R5 E-Tech and Alpine A290 share the CMF-BEV / KCM platform).
 
-## Status
+## What's here
 
-- **Phase 1 — the add-on (this is here now):** [`renault_5/`](renault_5/) — the MQTT data
-  layer. Builds, boots, and publishes the full entity set. See
+- **The add-on:** [`renault_5/`](renault_5/) — the MQTT data layer. See
   [`renault_5/DOCS.md`](renault_5/DOCS.md).
-- **Phase 2 — the dashboards (next):** the standard dashboard (from Topolino's, repointed
-  to the add-on entities) and a Bubble Card dashboard (ported from the A290), both fed by
-  the new data layer.
+- **The dashboards:** [`dashboards/`](dashboards/) — a **standard** dashboard
+  (`front-end.txt`, Topolino's layout repointed to the add-on entities) and a **Bubble
+  Card** dashboard (`front-end-bubble.txt`, ported from the A290), both fed by the add-on.
+  The add-on can install either for you (`deploy_dashboard: standard|bubble`), or copy them
+  in manually. Assets (R5 renders, map markers, Zen Dots font) live under `dashboards/`.
 
 ## Install (add-on)
 

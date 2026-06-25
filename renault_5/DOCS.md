@@ -21,7 +21,7 @@ these add-on entities.
 | `battery_capacity_kwh` | `52` or `40`. Must be set — the API reports capacity as 0; used to derive charge-session energy. |
 | `stale_hours` | Mark data stale after this many hours without a successful poll (default 6). |
 | `log_level` | `info` normally; `debug` for troubleshooting. |
-| `deploy_dashboard` | `none` (default), `standard`, or `bubble`. Auto-installs that dashboard (Phase 2). |
+| `deploy_dashboard` | `none` (default), `standard`, or `bubble`. Auto-installs that dashboard for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. |
 | `dashboard_url_path` | URL slug for the deployed dashboard (default `renault-5`). |
 | `redeploy_dashboard` | `true` re-pushes the dashboard config on next start. Default `false`. |
 
