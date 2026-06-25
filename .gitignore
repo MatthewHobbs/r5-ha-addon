@@ -1,0 +1,12 @@
+# Local-only upstream reference (Topolino65/renault-5-dashboard-view) — sourced for
+# assets, never committed.
+reference/
+
+# macOS / Python / tooling
+.DS_Store
+._*
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.venv/
+venv/
