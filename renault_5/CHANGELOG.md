@@ -11,9 +11,11 @@
   CLI, shell scripts or `secrets.yaml`.
 - Entity names follow Topolino65's `renault-5-dashboard-view`, modernised: no legacy
   `_api`/`_mi` suffixes, and **locale-aware units** (miles for `en_GB`, km elsewhere).
-- Native command buttons: **Start Charging**, **Flash Lights**, **Sound Horn** (the R5
-  supports `actions/horn-start` + `actions/lights-start`, so no official Renault
-  integration is needed for these). Plus charge-session tracking (last-charge stats,
+- Native command buttons: **Start Charging**, **Flash Lights**, **Sound Horn**, **HVAC
+  Start**, **HVAC Stop** — all sent directly via `renault-api`, so the **official Renault
+  integration is not required** for any dashboard control. HVAC-start uses the car's
+  preconditioning temperature (fallback 21°C). Plus charge-session tracking (last-charge
+  stats,
   charge-type classification), plug stuck-detection, and health sensors (auth-failure,
   data-stale). State persists to `/data/state.json`.
 - **Cabin Temperature** (`internalTemperature`) is published — the R5 populates it

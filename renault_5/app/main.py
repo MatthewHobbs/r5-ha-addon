@@ -7,10 +7,11 @@ A290 add-on this is ported from (R5 E-Tech and A290 share the CMF-BEV / KCM plat
 
 Read endpoints: battery-status, cockpit, HVAC, location, ev/settings (preconditioning),
 ev/soc-levels, plus optional charge-mode and tyre-pressure (gated on supports_endpoint).
-Command buttons: Start Charging (KCM instant-charge), Flash Lights and Sound Horn — all
-native (the R5 supports actions/horn-start + actions/lights-start), so no official Renault
-integration is needed for these. Plug stuck-detection + charge-session tracking + health
-sensors persist to /data/state.json.
+Command buttons: Start Charging (KCM instant-charge), Flash Lights, Sound Horn, and HVAC
+Start/Stop — all sent natively via renault-api, so the **official Renault integration is
+not required at all**. HVAC-start targets the car's configured preconditioning temperature
+(falling back to 21°C). Plug stuck-detection + charge-session tracking + health sensors
+persist to /data/state.json.
 
 Platform caveats (R5 E-Tech / CMF-BEV, KCM): batteryCapacity is always 0 (we use the
 configured capacity); chargingStatus is a float ChargeState (0.0/0.2/1.0/-1.0/… — decoded
@@ -45,6 +46,8 @@ AVAIL_TOPIC = f"{NODE}/availability"
 CMD_CHARGE_START = f"{NODE}/cmd/charge_start"
 CMD_HORN = f"{NODE}/cmd/horn"
 CMD_LIGHTS = f"{NODE}/cmd/lights"
+CMD_HVAC_START = f"{NODE}/cmd/hvac_start"
+CMD_HVAC_STOP = f"{NODE}/cmd/hvac_stop"
 STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
 
 # Device name "R5" (not "Renault 5") is deliberate: HA derives entity_ids from
@@ -211,7 +214,8 @@ def save_state(state):
 def _on_message(client, userdata, msg):
     if _LOOP is None:
         return
-    coro = {CMD_CHARGE_START: do_charge_start, CMD_HORN: do_horn, CMD_LIGHTS: do_lights}.get(msg.topic)
+    coro = {CMD_CHARGE_START: do_charge_start, CMD_HORN: do_horn, CMD_LIGHTS: do_lights,
+            CMD_HVAC_START: do_hvac_start, CMD_HVAC_STOP: do_hvac_stop}.get(msg.topic)
     if coro is not None:
         LOG.info("Received command: %s", msg.topic)
         asyncio.run_coroutine_threadsafe(coro(), _LOOP)
@@ -225,7 +229,7 @@ def mqtt_connect():
     client.on_message = _on_message
     LOG.info("Connecting to MQTT %s:%s", cfg("MQTT_HOST"), cfg("MQTT_PORT", "1883"))
     client.connect(cfg("MQTT_HOST"), int(cfg("MQTT_PORT", "1883") or "1883"), keepalive=60)
-    for topic in (CMD_CHARGE_START, CMD_HORN, CMD_LIGHTS):
+    for topic in (CMD_CHARGE_START, CMD_HORN, CMD_LIGHTS, CMD_HVAC_START, CMD_HVAC_STOP):
         client.subscribe(topic)
     client.loop_start()
     return client
@@ -278,6 +282,8 @@ def publish_discovery(client, supported_eps, dist_unit):
         ("Start Charging", "r5_charge_start", "charge_start", CMD_CHARGE_START, "mdi:ev-station"),
         ("Flash Lights", "r5_flash_lights", "flash_lights", CMD_LIGHTS, "mdi:car-light-high"),
         ("Sound Horn", "r5_sound_horn", "sound_horn", CMD_HORN, "mdi:bullhorn"),
+        ("Start Air Conditioner", "r5_start_air_conditioner", "start_ac", CMD_HVAC_START, "mdi:air-conditioner"),
+        ("Stop Air Conditioner", "r5_stop_air_conditioner", "stop_ac", CMD_HVAC_STOP, "mdi:fan-off"),
     ]
     for name, oid, node, cmd, icon in buttons:
         conf = {"name": name, "object_id": oid, "unique_id": oid, "command_topic": cmd,
@@ -392,6 +398,24 @@ async def do_horn():
 
 async def do_lights():
     await _send_action("Flash-lights", lambda v: v.start_lights())
+
+
+async def do_hvac_start():
+    # set_ac_start needs a target temp; use the car's configured preconditioning
+    # temperature (what the dashboard shows as "Desired Temp"), falling back to 21°C.
+    async def _start(v):
+        temp = 21.0
+        try:
+            p = _find_precond(await v.get_charge_schedule())
+            temp = float(p.get("preconditioningTemperature") or 21)
+        except Exception:  # noqa: BLE001
+            pass
+        await v.set_ac_start(temp)
+    await _send_action("HVAC-start", _start)
+
+
+async def do_hvac_stop():
+    await _send_action("HVAC-stop", lambda v: v.set_ac_stop())
 
 
 def detect_plug_suspect(state, plug, mileage, soc, charging):
