@@ -10,3 +10,8 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
+
+# Secrets / local env (the add-on takes credentials via its config page)
+secrets.yaml
+.env
+*.local
