@@ -52,7 +52,7 @@ STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
 # slug(device_name + " " + entity_name), ignoring the MQTT object_id — so this yields
 # sensor.r5_<name> (the modernised Topolino naming the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
 
@@ -146,6 +146,7 @@ ACTION_BUTTONS = {
     "horn":         ("r5_sound_horn", "sound_horn", "Sound Horn", "mdi:bullhorn", "actions/horn-start"),
     "hvac_start":   ("r5_start_air_conditioner", "start_air_conditioner", "Start Air Conditioner", "mdi:air-conditioner", "actions/hvac-start"),
     "hvac_stop":    ("r5_stop_air_conditioner", "stop_air_conditioner", "Stop Air Conditioner", "mdi:fan-off", "actions/hvac-stop"),
+    "refresh_location": ("r5_refresh_location", "refresh_location", "Refresh Location", "mdi:crosshairs-gps", "actions/refresh-location"),
 }
 
 # Sensor object_ids a previous version published but no longer ships. Their retained
@@ -467,6 +468,7 @@ COMMAND_ACTIONS = {
     "lights":       lambda v: v.start_lights(),
     "hvac_start":   _hvac_start_action,
     "hvac_stop":    lambda v: v.set_ac_stop(),
+    "refresh_location": lambda v: v.refresh_location(),
 }
 
 
@@ -484,6 +486,57 @@ async def run_command(cmd):
         LOG.info("Command '%s' sent", cmd)
     except Exception as err:  # noqa: BLE001
         LOG.error("Command '%s' failed: %s", cmd, err)
+
+
+# --- Debug API dump (set debug_dump: true on the Configuration page) ----------------
+# Read-only endpoints tried when dumping everything the API exposes for this car.
+_DEBUG_METHODS = [
+    "get_details", "get_battery_status", "get_battery_soc", "get_cockpit",
+    "get_hvac_status", "get_hvac_settings", "get_location", "get_charge_schedule",
+    "get_charge_mode", "get_charging_settings", "get_tyre_pressure", "get_lock_status",
+    "get_res_state", "get_contracts", "get_notification_settings",
+]
+# Keys masked regardless of value — identifiers / contact info (not telemetry).
+_DEBUG_REDACT_KEYS = {"registrationnumber", "vin", "tcucode", "radiocode", "siret",
+                      "msisdn", "phonenumber", "phone", "email", "firstname", "lastname"}
+
+
+def debug_enabled():
+    return cfg("R5_DEBUG_DUMP", "false").strip().lower() in ("true", "1", "on")
+
+
+def _debug_redact(obj, secrets):
+    """Recursively scrub identifiers + configured VIN/account/username from a payload.
+    Telemetry (battery, GPS, etc.) is kept — only IDs/contact fields and secret values
+    are masked, so the dump shows the data without leaking who/which car it is."""
+    if isinstance(obj, dict):
+        return {k: ("***" if k.lower() in _DEBUG_REDACT_KEYS else _debug_redact(v, secrets))
+                for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_debug_redact(v, secrets) for v in obj]
+    if isinstance(obj, str):
+        for s in secrets:
+            if s and s in obj:
+                obj = obj.replace(s, "***")
+    return obj
+
+
+async def dump_api(vehicle):
+    """DEBUG: fetch every readable endpoint, redact IDs/secrets, log the lot. Never fatal."""
+    secrets = [v for v in (cfg("R5_VIN"), cfg("R5_ACCOUNT_ID"), cfg("R5_USERNAME")) if v]
+    out = {}
+    for meth in _DEBUG_METHODS:
+        fn = getattr(vehicle, meth, None)
+        if fn is None:
+            continue
+        try:
+            res = await fn()
+            raw = res if isinstance(res, dict) else getattr(res, "raw_data", None)
+            out[meth] = _debug_redact(raw if raw is not None else str(res), secrets)
+        except Exception as err:  # noqa: BLE001
+            out[meth] = {"_error": f"{type(err).__name__}: {err}"}
+    LOG.info("API DEBUG DUMP (secrets/IDs redacted):\n%s",
+             json.dumps(out, indent=2, default=str, ensure_ascii=False))
 
 
 def detect_plug_suspect(state, plug, mileage, soc, charging):
@@ -643,6 +696,8 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
     data["charging"] = "on" if charging else "off"
     data["plug_suspect"] = detect_plug_suspect(state, battery.plugStatus, mileage,
                                                 battery.batteryLevel, charging)
+    if debug_enabled():
+        await dump_api(vehicle)
     return data, location_attrs
 
 

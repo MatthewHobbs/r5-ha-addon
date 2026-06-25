@@ -257,12 +257,16 @@ def test_command_actions_dispatch_to_real_methods():
         async def set_ac_stop(self):
             self.calls.append("set_ac_stop")
 
+        async def refresh_location(self):
+            self.calls.append("refresh_location")
+
         async def get_charge_schedule(self):
             return {"preconditioningTemperature": 19}
 
     async def scenario():
         for cmd, expect in [("charge_start", "set_charge_start"), ("horn", "start_horn"),
-                            ("lights", "start_lights"), ("hvac_stop", "set_ac_stop")]:
+                            ("lights", "start_lights"), ("hvac_stop", "set_ac_stop"),
+                            ("refresh_location", "refresh_location")]:
             v = FakeVehicle()
             await main.COMMAND_ACTIONS[cmd](v)
             assert expect in v.calls
@@ -307,3 +311,33 @@ def test_vehicle_session_reuses_login_and_reauths_after_invalidate(monkeypatch):
         assert calls["closed"] == 2
 
     asyncio.run(scenario())
+
+
+# debug API dump --------------------------------------------------------------
+
+def test_debug_redact_masks_ids_and_secrets_but_keeps_telemetry():
+    payload = {
+        "vin": "VF1SECRET",
+        "registrationNumber": "PLATE123",
+        "batteryLevel": 80,
+        "gpsLatitude": 51.5,
+        "owner": {"firstName": "Matt", "email": "x@y.z", "note": "car VF1SECRET here"},
+        "programs": [{"tcuCode": "T1"}],
+    }
+    out = main._debug_redact(payload, ["VF1SECRET"])
+    assert out["vin"] == "***"                       # id key masked
+    assert out["registrationNumber"] == "***"        # plate masked
+    assert out["batteryLevel"] == 80                 # telemetry kept
+    assert out["gpsLatitude"] == 51.5                # telemetry kept
+    assert out["owner"]["firstName"] == "***"        # contact field masked
+    assert out["owner"]["note"] == "car *** here"    # secret value scrubbed in-string
+    assert out["programs"][0]["tcuCode"] == "***"    # nested list+id masked
+
+
+def test_debug_enabled_reads_env(monkeypatch):
+    monkeypatch.delenv("R5_DEBUG_DUMP", raising=False)
+    assert main.debug_enabled() is False
+    monkeypatch.setenv("R5_DEBUG_DUMP", "true")
+    assert main.debug_enabled() is True
+    monkeypatch.setenv("R5_DEBUG_DUMP", "false")
+    assert main.debug_enabled() is False
