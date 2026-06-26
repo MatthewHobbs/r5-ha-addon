@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.2
+
+- Refine 0.8.1: only drop the `distance` device_class when the unit is **miles**
+  (`locale: en_GB`); for km it's kept, so the sensors retain distance semantics/statistics.
+
 ## 0.8.1
 
 - Fix **Battery Autonomy / Vehicle Mileage shown in km even with `locale: en_GB`** (ported

@@ -211,6 +211,20 @@ def test_optional_sensors_cleared_when_unsupported():
         assert c.pub[f"homeassistant/sensor/{main.NODE}/{obj}/config"] == ""
 
 
+def test_distance_device_class_dropped_only_for_miles():
+    c = StubClient()
+    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS), "km")
+    for obj in ("r5_battery_autonomy", "r5_vehicle_mileage"):
+        conf = json.loads(c.pub[f"homeassistant/sensor/{main.NODE}/{obj}/config"])
+        assert conf.get("device_class") == "distance" and conf["unit_of_measurement"] == "km"
+
+    c = StubClient()
+    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS), "mi")
+    for obj in ("r5_battery_autonomy", "r5_vehicle_mileage"):
+        conf = json.loads(c.pub[f"homeassistant/sensor/{main.NODE}/{obj}/config"])
+        assert "device_class" not in conf and conf["unit_of_measurement"] == "mi"
+
+
 # --------------------------------------------------------------------------- #
 # control buttons (all five supported on the R5)
 # --------------------------------------------------------------------------- #
