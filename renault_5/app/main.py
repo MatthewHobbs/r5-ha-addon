@@ -51,7 +51,7 @@ STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
 # Device name "R5" is deliberate: HA builds entity_ids from slug(device + entity name) and
 # ignores object_id, so this yields sensor.r5_<name> (what the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
-VERSION = "0.8.1"
+VERSION = "0.8.2"
 
 _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
 
@@ -59,7 +59,7 @@ _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
 # R5 naming (minus the legacy _api/_mi suffixes); units are locale-aware (see publish).
 SENSORS = {
     "r5_battery_level":          ("Battery Level", "battery", "%", "measurement"),
-    "r5_battery_autonomy":       ("Battery Autonomy", None, "km", "measurement"),  # no distance device_class: HA would re-convert our mi back to km
+    "r5_battery_autonomy":       ("Battery Autonomy", "distance", "km", "measurement"),
     "r5_battery_temperature":    ("Battery Temperature", "temperature", "°C", "measurement"),
     "r5_charging_rate":          ("Charging Rate", "power", "kW", "measurement"),
     "r5_charging_remaining_time": ("Charging Remaining Time", "duration", "min", "measurement"),
@@ -68,7 +68,7 @@ SENSORS = {
     "r5_charger_status":         ("Charger Status", None, None, None),
     "r5_charging_flap_status":   ("Charging Flap Status", None, None, None),
     "r5_drive_side":             ("Drive Side", None, None, None),
-    "r5_vehicle_mileage":        ("Vehicle Mileage", None, "km", "total_increasing"),  # no distance device_class (see battery_autonomy)
+    "r5_vehicle_mileage":        ("Vehicle Mileage", "distance", "km", "total_increasing"),
     "r5_preconditioning_temperature": ("Preconditioning Temperature", "temperature", "°C", None),
     "r5_hvac_last_activity":     ("HVAC Last Activity", "timestamp", None, None),
     "r5_gps_last_activity":      ("GPS Last Activity", "timestamp", None, None),
@@ -266,6 +266,8 @@ def publish_discovery(client, supported_eps, dist_unit):
         published += 1
         if obj in ("r5_battery_autonomy", "r5_vehicle_mileage"):
             unit = dist_unit   # locale-aware (mi for UK, km elsewhere)
+            if dist_unit == "mi":
+                dev_class = None  # else HA (metric) re-converts our miles back to km
         conf = {"name": name, "object_id": obj, "unique_id": obj,
                 "state_topic": STATE_TOPIC, "value_template": "{{ value_json.%s }}" % obj.removeprefix("r5_"),
                 "availability_topic": AVAIL_TOPIC, "device": DEVICE}
