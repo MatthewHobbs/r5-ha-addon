@@ -33,6 +33,7 @@ from datetime import datetime, timedelta, timezone
 import aiohttp
 import deploy
 import paho.mqtt.client as mqtt
+from aiohttp import web
 from renault_api.kamereon.enums import ChargeState, PlugState
 from renault_api.renault_client import RenaultClient
 
@@ -820,6 +821,21 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
     return data, location_attrs
 
 
+HEALTH_PORT = 8099
+
+
+async def start_health_server():
+    """/healthz on the poll loop — backs the Dockerfile HEALTHCHECK: a deadlocked event loop
+    can't answer, so the Supervisor marks the container unhealthy and restarts it."""
+    app = web.Application()
+    app.router.add_get("/healthz", lambda _req: web.Response(text="ok"))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    await web.TCPSite(runner, "0.0.0.0", HEALTH_PORT).start()  # nosec B104
+    LOG.info("Health endpoint listening on :%d/healthz", HEALTH_PORT)
+    return runner
+
+
 async def main():
     global _LOOP
     setup_logging()
@@ -840,6 +856,7 @@ async def main():
     for sig in (signal.SIGTERM, signal.SIGINT):   # honour shutdown during startup too
         _LOOP.add_signal_handler(sig, stop.set)
 
+    health = await start_health_server()
     state = load_state()
     vsession = VehicleSession(locale)
     supported = await detect_supported(vsession)
@@ -887,6 +904,7 @@ async def main():
 
     LOG.info("Shutting down")
     await vsession.close()
+    await health.cleanup()
     client.publish(AVAIL_TOPIC, "offline", retain=True)
     client.loop_stop()
     client.disconnect()

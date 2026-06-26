@@ -674,6 +674,21 @@ def test_poll_once_survives_every_secondary_endpoint_failing():
 # --------------------------------------------------------------------------- #
 # main() — one full poll cycle (success + failure branch)
 # --------------------------------------------------------------------------- #
+def test_health_server_serves_200():
+    import aiohttp
+
+    async def scenario():
+        runner = await main.start_health_server()
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.get(f"http://127.0.0.1:{main.HEALTH_PORT}/healthz") as r:
+                    assert r.status == 200 and (await r.text()) == "ok"
+        finally:
+            await runner.cleanup()
+
+    asyncio.run(scenario())
+
+
 def _wire_main(monkeypatch, tmp_path, poll):
     for k, v in {"R5_USERNAME": "u", "R5_PASSWORD": "p", "R5_VIN": "VF1",
                  "MQTT_HOST": "broker", "R5_LOCALE": "en_GB"}.items():
@@ -691,6 +706,14 @@ def _wire_main(monkeypatch, tmp_path, poll):
         return None
 
     monkeypatch.setattr(main.deploy, "run_deploy", fake_deploy)
+
+    async def fake_health():                       # don't bind a real port in the loop test
+        class _Runner:
+            async def cleanup(self):
+                pass
+        return _Runner()
+
+    monkeypatch.setattr(main, "start_health_server", fake_health)
 
     created = {}
     real_event = main.asyncio.Event

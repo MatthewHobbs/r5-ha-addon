@@ -14,6 +14,10 @@
   `alerts`, plus `hvac-history` / `hvac-sessions` so the dump documents what's forbidden too.
   Date-ranged (`charges`, `charge-history`) probed over the last 30 days; `alerts` is path-
   resolved and raw-GET. Use it to see what `charges` / `alerts` return before building on them.
+- **Container health endpoint + `HEALTHCHECK`** (ported from the A290 — closes a parity gap).
+  A tiny `/healthz` server runs on the poll loop and a Dockerfile `HEALTHCHECK` polls it, so a
+  **deadlocked event loop** (which the in-loop logic can't catch) now marks the container
+  unhealthy and the Supervisor **restarts** it, instead of the add-on silently going stale.
 
 ## 0.8.2
 
