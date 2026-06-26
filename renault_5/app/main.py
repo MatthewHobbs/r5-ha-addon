@@ -29,7 +29,7 @@ import os
 import signal
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import aiohttp
 import deploy
@@ -568,12 +568,15 @@ async def run_command(cmd, payload=""):
 # --- Debug API dump (set debug_dump: true on the Configuration page) ----------------
 # Vehicle-telemetry endpoints only. Deliberately excludes get_location (GPS),
 # get_contracts and get_notification_settings — those carry location / contact / account
-# PII with no sensor-mapping diagnostic value.
+# PII with no sensor-mapping diagnostic value. No-arg readers below; date-ranged (charges,
+# charge-history) and raw (alerts) endpoints are probed separately in dump_api.
 _DEBUG_METHODS = [
-    "get_details", "get_battery_status", "get_battery_soc", "get_cockpit",
-    "get_hvac_status", "get_hvac_settings", "get_charge_schedule", "get_charge_mode",
-    "get_charging_settings", "get_tyre_pressure", "get_lock_status", "get_res_state",
+    "get_details", "get_car_adapter", "get_battery_status", "get_battery_soc", "get_cockpit",
+    "get_hvac_status", "get_hvac_settings", "get_hvac_history", "get_hvac_sessions",
+    "get_charge_schedule", "get_charge_mode", "get_charging_settings", "get_tyre_pressure",
+    "get_lock_status", "get_res_state",
 ]
+_DEBUG_RANGE_DAYS = 30
 # Keys masked regardless of value type — identifiers / contact / location fields.
 _DEBUG_REDACT_KEYS = {
     "registrationnumber", "vin", "tcucode", "radiocode", "siret", "msisdn", "phonenumber",
@@ -605,25 +608,47 @@ def _debug_redact(obj, secrets):
     return obj
 
 
+async def _dump_one(out, name, call, secrets):
+    """Run one debug probe, mask its raw payload, store the result; never fatal."""
+    try:
+        res = await call()
+        if isinstance(res, dict):
+            raw = res
+        elif isinstance(res, list):
+            raw = [getattr(x, "raw_data", x) for x in res]
+        else:
+            raw = getattr(res, "raw_data", None) or {"_repr": str(res)}
+        out[name] = _debug_redact(raw, secrets)
+    except Exception as err:  # noqa: BLE001
+        out[name] = {"_error": f"{type(err).__name__}: {err}"}
+
+
 async def dump_api(vehicle):
     """DEBUG: fetch the telemetry endpoints, mask IDs/secrets, log the lot. Never fatal."""
     secrets = [v for v in (cfg("R5_VIN"), cfg("R5_ACCOUNT_ID"), cfg("R5_USERNAME")) if v]
     out = {}
     for meth in _DEBUG_METHODS:
         fn = getattr(vehicle, meth, None)
-        if fn is None:
-            continue
-        try:
-            res = await fn()
-            if isinstance(res, dict):
-                raw = res
-            elif isinstance(res, list):
-                raw = [getattr(x, "raw_data", x) for x in res]
-            else:
-                raw = getattr(res, "raw_data", None) or {"_repr": str(res)}
-            out[meth] = _debug_redact(raw, secrets)
-        except Exception as err:  # noqa: BLE001
-            out[meth] = {"_error": f"{type(err).__name__}: {err}"}
+        if fn is not None:
+            await _dump_one(out, meth, lambda _f=fn: _f(), secrets)
+    # Date-ranged + raw endpoints can't be called arg-less; probe them explicitly. alerts has
+    # no convenience method, so resolve its per-model path and raw-GET it (forbidden -> _error).
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=_DEBUG_RANGE_DAYS)
+
+    async def _alerts():
+        return await vehicle.http_get(await vehicle.get_full_endpoint("alerts"))
+
+    specials = (
+        ("get_charges", getattr(vehicle, "get_charges", None),
+         lambda: vehicle.get_charges(start, end)),
+        ("get_charge_history", getattr(vehicle, "get_charge_history", None),
+         lambda: vehicle.get_charge_history(start, end, "month")),
+        ("alerts", getattr(vehicle, "http_get", None), _alerts),
+    )
+    for name, present, call in specials:
+        if present is not None:
+            await _dump_one(out, name, call, secrets)
     LOG.warning("API DEBUG DUMP — may contain personal data; redaction is best-effort, do NOT "
                 "paste publicly. One-shot per restart; turn debug_dump off when done.\n%s",
                 json.dumps(out, indent=2, default=str, ensure_ascii=False))

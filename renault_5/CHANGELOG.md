@@ -9,6 +9,11 @@
   back first and re-sent. Published only where the car supports `soc-levels`, and optimistic
   so the slider reflects the new value immediately. Ported from the Alpine A290 — keeps the
   two add-ons in sync.
+- **`debug_dump` now covers the full endpoint set.** Added the previously-missing readable
+  endpoints — `charges` (real charge-session history), `car-adapter` (vehicle spec), the R5-only
+  `alerts`, plus `hvac-history` / `hvac-sessions` so the dump documents what's forbidden too.
+  Date-ranged (`charges`, `charge-history`) probed over the last 30 days; `alerts` is path-
+  resolved and raw-GET. Use it to see what `charges` / `alerts` return before building on them.
 
 ## 0.8.2
 

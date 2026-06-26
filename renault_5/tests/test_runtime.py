@@ -466,6 +466,35 @@ def test_dump_api_redacts_secrets_and_never_raises(monkeypatch, caplog):
     assert "hvac boom" in caplog.text                 # endpoint error captured, not fatal
 
 
+def test_dump_api_probes_ranged_and_alerts(monkeypatch, caplog):
+    monkeypatch.setenv("R5_VIN", "VF1SECRET")
+    captured = {}
+
+    class V:
+        async def get_charges(self, start, end):
+            captured["window"] = (start, end)
+            return [_obj(raw_data={"chargeEnergyRecovered": 12})]
+
+        async def get_charge_history(self, start, end, period):
+            raise RuntimeError("forbidden")           # exercises the error branch
+
+        async def get_full_endpoint(self, key):
+            captured["alerts_key"] = key
+            return "/resolved/alerts"
+
+        async def http_get(self, path):
+            captured["alerts_path"] = path
+            return {"alerts": ["x"]}
+
+    with caplog.at_level(logging.WARNING, logger="renault_5"):
+        asyncio.run(main.dump_api(V()))
+    start, end = captured["window"]
+    assert (end - start).days == main._DEBUG_RANGE_DAYS   # charges window ~30 days
+    assert captured["alerts_key"] == "alerts"             # alerts path resolved by key
+    assert captured["alerts_path"] == "/resolved/alerts"  # then raw-GET
+    assert "chargeEnergyRecovered" in caplog.text         # charges payload captured
+
+
 def test_maybe_dump_api_runs_once_per_restart(monkeypatch):
     main._DEBUG_STATE["dumped"] = False
     monkeypatch.setenv("R5_DEBUG_DUMP", "true")
