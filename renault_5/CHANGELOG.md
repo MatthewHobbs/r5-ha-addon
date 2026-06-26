@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.1
+
+- Fix **Battery Autonomy / Vehicle Mileage shown in km even with `locale: en_GB`** (ported
+  from the A290). Those sensors carried `device_class: distance`, so Home Assistant on a
+  metric unit system converted the add-on's miles back to km for display. Dropped the
+  `distance` device_class on both so the locale-derived unit shows as-is.
+
 ## 0.8.0
 
 - **`deploy_dashboard: both`** — deploy the standard *and* Bubble dashboards in one go. The
