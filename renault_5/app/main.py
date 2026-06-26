@@ -51,7 +51,7 @@ STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
 # Device name "R5" is deliberate: HA builds entity_ids from slug(device + entity name) and
 # ignores object_id, so this yields sensor.r5_<name> (what the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
-VERSION = "0.8.2"
+VERSION = "0.9.0"
 
 _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
 
@@ -76,8 +76,6 @@ SENSORS = {
     "r5_cabin_temperature":      ("Cabin Temperature", "temperature", "°C", "measurement"),
     "r5_hvac_status":            ("HVAC Status", None, None, None),
     "r5_hvac_soc_threshold":     ("HVAC SoC Threshold", "battery", "%", None),
-    "r5_soc_max_target":         ("SOC Max Target", "battery", "%", None),
-    "r5_soc_min_target":         ("SOC Min Target", "battery", "%", None),
     "r5_charge_mode":            ("Charge Mode", None, None, None),
     "r5_tyre_pressure_fl":       ("Tyre Pressure Front Left", None, None, "measurement"),
     "r5_tyre_pressure_fr":       ("Tyre Pressure Front Right", None, None, "measurement"),
@@ -139,9 +137,20 @@ ACTION_BUTTONS = {
     "refresh_location": ("r5_refresh_location", "refresh_location", "Refresh Location", "mdi:crosshairs-gps", "actions/refresh-location"),
 }
 
+# Writable charge-limit controls. State comes from the poll's soc-levels read (data key =
+# object_id without the r5_ prefix); a slider move writes via set_battery_soc(). Gated on
+# SOC_ENDPOINT, so a model that rejects the write never ships the control.
+# object_id -> (name, icon, role, min, max, step); role ("min"/"target") selects the arg.
+SOC_ENDPOINT = "soc-levels"
+NUMBERS = {
+    "r5_soc_min_target": ("SOC Min Target", "mdi:battery-arrow-down", "min",    15, 45,  5),
+    "r5_soc_max_target": ("SOC Max Target", "mdi:battery-arrow-up",   "target", 55, 100, 5),
+}
+
 # Sensor object_ids a previous version published but no longer ships. Their retained
 # discovery config is cleared on startup so upgraded installs don't keep a dead entity.
-RETIRED_SENSORS = []
+# soc_*_target moved from SENSORS to NUMBERS, so clear their old sensor configs.
+RETIRED_SENSORS = ["r5_soc_max_target", "r5_soc_min_target"]
 
 HOME_POWER_MAX_KW = 7.4
 # Friendly labels for the ChargeState/PlugState enums (every member mapped, so float
@@ -218,8 +227,9 @@ def save_state(state):
 def _on_message(client, userdata, msg):
     if _LOOP is not None and msg.topic.startswith(CMD_PREFIX):
         cmd = msg.topic[len(CMD_PREFIX):]
-        LOG.info("Received command: %s", cmd)
-        asyncio.run_coroutine_threadsafe(run_command(cmd), _LOOP)
+        payload = msg.payload.decode(errors="replace") if msg.payload else ""
+        LOG.info("Received command: %s %s", cmd, payload)
+        asyncio.run_coroutine_threadsafe(run_command(cmd, payload), _LOOP)
 
 
 def _on_connect(client, userdata, flags, reason_code, properties=None):
@@ -306,8 +316,26 @@ def publish_discovery(client, supported_eps, dist_unit):
             shipped.append(node)
         else:
             client.publish(topic, "", retain=True)
-    LOG.info("Published discovery: %d sensors (%d unsupported cleared), %d binary_sensors, device_tracker, buttons=%s",
-             published, len(skip), len(BINARY_SENSORS), shipped or "none")
+    # Writable charge-limit numbers, gated on soc-levels support (else cleared).
+    numbers = []
+    soc_ok = SOC_ENDPOINT in supported_eps
+    for obj, (name, icon, _role, mn, mx, step) in NUMBERS.items():
+        short = obj.removeprefix("r5_")
+        topic = f"{DISCOVERY_PREFIX}/number/{NODE}/{short}/config"
+        if soc_ok:
+            conf = {"name": name, "object_id": obj, "unique_id": obj,
+                    "state_topic": STATE_TOPIC, "value_template": "{{ value_json.%s }}" % short,
+                    "command_topic": f"{CMD_PREFIX}{short}", "availability_topic": AVAIL_TOPIC,
+                    "min": mn, "max": mx, "step": step, "mode": "slider",
+                    "unit_of_measurement": "%", "device_class": "battery",
+                    "optimistic": True, "icon": icon, "device": DEVICE}
+            client.publish(topic, json.dumps(conf), retain=True)
+            numbers.append(short)
+        else:
+            client.publish(topic, "", retain=True)
+    LOG.info("Published discovery: %d sensors (%d unsupported cleared), %d binary_sensors, "
+             "device_tracker, buttons=%s, numbers=%s",
+             published, len(skip), len(BINARY_SENSORS), shipped or "none", numbers or "none")
 
 
 KM_TO_MI = 0.621371
@@ -441,7 +469,7 @@ async def detect_supported(vsession):
                     supported.discard(ep)
             except Exception as err:  # noqa: BLE001
                 LOG.warning("supports_endpoint(%s) check failed: %s", ep, err)
-        for ep in sorted(action_eps):
+        for ep in sorted(action_eps | {SOC_ENDPOINT}):
             try:
                 if await _supports(vehicle, ep):
                     supported.add(ep)
@@ -480,9 +508,45 @@ COMMAND_ACTIONS = {
 COMMAND_DEBOUNCE_S = 5
 _last_command = {}
 
+# Command-topic suffixes that map to writable numbers, and each one's set_battery_soc role.
+NUMBER_CMDS = {oid.removeprefix("r5_") for oid in NUMBERS}
+_NUMBER_ROLE = {oid.removeprefix("r5_"): role
+                for oid, (_n, _i, role, _mn, _mx, _s) in NUMBERS.items()}
 
-async def run_command(cmd):
-    """Dispatch an MQTT button press to its renault-api action; never fatal."""
+
+async def set_soc_level(which, payload):
+    """Write a charge limit. set_battery_soc needs both min and target together, so the
+    opposing slider's current value is read back first and re-sent unchanged."""
+    try:
+        value = int(float(payload))
+    except (TypeError, ValueError):
+        LOG.warning("Ignoring non-numeric %s value: %r", which, payload)
+        return
+    locale = cfg("R5_LOCALE", "en_GB")
+    try:
+        async with aiohttp.ClientSession() as websession:
+            vehicle = await _login_vehicle(websession, locale)
+            soc = await vehicle.get_battery_soc()
+            cur_min = getattr(soc, "socMin", None)
+            cur_target = getattr(soc, "socTarget", None)
+            new_min, new_target = ((value, cur_target) if _NUMBER_ROLE[which] == "min"
+                                   else (cur_min, value))
+            if new_min is None or new_target is None:
+                LOG.error("Cannot set %s: current limits unavailable (min=%s, target=%s)",
+                          which, cur_min, cur_target)
+                return
+            await vehicle.set_battery_soc(min=int(new_min), target=int(new_target))
+        LOG.info("Set charge limits: min=%s%%, target=%s%%", new_min, new_target)
+    except Exception as err:  # noqa: BLE001
+        LOG.error("Failed to set %s=%s: %s", which, value, err)
+
+
+async def run_command(cmd, payload=""):
+    """Dispatch an MQTT command: a button press to its renault-api action, or a number set
+    to set_battery_soc. Never fatal."""
+    if cmd in NUMBER_CMDS:
+        await set_soc_level(cmd, payload)
+        return
     action = COMMAND_ACTIONS.get(cmd)
     if action is None:
         LOG.warning("Ignoring unknown command: %s", cmd)

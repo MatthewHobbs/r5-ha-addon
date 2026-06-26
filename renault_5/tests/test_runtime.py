@@ -103,9 +103,11 @@ def test_on_message_dispatches(monkeypatch):
     monkeypatch.setattr(main, "_LOOP", object())
     monkeypatch.setattr(main.asyncio, "run_coroutine_threadsafe",
                         lambda coro, loop: captured.update(coro=coro, loop=loop))
-    monkeypatch.setattr(main, "run_command", lambda cmd: ("CO", cmd))
-    main._on_message(None, None, _obj(topic=main.CMD_PREFIX + "horn"))
-    assert captured["coro"] == ("CO", "horn")
+    monkeypatch.setattr(main, "run_command", lambda cmd, payload="": ("CO", cmd, payload))
+    main._on_message(None, None, _obj(topic=main.CMD_PREFIX + "horn", payload=b""))
+    assert captured["coro"] == ("CO", "horn", "")
+    main._on_message(None, None, _obj(topic=main.CMD_PREFIX + "soc_max_target", payload=b"90"))
+    assert captured["coro"] == ("CO", "soc_max_target", "90")
 
 
 def test_on_message_ignores_non_command_and_no_loop(monkeypatch):
@@ -236,6 +238,7 @@ def test_detect_supported_probes_endpoints():
         sup = await main.detect_supported(Sess())
         assert "charge-mode" in sup and "pressure" not in sup
         assert actions <= sup
+        assert main.SOC_ENDPOINT in sup          # soc-levels probed and supported
 
     asyncio.run(scenario())
 
@@ -356,6 +359,82 @@ def test_run_command_failure_is_logged_not_raised(monkeypatch):
 
     monkeypatch.setattr(main, "_login_vehicle", login)
     asyncio.run(main.run_command("horn"))             # logs error, never raises
+
+
+# --------------------------------------------------------------------------- #
+# charge-limit numbers (set_battery_soc)
+# --------------------------------------------------------------------------- #
+class _SocVehicle:
+    def __init__(self):
+        self.soc_set = None
+
+    async def get_battery_soc(self):
+        return _obj(socTarget=80, socMin=20)
+
+    async def set_battery_soc(self, *, min, target):
+        self.soc_set = (min, target)
+
+
+def _soc_login(monkeypatch, vehicle):
+    monkeypatch.setattr(main.aiohttp, "ClientSession", lambda *a, **k: _CmdSession())
+
+    async def login(ws, loc):
+        return vehicle
+
+    monkeypatch.setattr(main, "_login_vehicle", login)
+
+
+def test_set_soc_max_target_sends_both_limits(monkeypatch):
+    v = _SocVehicle()
+    _soc_login(monkeypatch, v)
+    asyncio.run(main.run_command("soc_max_target", "90"))
+    assert v.soc_set == (20, 90)         # min unchanged, target updated
+
+
+def test_set_soc_min_target_sends_both_limits(monkeypatch):
+    v = _SocVehicle()
+    _soc_login(monkeypatch, v)
+    asyncio.run(main.run_command("soc_min_target", "30"))
+    assert v.soc_set == (30, 80)         # target unchanged, min updated
+
+
+def test_set_soc_ignores_non_numeric(monkeypatch):
+    v = _SocVehicle()
+    _soc_login(monkeypatch, v)
+    asyncio.run(main.run_command("soc_max_target", "not-a-number"))
+    assert v.soc_set is None             # never written
+
+
+def test_set_soc_bails_when_opposing_limit_missing(monkeypatch):
+    class _NoLimits(_SocVehicle):
+        async def get_battery_soc(self):
+            return _obj(socTarget=None, socMin=None)
+
+    v = _NoLimits()
+    _soc_login(monkeypatch, v)
+    asyncio.run(main.run_command("soc_max_target", "90"))
+    assert v.soc_set is None             # bailed: current limits unavailable
+
+
+def test_set_soc_error_is_swallowed(monkeypatch):
+    monkeypatch.setattr(main.aiohttp, "ClientSession", lambda *a, **k: _CmdSession())
+
+    async def login(ws, loc):
+        raise RuntimeError("auth failed")
+
+    monkeypatch.setattr(main, "_login_vehicle", login)
+    asyncio.run(main.run_command("soc_max_target", "90"))   # no raise
+
+
+def test_numbers_not_debounced(monkeypatch):
+    # A number set must not be dropped by the button debounce window.
+    main._last_command.clear()
+    monkeypatch.setattr(main, "now_ts", lambda: 1000.0)
+    v = _SocVehicle()
+    _soc_login(monkeypatch, v)
+    asyncio.run(main.run_command("soc_max_target", "70"))
+    asyncio.run(main.run_command("soc_max_target", "75"))   # immediate repeat still applies
+    assert v.soc_set == (20, 75)
 
 
 # --------------------------------------------------------------------------- #

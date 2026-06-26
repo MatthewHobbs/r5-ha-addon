@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.0
+
+- **Set the charge limits from Home Assistant.** SOC Min/Max Target are now **writable
+  `number` sliders** (`number.r5_soc_min_target` 15–45 %, `number.r5_soc_max_target`
+  55–100 %) instead of read-only sensors. Moving a slider writes both limits to the car via
+  `renault-api`'s `set_battery_soc` (the `soc-levels` endpoint); the unchanged limit is read
+  back first and re-sent. Published only where the car supports `soc-levels`, and optimistic
+  so the slider reflects the new value immediately. Ported from the Alpine A290 — keeps the
+  two add-ons in sync.
+
 ## 0.8.2
 
 - Refine 0.8.1: only drop the `distance` device_class when the unit is **miles**
