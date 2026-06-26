@@ -8,8 +8,7 @@ A290 add-on this is ported from (R5 E-Tech and A290 share the CMF-BEV / KCM plat
 Read endpoints: battery-status, cockpit, HVAC, location, ev/settings (preconditioning),
 ev/soc-levels, plus optional charge-mode and tyre-pressure (gated on supports_endpoint).
 Command buttons (ACTION_BUTTONS): Start Charging (KCM instant-charge), Flash Lights, Sound
-Horn, and HVAC Start/Stop — all sent natively via renault-api, so the **official Renault
-integration is not required at all**. Each button is gated on supports_endpoint(), so a
+Horn, and HVAC Start/Stop — all sent natively via renault-api, so **Home Assistant's `renault` integration is not required at all**. Each button is gated on supports_endpoint(), so a
 control the platform forbids is never shown (all five are supported on the R5). HVAC-start
 targets the car's configured preconditioning temperature (falling back to 21°C). One cached
 login is reused across polls (VehicleSession) rather than re-authenticating every cycle.
