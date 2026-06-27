@@ -8,6 +8,22 @@ This is a maintained data layer for Topolino65's
 entity names follow that project (modernised, locale-aware), so the dashboards bind to
 these add-on entities.
 
+## Before you start — install these first
+
+The add-on itself only needs the **Mosquitto broker** add-on (its MQTT connection is
+auto-discovered). But if you use one of the **bundled dashboards** (`deploy_dashboard`),
+you must **first install the frontend cards via HACS** — otherwise the dashboard renders
+as *"Custom element doesn't exist"* with broken tiles:
+
+| Install via HACS → Frontend | Needed for |
+| --- | --- |
+| **card-mod** + **Mushroom** | both dashboards |
+| **Button Card** + **Browser Mod** | the **standard** dashboard (tiles + pop-ups) |
+| **Bubble Card** | the **bubble** dashboard only |
+
+Install Mosquitto and the cards above **before** enabling `deploy_dashboard`, so the
+dashboard renders correctly the first time.
+
 ## Configuration
 
 | Option | Description |
