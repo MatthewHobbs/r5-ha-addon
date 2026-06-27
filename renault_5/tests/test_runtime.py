@@ -910,6 +910,23 @@ def test_run_deploy_creates_dashboard_and_rewrites_assets(monkeypatch):
     assert "/local/backgrounds/unmapped.png" in txt  # unmapped reference left untouched
 
 
+# dashboard_url_path validation — never overwrite a built-in HA panel
+def test_validate_url_path_normalises_valid():
+    assert deploy._validate_url_path("  Renault-5  ") == "renault-5"
+
+
+@pytest.mark.parametrize("bad", ["", "renault_5", "energy", "developer-tools", "no space", "UPPER"])
+def test_validate_url_path_rejects_bad(bad):
+    with pytest.raises(ValueError):
+        deploy._validate_url_path(bad)
+
+
+def test_run_deploy_skips_reserved_url_path(monkeypatch):
+    # Reaches validation (token present) and returns before any WS connection / save.
+    _deploy_env(monkeypatch, R5_DASHBOARD_URL_PATH="energy")
+    asyncio.run(deploy.run_deploy())
+
+
 def test_deploy_targets():
     assert deploy._deploy_targets("standard", "renault-5") == [("standard", "renault-5", "Renault 5")]
     assert deploy._deploy_targets("bubble", "renault-5") == [("bubble", "renault-5", "Renault 5")]
