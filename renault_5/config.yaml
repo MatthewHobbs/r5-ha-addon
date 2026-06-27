@@ -1,8 +1,12 @@
 name: Renault 5
-version: "0.9.6"
+version: "0.9.7"
 slug: renault_5
 description: Polls your Renault 5 (Renault/Kamereon API) and publishes its data to Home Assistant via MQTT auto-discovery — no scripts, venv or secrets files needed.
 url: https://github.com/MatthewHobbs/r5-ha-addon/tree/main/renault_5
+# Pre-built multi-arch image published to GHCR by .github/workflows/release.yaml
+# (Cosign-signed). With this set, the Supervisor pulls the image instead of building
+# it on the user's device. The GHCR package must be public.
+image: ghcr.io/matthewhobbs/renault_5
 arch:
   - aarch64
   - amd64
