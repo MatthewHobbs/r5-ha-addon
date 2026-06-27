@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.2
+
+- **Privacy:** the account **password is added to the `debug_dump` redaction list** so it can
+  never appear unmasked in a dump. (The account id was already logged only at `debug`.)
+- **Fix the "Data Stale" dashboard pop-up** to point at the **add-on Log** and a restart
+  instead of a non-existent `Auto-Reauth (8)` automation / `/config/renault_cli.log` — copy
+  inherited from the old CLI-based predecessor and wrong for this add-on.
+- **Bubble dashboard:** removed a redundant full-size background image from the **main menu**
+  pop-up — it duplicated the page background and could render as a broken strip on first load.
+- **Docs:** added a **"Before you start"** prerequisites section to `DOCS.md` so the required
+  HACS frontend cards are installed **before** a dashboard is deployed.
+- Mirrors **a290-ha-addon v1.4.2**.
+
 ## 0.9.1
 
 - **Fix dashboard text truncation on phones, with consistent typography** (ported from the
