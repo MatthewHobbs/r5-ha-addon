@@ -18,6 +18,10 @@
   A tiny `/healthz` server runs on the poll loop and a Dockerfile `HEALTHCHECK` polls it, so a
   **deadlocked event loop** (which the in-loop logic can't catch) now marks the container
   unhealthy and the Supervisor **restarts** it, instead of the add-on silently going stale.
+- **Poll-loop robustness (A290 parity).** Each `poll_once` is now wrapped in
+  `asyncio.wait_for`, so a single hung API call can't stall the loop indefinitely (it's
+  treated as a failed poll and retried with backoff). Charge-limit writes are also
+  **serialised** (a lock), so adjusting both sliders quickly can't clobber a limit.
 
 ## 0.8.2
 

@@ -513,32 +513,48 @@ NUMBER_CMDS = {oid.removeprefix("r5_") for oid in NUMBERS}
 _NUMBER_ROLE = {oid.removeprefix("r5_"): role
                 for oid, (_n, _i, role, _mn, _mx, _s) in NUMBERS.items()}
 
+_soc_lock = None
+_soc_lock_loop = None
+
+
+def _soc_lock_get():
+    """One lock per event loop, serialising charge-limit writes so two quick slider moves
+    can't interleave a read-modify-write and clobber each other. Re-created if the running
+    loop changes (so per-test event loops don't trip cross-loop binding)."""
+    global _soc_lock, _soc_lock_loop
+    loop = asyncio.get_running_loop()
+    if _soc_lock is None or _soc_lock_loop is not loop:
+        _soc_lock, _soc_lock_loop = asyncio.Lock(), loop
+    return _soc_lock
+
 
 async def set_soc_level(which, payload):
     """Write a charge limit. set_battery_soc needs both min and target together, so the
-    opposing slider's current value is read back first and re-sent unchanged."""
+    opposing slider's current value is read back first and re-sent unchanged. Serialised so
+    adjusting both sliders in quick succession can't interleave and clobber a change."""
     try:
         value = int(float(payload))
     except (TypeError, ValueError):
         LOG.warning("Ignoring non-numeric %s value: %r", which, payload)
         return
     locale = cfg("R5_LOCALE", "en_GB")
-    try:
-        async with aiohttp.ClientSession() as websession:
-            vehicle = await _login_vehicle(websession, locale)
-            soc = await vehicle.get_battery_soc()
-            cur_min = getattr(soc, "socMin", None)
-            cur_target = getattr(soc, "socTarget", None)
-            new_min, new_target = ((value, cur_target) if _NUMBER_ROLE[which] == "min"
-                                   else (cur_min, value))
-            if new_min is None or new_target is None:
-                LOG.error("Cannot set %s: current limits unavailable (min=%s, target=%s)",
-                          which, cur_min, cur_target)
-                return
-            await vehicle.set_battery_soc(min=int(new_min), target=int(new_target))
-        LOG.info("Set charge limits: min=%s%%, target=%s%%", new_min, new_target)
-    except Exception as err:  # noqa: BLE001
-        LOG.error("Failed to set %s=%s: %s", which, value, err)
+    async with _soc_lock_get():
+        try:
+            async with aiohttp.ClientSession() as websession:
+                vehicle = await _login_vehicle(websession, locale)
+                soc = await vehicle.get_battery_soc()
+                cur_min = getattr(soc, "socMin", None)
+                cur_target = getattr(soc, "socTarget", None)
+                new_min, new_target = ((value, cur_target) if _NUMBER_ROLE[which] == "min"
+                                       else (cur_min, value))
+                if new_min is None or new_target is None:
+                    LOG.error("Cannot set %s: current limits unavailable (min=%s, target=%s)",
+                              which, cur_min, cur_target)
+                    return
+                await vehicle.set_battery_soc(min=int(new_min), target=int(new_target))
+            LOG.info("Set charge limits: min=%s%%, target=%s%%", new_min, new_target)
+        except Exception as err:  # noqa: BLE001
+            LOG.error("Failed to set %s=%s: %s", which, value, err)
 
 
 async def run_command(cmd, payload=""):
@@ -868,7 +884,9 @@ async def main():
     while not stop.is_set():
         try:
             t0 = time.monotonic()
-            data, location_attrs = await poll_once(vsession, state, capacity, supported, dist_unit)
+            data, location_attrs = await asyncio.wait_for(   # a hung poll can't stall the loop
+                poll_once(vsession, state, capacity, supported, dist_unit),
+                timeout=max(30, interval - 10))
             state["last_success"] = now_ts()
             data["api_auth_failure"] = "off"
             data["data_stale"] = "off"

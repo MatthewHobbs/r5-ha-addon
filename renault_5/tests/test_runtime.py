@@ -426,6 +426,27 @@ def test_set_soc_error_is_swallowed(monkeypatch):
     asyncio.run(main.run_command("soc_max_target", "90"))   # no raise
 
 
+def test_concurrent_soc_sets_do_not_clobber(monkeypatch):
+    car = {"min": 20, "target": 80}
+
+    class V:
+        async def get_battery_soc(self):
+            return _obj(socMin=car["min"], socTarget=car["target"])
+
+        async def set_battery_soc(self, *, min, target):
+            await asyncio.sleep(0)               # yield — interleaves without the lock
+            car["min"], car["target"] = min, target
+
+    _soc_login(monkeypatch, V())
+
+    async def both():
+        await asyncio.gather(main.run_command("soc_min_target", "30"),
+                             main.run_command("soc_max_target", "90"))
+
+    asyncio.run(both())
+    assert car == {"min": 30, "target": 90}      # both survived -> writes serialised
+
+
 def test_numbers_not_debounced(monkeypatch):
     # A number set must not be dropped by the button debounce window.
     main._last_command.clear()
