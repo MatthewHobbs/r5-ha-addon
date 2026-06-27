@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.1
+
+- **More reliable dashboard auto-deploy.** The dashboard YAML is now **bundled in the add-on
+  image and read locally**, instead of being fetched from `raw.githubusercontent.com` at
+  deploy time — so `deploy_dashboard` no longer depends on GitHub being reachable when the
+  add-on starts. (Images are still served from the jsDelivr CDN, unchanged.) This also brings
+  the add-on's layout in line with the Alpine A290 add-on: the dashboards now live under
+  `renault_5/dashboards/`. No change to entities, options, or the dashboards themselves.
+
 ## 0.11.0
 
 UX pass — a fresh product + design review of the current dashboards, mirrored from the
@@ -225,7 +234,7 @@ Review-panel fixes (security / privacy / reliability / QA) before first release.
   render from the repo CDN, so there's nothing to copy or hand-edit. All 22 R5 renders
   (Evolution / Iconic / Roland Garros / Techno × colours) are selectable; change it and
   re-deploy (`redeploy_dashboard: true`) to update. Manual installs can still swap the
-  images by hand — see [`dashboards/CUSTOMISING.md`](../dashboards/CUSTOMISING.md).
+  images by hand — see [`dashboards/CUSTOMISING.md`](dashboards/CUSTOMISING.md).
 
 ## 0.3.0
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Render the bundled A290 dashboards in a real Home Assistant across the mobile device
+# Render the bundled R5 dashboards in a real Home Assistant across the mobile device
 # matrix (ui-tests/devices.json) and fail on text truncation or broken cards. Used by CI
 # and runnable locally. Needs: docker, curl, and a python with aiohttp + PyYAML + playwright
 # (override the interpreter with PYTHON=/path/to/python; it must have chromium installed via
