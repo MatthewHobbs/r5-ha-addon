@@ -9,16 +9,23 @@
 
 [![Open your Home Assistant instance and add this add-on repository.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FMatthewHobbs%2Fr5-ha-addon)
 
-A maintained Home Assistant add-on for the **Renault 5 E-Tech**, continuing the work
-of [**Topolino65/renault-5-dashboard-view**](https://github.com/Topolino65/renault-5-dashboard-view)
+A maintained Home Assistant add-on for the **Renault 5 E-Tech**. Its real purpose is to be
+an **updated data layer** for
+[**Topolino65/renault-5-dashboard-view**](https://github.com/Topolino65/renault-5-dashboard-view)
 — full credit to Topolino65 for the original dashboards, assets and design.
 
-This repo modernises that project by replacing its fragile `venv` + `renault-api` CLI +
-shell-script data layer with a proper **Home Assistant add-on** that polls the
-Renault/Kamereon API and publishes `sensor.r5_*` entities over **MQTT auto-discovery** —
-no scripts, no `secrets.yaml`, credentials entered once on the add-on's config page. It is
-ported from the [Alpine A290 add-on](https://github.com/MatthewHobbs/a290-ha-addon) (the R5
-E-Tech and Alpine A290 share the CMF-BEV / KCM platform).
+It replaces that project's fragile `venv` + `renault-api` CLI + shell-script data layer with
+a proper **Home Assistant add-on** that polls the Renault/Kamereon API and publishes
+`sensor.r5_*` entities over **MQTT auto-discovery** — no scripts, no `secrets.yaml`,
+credentials entered once on the add-on's config page. Entity names follow Topolino's naming,
+so **his UI binds straight to these entities** — keep using his dashboards and let this
+add-on feed them fresh data.
+
+It can **also** auto-deploy a dashboard for you (`deploy_dashboard`, off by default) — a
+**modified version of Topolino's UI**, ported from the maintainer's
+[Alpine A290 add-on](https://github.com/MatthewHobbs/a290-ha-addon) (the R5 E-Tech and Alpine
+A290 share the CMF-BEV / KCM platform). It's a bonus, not the point: use it, or keep
+Topolino's own.
 
 Every control is sent **natively** by the add-on (charge, lights, horn, HVAC, refresh
 location) — **you do not need Home Assistant's `renault` integration**.
