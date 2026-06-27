@@ -710,6 +710,32 @@ def test_health_server_serves_200():
     asyncio.run(scenario())
 
 
+def test_status_panel_routes(monkeypatch):
+    import aiohttp
+
+    async def scenario():
+        main._LATEST.update(ok=True, version="testver", supported=["x", "y"],
+                            data={"battery_level": 42, "charger_plug_status": "Plugged"})
+        runner = await main.start_health_server()
+        base = f"http://127.0.0.1:{main.HEALTH_PORT}"
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.get(f"{base}/api/state") as r:        # JSON snapshot
+                    assert r.status == 200
+                    body = await r.json()
+                    assert body["ok"] is True and body["version"] == "testver"
+                    assert body["data"]["battery_level"] == 42
+                async with s.get(f"{base}/") as r:                 # panel HTML
+                    assert r.status == 200 and "Renault 5" in (await r.text())
+                monkeypatch.setattr(main, "_PANEL_FILE", "/no/such/panel.html")
+                async with s.get(f"{base}/") as r:                 # graceful fallback
+                    assert r.status == 200 and "unavailable" in (await r.text())
+        finally:
+            await runner.cleanup()
+
+    asyncio.run(scenario())
+
+
 def _wire_main(monkeypatch, tmp_path, poll):
     for k, v in {"R5_USERNAME": "u", "R5_PASSWORD": "p", "R5_VIN": "VF1",
                  "MQTT_HOST": "broker", "R5_LOCALE": "en_GB"}.items():

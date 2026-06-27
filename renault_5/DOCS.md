@@ -43,6 +43,14 @@ dashboard renders correctly the first time.
 | `redeploy_dashboard` | `true` re-pushes the dashboard config on next start. Default `false`. |
 | `car_render` | The trim/colour render shown on the dashboard (e.g. `midnight-blue-iconic`), used when auto-deploying. Default `pop-yellow-techno`. See [Customising](../dashboards/CUSTOMISING.md). |
 
+## Status panel
+
+The add-on adds a **read-only "Renault 5" panel to the Home Assistant sidebar** (via ingress).
+It shows the latest poll at a glance — battery, range, charging, plug, climate, charge limits
+and diagnostics — without needing a dashboard. It is **read-only** (it never changes anything),
+**auth-gated by Home Assistant**, and stores no credentials or precise location. The bundled
+dashboards remain the richer view; the panel is the quick glance.
+
 ## Requirements
 
 - The **Mosquitto broker** add-on (the MQTT connection is auto-discovered).

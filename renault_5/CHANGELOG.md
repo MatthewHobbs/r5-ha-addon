@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.10.0
+
+- **Read-only status panel in the sidebar (ingress)** (ported from the A290). The add-on now
+  serves a small **at-a-glance panel** — battery, range, charging, plug, climate, charge
+  limits, diagnostics — straight from the Home Assistant sidebar, no dashboard required. It is
+  **read-only** and **auth-gated by Home Assistant** (ingress), served by the poller's own HTTP
+  server, so it needs **no extra Supervisor permissions** and stores **no credentials or raw
+  GPS**. *(This also takes the Supervisor security rating from 6 to 8.)* Mirrors
+  **a290-ha-addon v1.5.0**.
+
 ## 0.9.8
 
 - **Auto-deployed dashboards are now pinned to the release** (ported from the A290). When the
