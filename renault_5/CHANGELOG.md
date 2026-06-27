@@ -2,10 +2,12 @@
 
 ## 0.9.0
 
-- **Fix dashboard text truncation on phones** (ported from the A290). The Mushroom tile
-  labels/values sit in a 2-column grid that leaves a ~70px text column on a phone, and
-  Mushroom clips with `text-overflow: ellipsis`, so text was cut off on narrow screens. Both
-  the **standard** and **bubble** dashboards now let those labels **wrap** instead of clip.
+- **Fix dashboard text truncation on phones, with consistent typography** (ported from the
+  A290). Tile labels and section headers were cut off on narrow screens (especially 360px
+  Samsungs). Both dashboards now **wrap that text on clean word breaks** instead of clipping,
+  and the **font and sizes are now identical on every screen** — the responsive `@media` rules
+  that changed fonts/sizes between phone and desktop have been removed. See the
+  [mobile preview](docs/dashboards-on-mobile.md).
 - **Automated responsive UI testing in CI.** New `ui-tests/` harness renders the bundled
   dashboards in a real Home Assistant (custom cards loaded) across the **top mobile device
   sizes** (iPhone 15 Pro Max/Pro/15/SE, Pixel 8/7a, Galaxy S24/S23/A54, + a 360px narrow

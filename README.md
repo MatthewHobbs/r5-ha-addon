@@ -42,7 +42,8 @@ location) — **you do not need the official Renault integration**.
   (`deploy_dashboard: standard|bubble|both`), or copy them in manually. Assets (R5 renders,
   map markers, Zen Dots font) live under `dashboards/`. To show the render matching your
   trim/colour, see
-  **[Customising your R5](dashboards/CUSTOMISING.md)**.
+  **[Customising your R5](dashboards/CUSTOMISING.md)**. Both are built for phones and
+  [**verified on the top mobile devices**](docs/dashboards-on-mobile.md) by CI.
 
 ## Requirements
 
