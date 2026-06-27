@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.1
+
+- **Fix dashboard text truncation on phones, with consistent typography** (ported from the
+  A290). Tile labels and section headers were cut off on narrow screens (especially 360px
+  Samsungs). Both dashboards now **wrap that text on clean word breaks** instead of clipping,
+  and the **font and sizes are now identical on every screen** — the responsive `@media` rules
+  that changed fonts/sizes between phone and desktop have been removed. See the
+  [mobile preview](docs/dashboards-on-mobile.md).
+- **Automated responsive UI testing in CI.** New `ui-tests/` harness renders the bundled
+  dashboards in a real Home Assistant (custom cards loaded) across the **top mobile device
+  sizes** (iPhone 15 Pro Max/Pro/15/SE, Pixel 8/7a, Galaxy S24/S23/A54, + a 360px narrow
+  bound) and **fails on any text truncation or broken card**, saving a screenshot per device
+  as a CI artifact. Runs as the **UI Tests** workflow whenever the dashboards change.
+
 ## 0.9.0
 
 - **Set the charge limits from Home Assistant.** SOC Min/Max Target are now **writable
