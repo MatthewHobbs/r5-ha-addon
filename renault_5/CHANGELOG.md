@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.9.5
+
+- **Custom AppArmor profile — raises the Supervisor security rating to 6.** Ships
+  `apparmor.txt`, confining the poller to the files (read-only system + `/app`, read-write
+  `/data`) and network (outbound TLS/DNS/MQTT and the health-port bind) it actually needs —
+  no mount, ptrace, raw sockets, or writes outside `/data`. (Rating 5 → 6.)
+- Mirrors **a290-ha-addon v1.4.5**.
+
+## 0.9.4
+
+- **Guard `dashboard_url_path` against overwriting a built-in Home Assistant panel.** Before
+  auto-deploying, the add-on now validates the configured path (lowercase slug, must contain
+  a hyphen, and not a reserved HA path such as `energy` / `lovelace` / `developer-tools`) and
+  **skips with a clear log line** instead of pushing a Lovelace config to it. Mirrors
+  **a290-ha-addon v1.4.4**.
+
 ## 0.9.2
 
 - **Privacy:** the account **password is added to the `debug_dump` redaction list** so it can
