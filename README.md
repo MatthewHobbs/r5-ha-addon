@@ -21,7 +21,7 @@ ported from the [Alpine A290 add-on](https://github.com/MatthewHobbs/a290-ha-add
 E-Tech and Alpine A290 share the CMF-BEV / KCM platform).
 
 Every control is sent **natively** by the add-on (charge, lights, horn, HVAC, refresh
-location) — **you do not need the official Renault integration**.
+location) — **you do not need Home Assistant's `renault` integration**.
 
 > [!IMPORTANT]
 > **Untested on an actual Renault 5 — I don't own one.** I drive an **Alpine A290**, and
@@ -104,7 +104,7 @@ key needed.
   mileage, last-charge stats, GPS/HVAC/battery last-activity, and health
   (`api_auth_failure`, `data_stale`, `plug_state_suspect`).
 - **Location:** `device_tracker.r5_location`.
-- **Native controls (no official Renault integration):** `button.r5_start_charging`,
+- **Native controls (no Home Assistant `renault` integration):** `button.r5_start_charging`,
   `…_flash_lights`, `…_sound_horn`, `…_start_air_conditioner`, `…_stop_air_conditioner`,
   `…_refresh_location` — each gated on what the platform supports.
 - **Debug:** set `debug_dump: true` to log every readable API endpoint (secrets redacted)
