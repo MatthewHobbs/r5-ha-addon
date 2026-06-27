@@ -409,11 +409,11 @@ def test_debug_enabled_reads_env(monkeypatch):
 def test_selected_render_resolves_trim_folder(monkeypatch):
     import deploy
     monkeypatch.setenv("R5_CAR_RENDER", "midnight-blue-iconic")
-    assert deploy._selected_render() == "Images/Models/Iconic/midnight-blue-iconic.png"
+    assert deploy._selected_render() == "Images/Models/Iconic/midnight-blue-iconic.webp"
     monkeypatch.setenv("R5_CAR_RENDER", "matte-grey-roland-garros")
-    assert deploy._selected_render() == "Images/Models/Roland%20Garros/matte-grey-roland-garros.png"
+    assert deploy._selected_render() == "Images/Models/Roland%20Garros/matte-grey-roland-garros.webp"
     monkeypatch.setenv("R5_CAR_RENDER", "pop-yellow-techno-black-roof")
-    assert deploy._selected_render() == "Images/Models/Techno/pop-yellow-techno-black-roof.png"
+    assert deploy._selected_render() == "Images/Models/Techno/pop-yellow-techno-black-roof.webp"
     monkeypatch.delenv("R5_CAR_RENDER", raising=False)
     assert deploy._selected_render() is None
 

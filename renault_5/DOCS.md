@@ -10,19 +10,35 @@ these add-on entities.
 
 ## Before you start — install these first
 
-The add-on itself only needs the **Mosquitto broker** add-on (its MQTT connection is
-auto-discovered). But if you use one of the **bundled dashboards** (`deploy_dashboard`),
-you must **first install the frontend cards via HACS** — otherwise the dashboard renders
-as *"Custom element doesn't exist"* with broken tiles:
+The add-on only needs the **Mosquitto broker** add-on (its MQTT connection is auto-discovered
+from it). It publishes the entities; **you choose the dashboard**:
+
+- **Topolino's [renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view)** —
+  this add-on's entities follow that project's naming, so its dashboards bind straight to them.
+- **or** one of this add-on's **bundled dashboards** — set `deploy_dashboard` to `standard`,
+  `bubble`, or `both` (off by default).
+
+Either way, if you use a card-based dashboard you must **first install its frontend cards via
+HACS → Frontend** — otherwise it renders as *"Custom element doesn't exist"* with broken tiles.
+For the bundled dashboards:
 
 | Install via HACS → Frontend | Needed for |
 | --- | --- |
-| **card-mod** + **Mushroom** | both dashboards |
-| **Button Card** + **Browser Mod** | the **standard** dashboard (tiles + pop-ups) |
-| **Bubble Card** | the **bubble** dashboard only |
+| **card-mod** + **Mushroom** | both bundled dashboards |
+| **Button Card** + **Browser Mod** | the **standard** bundled dashboard (tiles + pop-ups) |
+| **Bubble Card** | the **bubble** bundled dashboard only |
 
-Install Mosquitto and the cards above **before** enabling `deploy_dashboard`, so the
-dashboard renders correctly the first time.
+Install Mosquitto (and, if you enable a bundled dashboard, the cards above) **before first
+start**, so everything renders correctly the first time.
+
+### Finding your VIN and account id
+
+- **VIN** (required): the 17-character vehicle identification number — on your **My Renault**
+  app (vehicle details), your registration document (V5C), or the windscreen base. Enter it
+  in **uppercase**.
+- **account id** (optional): leave it **blank** and the add-on auto-discovers your
+  MyRenault/Kamereon account on login. Only set it if you have multiple accounts and need to
+  pin a specific one.
 
 ## Configuration
 
@@ -38,7 +54,7 @@ dashboard renders correctly the first time.
 | `stale_hours` | Mark data stale after this many hours without a successful poll (default 6). |
 | `log_level` | `info` normally; `debug` for troubleshooting. |
 | `debug_dump` | `true` logs every readable API endpoint to the add-on Log **once per restart** (IDs/secrets/location redacted, best-effort). It may still contain personal data — do not paste the log publicly. Off by default. |
-| `deploy_dashboard` | `none` (default), `standard`, `bubble`, or `both`. Auto-installs the chosen dashboard(s) for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. With `both`, the standard dashboard lands at `dashboard_url_path` and the bubble one at the same path with `-bubble` appended. |
+| `deploy_dashboard` | `none` (default), `standard`, `bubble`, or `both`. Off by default so the add-on stays a neutral data layer (use Topolino's dashboards, or set this to install a bundled one). Auto-installs the chosen dashboard(s) for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. With `both`, the standard dashboard lands at `dashboard_url_path` and the bubble one at the same path with `-bubble` appended. |
 | `dashboard_url_path` | URL slug for the deployed dashboard (default `renault-5`). With `deploy_dashboard: both` the bubble dashboard is installed at `<this>-bubble` (e.g. `renault-5-bubble`). |
 | `redeploy_dashboard` | `true` re-pushes the dashboard config on next start. Default `false`. |
 | `car_render` | The trim/colour render shown on the dashboard (e.g. `midnight-blue-iconic`), used when auto-deploying. Default `pop-yellow-techno`. See [Customising](../dashboards/CUSTOMISING.md). |

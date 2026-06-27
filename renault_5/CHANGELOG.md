@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.11.0
+
+UX pass — a fresh product + design review of the current dashboards, mirrored from the
+Alpine A290 add-on (1.6.0) in lockstep.
+
+- **`deploy_dashboard` stays off by default** (unlike the A290 add-on, which now defaults to
+  `standard`). This add-on is a data layer for Topolino's `renault-5-dashboard-view`, so it
+  doesn't presume to auto-deploy its own bundled dashboard — set `deploy_dashboard` to
+  `standard`/`bubble`/`both` if you want one. DOCS now make the Topolino-vs-bundled choice
+  explicit and explain where to find your VIN.
+- **Last Charge tiles are now self-describing** (`Started / Ended / Duration`,
+  `SoC Start / SoC End / SoC Gain`, `Energy Start / Energy End / Energy Added`) instead of
+  repeating "Start/End/Gain" across all three rows.
+- **Charge-limit (SoC) numbers stand out** — the value is now larger than its label, with the
+  current SoC in white and the target in green.
+- **Bubble dashboard: restored the "Stop Charging" signal** — the Commands pop-up now shows a
+  disabled charge-control tile (parity with the standard dashboard) so the platform's
+  charge-stop limitation is visible there too.
+- **Fixes:** removed a duplicate "Initial" charging-power tile (same value as "Avg."); the
+  "Run Test Charge" tile pointed at a non-existent entity (always "unavailable") — now wired
+  to the real button.
+- **`Drive Side` is hidden by default** (a RHD/LHD mapping artifact, not user-meaningful).
+- **Status panel shows units** (range, kW, kWh, °C, distance per your locale).
+- **Much lighter dashboards.** Backgrounds and the per-trim car renders converted to WebP and
+  unused images removed — the bundled image assets dropped from ~8 MB to ~1 MB, so the
+  dashboard paints far faster on mobile.
+
 ## 0.10.1
 
 - **Fix: add-on failed to start after updating to 0.9.8 (AppArmor).** The custom AppArmor

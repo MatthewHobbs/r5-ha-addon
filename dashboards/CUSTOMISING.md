@@ -19,7 +19,7 @@ That's it — the matching render is served straight from the CDN, nothing to co
 
 ## Available renders
 
-Files are named **`<colour>-<trim>.png`** inside `Images/Models/<Trim>/` — and those
+Files are named **`<colour>-<trim>.webp`** inside `Images/Models/<Trim>/` — and those
 file-name stems are exactly the `car_render` dropdown values:
 
 | Trim | Colours (`car_render` value) |
@@ -32,12 +32,12 @@ file-name stems are exactly the `car_render` dropdown values:
 ## Manual install — swap the image files
 
 If you copied the images into `/config/www/backgrounds/` yourself (rather than using
-auto-deploy), the dashboards reference the render as **`r5_background.png`** (main image)
-and **`r5_side.png`** (the Bubble side tile):
+auto-deploy), the dashboards reference the render as **`r5_background.webp`** (main image)
+and **`r5_side.webp`** (the Bubble side tile):
 
-1. Pick your render, e.g. `Models/Iconic/midnight-blue-iconic.png`.
+1. Pick your render, e.g. `Models/Iconic/midnight-blue-iconic.webp`.
 2. With the **File Editor** add-on or **Samba**, copy it into `/config/www/backgrounds/`
-   **twice**, renamed `r5_background.png` and `r5_side.png`.
+   **twice**, renamed `r5_background.webp` and `r5_side.webp`.
 3. Hard-refresh the dashboard (Ctrl/Cmd-Shift-R). No YAML editing needed.
 
 ## Optional — a colour-matched map marker

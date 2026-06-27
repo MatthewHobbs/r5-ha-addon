@@ -51,7 +51,7 @@ STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
 # Device name "R5" is deliberate: HA builds entity_ids from slug(device + entity name) and
 # ignores object_id, so this yields sensor.r5_<name> (what the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
-VERSION = "0.10.1"
+VERSION = "0.11.0"
 
 _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
 
@@ -151,6 +151,11 @@ NUMBERS = {
 # discovery config is cleared on startup so upgraded installs don't keep a dead entity.
 # soc_*_target moved from SENSORS to NUMBERS, so clear their old sensor configs.
 RETIRED_SENSORS = ["r5_soc_max_target", "r5_soc_min_target"]
+
+# Published but disabled in the entity registry by default — mapping artifacts with no
+# user-meaningful state. drive_side is just RHD/LHD derived from locale (used internally for
+# heated-seat mapping); it adds noise to the entity list. Users who want it can re-enable it.
+DEFAULT_DISABLED_SENSORS = {"r5_drive_side"}
 
 HOME_POWER_MAX_KW = 7.4
 # Friendly labels for the ChargeState/PlugState enums (every member mapped, so float
@@ -289,6 +294,8 @@ def publish_discovery(client, supported_eps, dist_unit):
             conf["state_class"] = state_class
         if obj in ICONS:
             conf["icon"] = ICONS[obj]
+        if obj in DEFAULT_DISABLED_SENSORS:
+            conf["enabled_by_default"] = False
         client.publish(f"{DISCOVERY_PREFIX}/sensor/{NODE}/{obj}/config", json.dumps(conf), retain=True)
     for obj, (name, dev_class) in BINARY_SENSORS.items():
         conf = {"name": name, "object_id": obj, "unique_id": obj,
@@ -842,7 +849,8 @@ HEALTH_PORT = 8099
 
 # Latest poll snapshot for the read-only ingress status panel. Deliberately excludes raw
 # GPS (lat/lon are published separately to MQTT, not stored here) and any credential.
-_LATEST = {"version": VERSION, "ok": False, "last_poll": None, "supported": [], "data": {}}
+_LATEST = {"version": VERSION, "ok": False, "last_poll": None, "supported": [],
+           "dist_unit": "km", "data": {}}
 
 _PANEL_FILE = os.path.join(os.path.dirname(__file__), "panel.html")
 
@@ -899,6 +907,7 @@ async def main():
     vsession = VehicleSession(locale)
     supported = await detect_supported(vsession)
     _LATEST["supported"] = sorted(supported)
+    _LATEST["dist_unit"] = dist_unit  # so the status panel can label range/mileage
     client = mqtt_connect()
     publish_discovery(client, supported, dist_unit)
     await deploy.run_deploy()  # optional dashboard auto-deploy; never fatal
