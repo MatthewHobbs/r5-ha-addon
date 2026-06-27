@@ -3,10 +3,19 @@
 Polls your **Renault 5 E-Tech** through the Renault/Kamereon API and publishes its data
 to Home Assistant via MQTT auto-discovery — no venv, CLI, shell scripts or `secrets.yaml`.
 
-This is a maintained data layer for Topolino65's
-[renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view):
-entity names follow that project (modernised, locale-aware), so the dashboards bind to
-these add-on entities.
+**What this add-on is really for.** Its primary purpose is to be an **updated, maintained
+data layer** for the Renault 5 — a drop-in replacement for the fragile `venv` +
+`renault-api` CLI + shell-script layer behind Topolino65's
+[renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view). Entity
+names deliberately follow that project (modernised, locale-aware), so **Topolino's own UI
+binds straight to these `sensor.r5_*` entities** — keep using his dashboards and just let
+this add-on feed them fresh data.
+
+**The bundled dashboards are a bonus, not the point.** The add-on can also auto-deploy a
+dashboard for you (`deploy_dashboard`) — a **modified version of Topolino's UI**, adapted
+from the maintainer's [Alpine A290 add-on](https://github.com/MatthewHobbs/a290-ha-addon)
+(the R5 and A290 share the CMF-BEV / KCM platform). Use it if you want a ready-made layout,
+or ignore it and keep Topolino's — either way the data comes from this add-on.
 
 ## Before you start — install these first
 
