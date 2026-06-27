@@ -1,7 +1,7 @@
 """Optional dashboard auto-deploy.
 
-When `deploy_dashboard` is `standard` or `bubble`, this fetches the chosen
-dashboard from this repo (dashboards/ folder), rewrites its `/local/...`
+When `deploy_dashboard` is `standard` or `bubble`, this reads the chosen
+dashboard YAML bundled in the image (DASHBOARD_DIR), rewrites its `/local/...`
 image references to jsDelivr CDN URLs (so nothing has to be copied into
 `/config/www`), registers a Zen Dots Google-Font CSS resource, and creates the
 dashboard via Home Assistant's WebSocket API and pushes its config.
@@ -26,10 +26,10 @@ REPO = "MatthewHobbs/r5-ha-addon"
 # (R5_VERSION defaults to "dev"; release.yaml passes the real version as BUILD_VERSION.)
 _VERSION = os.environ.get("R5_VERSION", "dev")
 REF = f"v{_VERSION}" if _VERSION not in ("", "dev") else "main"
-RAW = f"https://raw.githubusercontent.com/{REPO}/{REF}/dashboards"
-CDN = f"https://cdn.jsdelivr.net/gh/{REPO}@{REF}/dashboards"
+CDN = f"https://cdn.jsdelivr.net/gh/{REPO}@{REF}/renault_5/dashboards"
 FONT_URL = "https://fonts.googleapis.com/css2?family=Zen+Dots&display=swap"
 DASHBOARDS = {"standard": "front-end.txt", "bubble": "front-end-bubble.txt"}
+DASHBOARD_DIR = os.environ.get("R5_DASHBOARD_DIR", "/app/dashboards")
 
 # /local/backgrounds/<file> -> repo path (the dashboards reference images as
 # /local/backgrounds/<file>; the repo keeps them in typed subfolders under dashboards/).
@@ -71,13 +71,14 @@ def _cdnify(text):
     return re.sub(r"/local/backgrounds/([\w.\-]+)", repl, text)
 
 
+def _read_dashboard(style):
+    """Read a bundled dashboard YAML from the image (DASHBOARD_DIR)."""
+    with open(os.path.join(DASHBOARD_DIR, DASHBOARDS[style]), encoding="utf-8") as fh:
+        return fh.read()
+
+
 async def _fetch_dashboard(style):
-    url = f"{RAW}/{DASHBOARDS[style]}"
-    async with aiohttp.ClientSession() as s:
-        async with s.get(url, timeout=aiohttp.ClientTimeout(total=30)) as r:
-            r.raise_for_status()
-            raw = await r.text()
-    views = yaml.safe_load(_cdnify(raw))
+    views = yaml.safe_load(_cdnify(_read_dashboard(style)))
     if not isinstance(views, list):
         raise ValueError("dashboard YAML did not parse to a list of views")
     return {"title": "Renault 5", "views": views}

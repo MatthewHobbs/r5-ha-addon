@@ -33,7 +33,9 @@ renault_5/                   the add-on (this is what HA installs)
   Dockerfile                 alpine base, HEALTHCHECK, root user
   run.sh                     bashio entrypoint (reads /data/options.json)
   DOCS.md / CHANGELOG.md     the add-on's HA docs page + changelog
-dashboards/                  front-end.txt (standard) + front-end-bubble.txt (Bubble Card)
+  dashboards/                front-end.txt + front-end-bubble.txt + Images/ — bundled into the
+                             image (COPYed in the Dockerfile); deploy.py reads the *.txt
+                             locally, images served from the jsDelivr CDN (like the A290)
 ui-tests/                    containerized HA + Playwright responsive/overflow gate
 docs/                        dashboards-on-mobile.md + screenshots (user docs)
 reference/                   local-only Topolino65 upstream — sourced for assets, gitignored,
@@ -85,7 +87,7 @@ trivy fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --exit-code 1
 The `ui-tests/` gate (its own `ui-tests.yaml` workflow, path-filtered to dashboards +
 ui-tests) is run with `ui-tests/run.sh` — it boots a throwaway HA container, seeds entities,
 and uses Playwright across ~10 phone viewports to fail on any text truncation or
-`hui-error-card`. Run it whenever you touch `dashboards/` or `ui-tests/`.
+`hui-error-card`. Run it whenever you touch `renault_5/dashboards/` or `ui-tests/`.
 
 Ruff config (`ruff.toml`): line-length 120, target py311, `select = E,F,W,B,I`,
 `ignore = E501,B008`.
@@ -138,7 +140,10 @@ mirroring to `a290-ha-addon`, bump **`alpine_a290/config.yaml`** there. Feature 
   everything through `_debug_redact` first; never add a logging path that bypasses it, and
   never use `log_level: debug` for diagnosis (the library prints access tokens at that
   level — `debug_dump` exists precisely to avoid that).
-- **Dashboards live at the repo root** (`dashboards/`), not under `renault_5/`. They keep
+- **Dashboards live under `renault_5/dashboards/`** — bundled into the image (`COPY
+  dashboards/*.txt` in the Dockerfile) and read locally by `deploy.py` (no runtime
+  raw.githubusercontent.com fetch), aligned with the A290 add-on. Images are still served via
+  the jsDelivr CDN (`renault_5/dashboards/Images/...` at the version tag). They keep
   Topolino65's naming (modernised, locale-aware). Typography is intentionally uniform across
   tabs (no per-screen font/size changes); overflow is handled by `white-space:normal`
   clean-word-break wrapping, not by shrinking text. The `reference/` upstream is sourced for
