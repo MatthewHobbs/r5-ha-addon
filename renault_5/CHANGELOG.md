@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.4
+
+- **Custom AppArmor profile — raises the Supervisor security rating to 6.** Ships
+  `apparmor.txt`, confining the poller to the files (read-only system + `/app`, read-write
+  `/data`) and network (outbound TLS/DNS/MQTT and the health-port bind) it actually needs —
+  no mount, ptrace, raw sockets, or writes outside `/data`. (Rating 5 → 6.)
+- **Supervisor watchdog.** Added a `watchdog` pointing at the existing `/healthz` endpoint,
+  so the Supervisor **automatically restarts the add-on** if the poller stops responding.
+- **`dashboard_url_path` is now validated on the Configuration page** (lowercase slug, must
+  contain a hyphen) instead of silently skipping the deploy on a bad value.
+- Mirrors **a290-ha-addon v1.4.4**.
+
 ## 0.9.3
 
 - **Guard `dashboard_url_path` against overwriting a built-in Home Assistant panel.** Before
