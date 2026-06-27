@@ -1,5 +1,5 @@
 name: Renault 5
-version: "0.9.8"
+version: "0.10.0"
 slug: renault_5
 description: Polls your Renault 5 (Renault/Kamereon API) and publishes its data to Home Assistant via MQTT auto-discovery — no scripts, venv or secrets files needed.
 url: https://github.com/MatthewHobbs/r5-ha-addon/tree/main/renault_5
@@ -11,6 +11,11 @@ arch:
   - aarch64
   - amd64
 init: false
+# Read-only status panel in the HA sidebar (ingress; auth-gated by HA). Served by the
+# poller's own HTTP server on the health port — no extra Supervisor role, no config writes.
+ingress: true
+panel_icon: mdi:car-sports
+panel_title: Renault 5
 # Talk to the HA core API (used to auto-deploy the dashboard, when enabled).
 homeassistant_api: true
 # Pull MQTT broker connection from the Mosquitto add-on automatically.
