@@ -1,6 +1,11 @@
 ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
+# Version, exposed to the app as R5_VERSION (release.yaml passes BUILD_VERSION from
+# config.yaml's version; deploy.py pins dashboard assets to the matching v<version> tag).
+ARG BUILD_VERSION="dev"
+ENV R5_VERSION=${BUILD_VERSION}
+
 # renault-api needs Python 3 + a few build deps for its crypto/aiohttp wheels.
 RUN apk add --no-cache python3 py3-pip
 
