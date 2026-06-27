@@ -51,7 +51,7 @@ STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
 # Device name "R5" is deliberate: HA builds entity_ids from slug(device + entity name) and
 # ignores object_id, so this yields sensor.r5_<name> (what the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
-VERSION = "0.9.8"
+VERSION = "0.10.0"
 
 _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
 
@@ -840,16 +840,37 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
 
 HEALTH_PORT = 8099
 
+# Latest poll snapshot for the read-only ingress status panel. Deliberately excludes raw
+# GPS (lat/lon are published separately to MQTT, not stored here) and any credential.
+_LATEST = {"version": VERSION, "ok": False, "last_poll": None, "supported": [], "data": {}}
+
+_PANEL_FILE = os.path.join(os.path.dirname(__file__), "panel.html")
+
+
+async def _panel_page(_req):
+    """Serve the self-contained, read-only ingress status panel."""
+    if os.path.isfile(_PANEL_FILE):
+        return web.FileResponse(_PANEL_FILE)
+    return web.Response(text="Status panel unavailable", content_type="text/plain")
+
+
+async def _panel_state(_req):
+    """JSON the panel polls — latest car state + diagnostics; no credentials, no raw GPS."""
+    return web.json_response(_LATEST)
+
 
 async def start_health_server():
-    """/healthz on the poll loop — backs the Dockerfile HEALTHCHECK: a deadlocked event loop
-    can't answer, so the Supervisor marks the container unhealthy and restarts it."""
+    """/healthz (backs the Dockerfile HEALTHCHECK) plus the read-only ingress status panel
+    (GET / and GET /api/state) on the poll loop. A deadlocked loop can't answer /healthz,
+    so the Supervisor marks the container unhealthy and restarts it."""
     app = web.Application()
     app.router.add_get("/healthz", lambda _req: web.Response(text="ok"))
+    app.router.add_get("/", _panel_page)
+    app.router.add_get("/api/state", _panel_state)
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", HEALTH_PORT).start()  # nosec B104
-    LOG.info("Health endpoint listening on :%d/healthz", HEALTH_PORT)
+    LOG.info("Health endpoint + status panel listening on :%d", HEALTH_PORT)
     return runner
 
 
@@ -877,6 +898,7 @@ async def main():
     state = load_state()
     vsession = VehicleSession(locale)
     supported = await detect_supported(vsession)
+    _LATEST["supported"] = sorted(supported)
     client = mqtt_connect()
     publish_discovery(client, supported, dist_unit)
     await deploy.run_deploy()  # optional dashboard auto-deploy; never fatal
@@ -892,6 +914,7 @@ async def main():
             data["api_auth_failure"] = "off"
             data["data_stale"] = "off"
             client.publish(STATE_TOPIC, json.dumps(data), retain=True)
+            _LATEST.update(ok=True, last_poll=iso(now_ts()), data=data)
             if location_attrs:
                 client.publish(ATTR_TOPIC, json.dumps(location_attrs), retain=True)
                 client.publish(TRACKER_STATE_TOPIC, "online", retain=True)
@@ -914,6 +937,9 @@ async def main():
                 "data_stale": "on" if stale else "off",
             }), retain=True)
             client.publish(AVAIL_TOPIC, "online", retain=True)
+            _LATEST.update(ok=False, last_poll=iso(now_ts()), error=str(err))
+            _LATEST["data"].update(api_auth_failure="on" if auth else "off",
+                                   data_stale="on" if stale else "off")
         # exponential backoff on repeated failures (avoid a re-auth storm), capped at 30 min
         delay = interval if fails == 0 else min(interval * 2 ** (fails - 1), 1800)
         try:
