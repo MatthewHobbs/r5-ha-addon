@@ -1,12 +1,12 @@
 # Changelog
 
-## 0.9.3
+## 0.9.4
 
 - **Guard `dashboard_url_path` against overwriting a built-in Home Assistant panel.** Before
   auto-deploying, the add-on now validates the configured path (lowercase slug, must contain
   a hyphen, and not a reserved HA path such as `energy` / `lovelace` / `developer-tools`) and
   **skips with a clear log line** instead of pushing a Lovelace config to it. Mirrors
-  **a290-ha-addon v1.4.3**.
+  **a290-ha-addon v1.4.4**.
 
 ## 0.9.2
 
