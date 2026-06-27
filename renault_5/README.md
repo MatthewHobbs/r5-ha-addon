@@ -1,16 +1,21 @@
 # Renault 5
 
-A maintained Home Assistant add-on for the **Renault 5 E-Tech**, continuing
+A maintained Home Assistant add-on for the **Renault 5 E-Tech**. Its real purpose is to be
+an **updated data layer** for
 [Topolino65/renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view)
-(full credit for the original dashboards, assets and design). It replaces that project's
-`venv` + `renault-api` CLI + shell-script layer with a proper add-on that polls the
+(full credit for the original dashboards, assets and design): it replaces that project's
+fragile `venv` + `renault-api` CLI + shell-script layer with a proper add-on that polls the
 Renault/Kamereon API and publishes `sensor.r5_*` entities over **MQTT auto-discovery** — no
-scripts, no `secrets.yaml`. Credentials are entered once on the **Configuration** tab.
+scripts, no `secrets.yaml`. Entity names follow Topolino's naming, so **his UI binds straight
+to these entities** — keep using his dashboards and let this add-on feed them. Credentials
+are entered once on the **Configuration** tab.
 
 - **Native controls** — charge, lights, horn, HVAC, refresh location — plus **writable
   charge-limit sliders**. You do **not** need Home Assistant's `renault` integration.
-- **Ready-made dashboards** bundled in: set `deploy_dashboard` and the add-on installs a
-  **standard** or **Bubble Card** dashboard for you (both phone-verified in CI).
+- **Optional bundled dashboards** — a **modified version of Topolino's UI**, ported from the
+  maintainer's [Alpine A290 add-on](https://github.com/MatthewHobbs/a290-ha-addon). Set
+  `deploy_dashboard` and the add-on installs a **standard** or **Bubble Card** dashboard for
+  you (both phone-verified in CI) — or leave it off (the default) and keep Topolino's own.
 - **Pre-built, Cosign-signed image** pulled by the Supervisor — no slow on-device build.
 
 > **Untested on a real Renault 5** — back-ported from the
