@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.7
+
+- **Pre-built, signed images — faster, more reliable installs** (ported from the A290). The
+  add-on is now published as a **multi-arch image** (`amd64` + `aarch64`) to **GHCR**, built
+  and **Cosign-signed** (keyless OIDC) by a new `release` workflow on every version-bump merge
+  to `main`. The Supervisor now **pulls** the image (via the new `image:` in `config.yaml`)
+  instead of **building it on your device**. Each release also gets a **`v<version>` git tag +
+  GitHub Release**. Mirrors **a290-ha-addon v1.4.7**.
+
 ## 0.9.6
 
 - **Bubble dashboard — location parity** (ported from the A290). The **Vehicle Status** pop-up
