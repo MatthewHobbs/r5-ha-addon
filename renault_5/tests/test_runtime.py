@@ -10,6 +10,8 @@ asyncio.run (so the suite needs only pytest, not pytest-asyncio).
 import asyncio
 import json
 import logging
+import os
+import tempfile
 
 import deploy
 import main
@@ -813,23 +815,8 @@ def test_main_exits_without_required_config(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# deploy.py — dashboard fetch + WebSocket deploy
+# deploy.py — local dashboard read + WebSocket deploy
 # --------------------------------------------------------------------------- #
-class _Resp:
-    def __init__(self, text):
-        self._text = text
-
-    def raise_for_status(self):
-        pass
-
-    async def text(self):
-        return self._text
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *a):
-        return False
 
 
 class _FakeWS:
@@ -881,8 +868,8 @@ class _FakeWS:
 
 
 class _FakeCS:
-    """Stands in for aiohttp.ClientSession for both the YAML fetch and the WS connect."""
-    text = "- title: T\n  cards: []\n"
+    """Stands in for aiohttp.ClientSession for the WS connect (the dashboard YAML is now
+    read locally from DASHBOARD_DIR, so no HTTP fetch is mocked)."""
     ws = None
 
     async def __aenter__(self):
@@ -890,9 +877,6 @@ class _FakeCS:
 
     async def __aexit__(self, *a):
         return False
-
-    def get(self, url, timeout=None):
-        return _Resp(_FakeCS.text)
 
     def ws_connect(self, url, timeout=None):
         return _FakeCS.ws
@@ -919,12 +903,18 @@ def _deploy_env(monkeypatch, **over):
             monkeypatch.setenv(k, v)
     monkeypatch.delenv("R5_REDEPLOY_DASHBOARD", raising=False)
     monkeypatch.delenv("R5_CAR_RENDER", raising=False)
+    # Dashboards are bundled in the image and read locally — point DASHBOARD_DIR at a temp
+    # copy of the fixture YAML (both styles) so _fetch_dashboard reads it without a network.
+    d = tempfile.mkdtemp()
+    for fname in deploy.DASHBOARDS.values():
+        with open(os.path.join(d, fname), "w", encoding="utf-8") as fh:
+            fh.write(_DASH_YAML)
+    monkeypatch.setattr(deploy, "DASHBOARD_DIR", d)
 
 
 def test_run_deploy_creates_dashboard_and_rewrites_assets(monkeypatch):
     _deploy_env(monkeypatch)
     ws = _FakeWS(dashboards=[], resources=[])
-    _FakeCS.text = _DASH_YAML
     _FakeCS.ws = ws
     monkeypatch.setattr(deploy.aiohttp, "ClientSession", _FakeCS)
     asyncio.run(deploy.run_deploy())
@@ -932,7 +922,7 @@ def test_run_deploy_creates_dashboard_and_rewrites_assets(monkeypatch):
     assert ws.created_dashboard is not None          # url_path was absent => created
     assert ws.saved is not None
     txt = json.dumps(ws.saved["config"])
-    assert "cdn.jsdelivr.net/gh/MatthewHobbs/r5-ha-addon@main/dashboards/Images/Background/r5_background.webp" in txt
+    assert "cdn.jsdelivr.net/gh/MatthewHobbs/r5-ha-addon@main/renault_5/dashboards/Images/Background/r5_background.webp" in txt
     assert "/local/backgrounds/unmapped.png" in txt  # unmapped reference left untouched
 
 
@@ -965,7 +955,6 @@ def test_deploy_targets():
 def test_run_deploy_both_installs_two_dashboards(monkeypatch):
     _deploy_env(monkeypatch, R5_DEPLOY_DASHBOARD="both")
     ws = _FakeWS(dashboards=[], resources=[])
-    _FakeCS.text = _DASH_YAML
     _FakeCS.ws = ws
     monkeypatch.setattr(deploy.aiohttp, "ClientSession", _FakeCS)
     asyncio.run(deploy.run_deploy())
@@ -980,7 +969,6 @@ def test_run_deploy_render_override_and_redeploy(monkeypatch):
     monkeypatch.setenv("R5_REDEPLOY_DASHBOARD", "true")
     monkeypatch.setenv("R5_CAR_RENDER", "midnight-blue-iconic")
     ws = _FakeWS(dashboards=[{"url_path": "renault-5"}], resources=[])
-    _FakeCS.text = _DASH_YAML
     _FakeCS.ws = ws
     monkeypatch.setattr(deploy.aiohttp, "ClientSession", _FakeCS)
     asyncio.run(deploy.run_deploy())
@@ -993,7 +981,6 @@ def test_run_deploy_render_override_and_redeploy(monkeypatch):
 def test_run_deploy_leaves_existing_dashboard_alone(monkeypatch):
     _deploy_env(monkeypatch)
     ws = _FakeWS(dashboards=[{"url_path": "renault-5"}], resources=[{"url": deploy.FONT_URL}])
-    _FakeCS.text = _DASH_YAML
     _FakeCS.ws = ws
     monkeypatch.setattr(deploy.aiohttp, "ClientSession", _FakeCS)
     asyncio.run(deploy.run_deploy())
@@ -1038,16 +1025,15 @@ def test_run_deploy_swallows_runtime_errors(monkeypatch):
     _deploy_env(monkeypatch)
     ws = _FakeWS()
     ws._auth_ok_type = "auth_invalid"                # auth handshake fails
-    _FakeCS.text = _DASH_YAML
     _FakeCS.ws = ws
     monkeypatch.setattr(deploy.aiohttp, "ClientSession", _FakeCS)
     asyncio.run(deploy.run_deploy())                 # error is caught; poller must survive
     assert ws.saved is None
 
 
-def test_fetch_dashboard_rejects_non_list(monkeypatch):
-    _FakeCS.text = "title: not-a-list\n"
-    monkeypatch.setattr(deploy.aiohttp, "ClientSession", _FakeCS)
+def test_fetch_dashboard_rejects_non_list(monkeypatch, tmp_path):
+    (tmp_path / "front-end.txt").write_text("title: not-a-list\n", encoding="utf-8")
+    monkeypatch.setattr(deploy, "DASHBOARD_DIR", str(tmp_path))
     with pytest.raises(ValueError):
         asyncio.run(deploy._fetch_dashboard("standard"))
 

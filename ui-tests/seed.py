@@ -18,7 +18,7 @@ import aiohttp
 import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DASH_DIR_DEFAULT = os.path.join(HERE, "..", "dashboards")
+DASH_DIR_DEFAULT = os.path.join(HERE, "..", "renault_5", "dashboards")
 DASHBOARDS = {"renault-5": "front-end.txt", "renault-5-bubble": "front-end-bubble.txt"}
 
 # Lovelace resources. card-mod first (it patches card rendering); mushroom/button-card are

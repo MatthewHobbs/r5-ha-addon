@@ -13,6 +13,9 @@ COPY app/requirements.txt /app/requirements.txt
 RUN pip3 install --no-cache-dir --break-system-packages -r /app/requirements.txt
 
 COPY app/ /app/
+# Bundle the dashboard YAML in the image so deploy.py reads it locally (no runtime
+# dependency on raw.githubusercontent.com). Images are still served via the jsDelivr CDN.
+COPY dashboards/*.txt /app/dashboards/
 COPY run.sh /run.sh
 RUN chmod a+x /run.sh
 

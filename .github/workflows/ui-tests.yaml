@@ -7,12 +7,12 @@ on:
   push:
     branches: [main]
     paths:
-      - 'dashboards/**'
+      - 'renault_5/dashboards/**'
       - 'ui-tests/**'
       - '.github/workflows/ui-tests.yaml'
   pull_request:
     paths:
-      - 'dashboards/**'
+      - 'renault_5/dashboards/**'
       - 'ui-tests/**'
       - '.github/workflows/ui-tests.yaml'
   workflow_dispatch:

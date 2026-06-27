@@ -66,7 +66,7 @@ start**, so everything renders correctly the first time.
 | `deploy_dashboard` | `none` (default), `standard`, `bubble`, or `both`. Off by default so the add-on stays a neutral data layer (use Topolino's dashboards, or set this to install a bundled one). Auto-installs the chosen dashboard(s) for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. With `both`, the standard dashboard lands at `dashboard_url_path` and the bubble one at the same path with `-bubble` appended. |
 | `dashboard_url_path` | URL slug for the deployed dashboard (default `renault-5`). With `deploy_dashboard: both` the bubble dashboard is installed at `<this>-bubble` (e.g. `renault-5-bubble`). |
 | `redeploy_dashboard` | `true` re-pushes the dashboard config on next start. Default `false`. |
-| `car_render` | The trim/colour render shown on the dashboard (e.g. `midnight-blue-iconic`), used when auto-deploying. Default `pop-yellow-techno`. See [Customising](../dashboards/CUSTOMISING.md). |
+| `car_render` | The trim/colour render shown on the dashboard (e.g. `midnight-blue-iconic`), used when auto-deploying. Default `pop-yellow-techno`. See [Customising](dashboards/CUSTOMISING.md). |
 
 ## Status panel
 
