@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.0
+## 0.9.1
 
 - **Fix dashboard text truncation on phones, with consistent typography** (ported from the
   A290). Tile labels and section headers were cut off on narrow screens (especially 360px
@@ -13,6 +13,29 @@
   sizes** (iPhone 15 Pro Max/Pro/15/SE, Pixel 8/7a, Galaxy S24/S23/A54, + a 360px narrow
   bound) and **fails on any text truncation or broken card**, saving a screenshot per device
   as a CI artifact. Runs as the **UI Tests** workflow whenever the dashboards change.
+
+## 0.9.0
+
+- **Set the charge limits from Home Assistant.** SOC Min/Max Target are now **writable
+  `number` sliders** (`number.r5_soc_min_target` 15–45 %, `number.r5_soc_max_target`
+  55–100 %) instead of read-only sensors. Moving a slider writes both limits to the car via
+  `renault-api`'s `set_battery_soc` (the `soc-levels` endpoint); the unchanged limit is read
+  back first and re-sent. Published only where the car supports `soc-levels`, and optimistic
+  so the slider reflects the new value immediately. Ported from the Alpine A290 — keeps the
+  two add-ons in sync.
+- **`debug_dump` now covers the full endpoint set.** Added the previously-missing readable
+  endpoints — `charges` (real charge-session history), `car-adapter` (vehicle spec), the R5-only
+  `alerts`, plus `hvac-history` / `hvac-sessions` so the dump documents what's forbidden too.
+  Date-ranged (`charges`, `charge-history`) probed over the last 30 days; `alerts` is path-
+  resolved and raw-GET. Use it to see what `charges` / `alerts` return before building on them.
+- **Container health endpoint + `HEALTHCHECK`** (ported from the A290 — closes a parity gap).
+  A tiny `/healthz` server runs on the poll loop and a Dockerfile `HEALTHCHECK` polls it, so a
+  **deadlocked event loop** (which the in-loop logic can't catch) now marks the container
+  unhealthy and the Supervisor **restarts** it, instead of the add-on silently going stale.
+- **Poll-loop robustness (A290 parity).** Each `poll_once` is now wrapped in
+  `asyncio.wait_for`, so a single hung API call can't stall the loop indefinitely (it's
+  treated as a failed poll and retried with backoff). Charge-limit writes are also
+  **serialised** (a lock), so adjusting both sliders quickly can't clobber a limit.
 
 ## 0.8.2
 

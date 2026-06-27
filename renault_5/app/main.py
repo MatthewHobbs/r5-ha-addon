@@ -8,8 +8,7 @@ A290 add-on this is ported from (R5 E-Tech and A290 share the CMF-BEV / KCM plat
 Read endpoints: battery-status, cockpit, HVAC, location, ev/settings (preconditioning),
 ev/soc-levels, plus optional charge-mode and tyre-pressure (gated on supports_endpoint).
 Command buttons (ACTION_BUTTONS): Start Charging (KCM instant-charge), Flash Lights, Sound
-Horn, and HVAC Start/Stop — all sent natively via renault-api, so the **official Renault
-integration is not required at all**. Each button is gated on supports_endpoint(), so a
+Horn, and HVAC Start/Stop — all sent natively via renault-api, so **Home Assistant's `renault` integration is not required at all**. Each button is gated on supports_endpoint(), so a
 control the platform forbids is never shown (all five are supported on the R5). HVAC-start
 targets the car's configured preconditioning temperature (falling back to 21°C). One cached
 login is reused across polls (VehicleSession) rather than re-authenticating every cycle.
@@ -29,11 +28,12 @@ import os
 import signal
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import aiohttp
 import deploy
 import paho.mqtt.client as mqtt
+from aiohttp import web
 from renault_api.kamereon.enums import ChargeState, PlugState
 from renault_api.renault_client import RenaultClient
 
@@ -51,7 +51,7 @@ STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
 # Device name "R5" is deliberate: HA builds entity_ids from slug(device + entity name) and
 # ignores object_id, so this yields sensor.r5_<name> (what the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
-VERSION = "0.8.2"
+VERSION = "0.9.1"
 
 _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
 
@@ -76,8 +76,6 @@ SENSORS = {
     "r5_cabin_temperature":      ("Cabin Temperature", "temperature", "°C", "measurement"),
     "r5_hvac_status":            ("HVAC Status", None, None, None),
     "r5_hvac_soc_threshold":     ("HVAC SoC Threshold", "battery", "%", None),
-    "r5_soc_max_target":         ("SOC Max Target", "battery", "%", None),
-    "r5_soc_min_target":         ("SOC Min Target", "battery", "%", None),
     "r5_charge_mode":            ("Charge Mode", None, None, None),
     "r5_tyre_pressure_fl":       ("Tyre Pressure Front Left", None, None, "measurement"),
     "r5_tyre_pressure_fr":       ("Tyre Pressure Front Right", None, None, "measurement"),
@@ -139,9 +137,20 @@ ACTION_BUTTONS = {
     "refresh_location": ("r5_refresh_location", "refresh_location", "Refresh Location", "mdi:crosshairs-gps", "actions/refresh-location"),
 }
 
+# Writable charge-limit controls. State comes from the poll's soc-levels read (data key =
+# object_id without the r5_ prefix); a slider move writes via set_battery_soc(). Gated on
+# SOC_ENDPOINT, so a model that rejects the write never ships the control.
+# object_id -> (name, icon, role, min, max, step); role ("min"/"target") selects the arg.
+SOC_ENDPOINT = "soc-levels"
+NUMBERS = {
+    "r5_soc_min_target": ("SOC Min Target", "mdi:battery-arrow-down", "min",    15, 45,  5),
+    "r5_soc_max_target": ("SOC Max Target", "mdi:battery-arrow-up",   "target", 55, 100, 5),
+}
+
 # Sensor object_ids a previous version published but no longer ships. Their retained
 # discovery config is cleared on startup so upgraded installs don't keep a dead entity.
-RETIRED_SENSORS = []
+# soc_*_target moved from SENSORS to NUMBERS, so clear their old sensor configs.
+RETIRED_SENSORS = ["r5_soc_max_target", "r5_soc_min_target"]
 
 HOME_POWER_MAX_KW = 7.4
 # Friendly labels for the ChargeState/PlugState enums (every member mapped, so float
@@ -218,8 +227,9 @@ def save_state(state):
 def _on_message(client, userdata, msg):
     if _LOOP is not None and msg.topic.startswith(CMD_PREFIX):
         cmd = msg.topic[len(CMD_PREFIX):]
-        LOG.info("Received command: %s", cmd)
-        asyncio.run_coroutine_threadsafe(run_command(cmd), _LOOP)
+        payload = msg.payload.decode(errors="replace") if msg.payload else ""
+        LOG.info("Received command: %s %s", cmd, payload)
+        asyncio.run_coroutine_threadsafe(run_command(cmd, payload), _LOOP)
 
 
 def _on_connect(client, userdata, flags, reason_code, properties=None):
@@ -306,8 +316,26 @@ def publish_discovery(client, supported_eps, dist_unit):
             shipped.append(node)
         else:
             client.publish(topic, "", retain=True)
-    LOG.info("Published discovery: %d sensors (%d unsupported cleared), %d binary_sensors, device_tracker, buttons=%s",
-             published, len(skip), len(BINARY_SENSORS), shipped or "none")
+    # Writable charge-limit numbers, gated on soc-levels support (else cleared).
+    numbers = []
+    soc_ok = SOC_ENDPOINT in supported_eps
+    for obj, (name, icon, _role, mn, mx, step) in NUMBERS.items():
+        short = obj.removeprefix("r5_")
+        topic = f"{DISCOVERY_PREFIX}/number/{NODE}/{short}/config"
+        if soc_ok:
+            conf = {"name": name, "object_id": obj, "unique_id": obj,
+                    "state_topic": STATE_TOPIC, "value_template": "{{ value_json.%s }}" % short,
+                    "command_topic": f"{CMD_PREFIX}{short}", "availability_topic": AVAIL_TOPIC,
+                    "min": mn, "max": mx, "step": step, "mode": "slider",
+                    "unit_of_measurement": "%", "device_class": "battery",
+                    "optimistic": True, "icon": icon, "device": DEVICE}
+            client.publish(topic, json.dumps(conf), retain=True)
+            numbers.append(short)
+        else:
+            client.publish(topic, "", retain=True)
+    LOG.info("Published discovery: %d sensors (%d unsupported cleared), %d binary_sensors, "
+             "device_tracker, buttons=%s, numbers=%s",
+             published, len(skip), len(BINARY_SENSORS), shipped or "none", numbers or "none")
 
 
 KM_TO_MI = 0.621371
@@ -441,7 +469,7 @@ async def detect_supported(vsession):
                     supported.discard(ep)
             except Exception as err:  # noqa: BLE001
                 LOG.warning("supports_endpoint(%s) check failed: %s", ep, err)
-        for ep in sorted(action_eps):
+        for ep in sorted(action_eps | {SOC_ENDPOINT}):
             try:
                 if await _supports(vehicle, ep):
                     supported.add(ep)
@@ -480,9 +508,61 @@ COMMAND_ACTIONS = {
 COMMAND_DEBOUNCE_S = 5
 _last_command = {}
 
+# Command-topic suffixes that map to writable numbers, and each one's set_battery_soc role.
+NUMBER_CMDS = {oid.removeprefix("r5_") for oid in NUMBERS}
+_NUMBER_ROLE = {oid.removeprefix("r5_"): role
+                for oid, (_n, _i, role, _mn, _mx, _s) in NUMBERS.items()}
 
-async def run_command(cmd):
-    """Dispatch an MQTT button press to its renault-api action; never fatal."""
+_soc_lock = None
+_soc_lock_loop = None
+
+
+def _soc_lock_get():
+    """One lock per event loop, serialising charge-limit writes so two quick slider moves
+    can't interleave a read-modify-write and clobber each other. Re-created if the running
+    loop changes (so per-test event loops don't trip cross-loop binding)."""
+    global _soc_lock, _soc_lock_loop
+    loop = asyncio.get_running_loop()
+    if _soc_lock is None or _soc_lock_loop is not loop:
+        _soc_lock, _soc_lock_loop = asyncio.Lock(), loop
+    return _soc_lock
+
+
+async def set_soc_level(which, payload):
+    """Write a charge limit. set_battery_soc needs both min and target together, so the
+    opposing slider's current value is read back first and re-sent unchanged. Serialised so
+    adjusting both sliders in quick succession can't interleave and clobber a change."""
+    try:
+        value = int(float(payload))
+    except (TypeError, ValueError):
+        LOG.warning("Ignoring non-numeric %s value: %r", which, payload)
+        return
+    locale = cfg("R5_LOCALE", "en_GB")
+    async with _soc_lock_get():
+        try:
+            async with aiohttp.ClientSession() as websession:
+                vehicle = await _login_vehicle(websession, locale)
+                soc = await vehicle.get_battery_soc()
+                cur_min = getattr(soc, "socMin", None)
+                cur_target = getattr(soc, "socTarget", None)
+                new_min, new_target = ((value, cur_target) if _NUMBER_ROLE[which] == "min"
+                                       else (cur_min, value))
+                if new_min is None or new_target is None:
+                    LOG.error("Cannot set %s: current limits unavailable (min=%s, target=%s)",
+                              which, cur_min, cur_target)
+                    return
+                await vehicle.set_battery_soc(min=int(new_min), target=int(new_target))
+            LOG.info("Set charge limits: min=%s%%, target=%s%%", new_min, new_target)
+        except Exception as err:  # noqa: BLE001
+            LOG.error("Failed to set %s=%s: %s", which, value, err)
+
+
+async def run_command(cmd, payload=""):
+    """Dispatch an MQTT command: a button press to its renault-api action, or a number set
+    to set_battery_soc. Never fatal."""
+    if cmd in NUMBER_CMDS:
+        await set_soc_level(cmd, payload)
+        return
     action = COMMAND_ACTIONS.get(cmd)
     if action is None:
         LOG.warning("Ignoring unknown command: %s", cmd)
@@ -504,12 +584,15 @@ async def run_command(cmd):
 # --- Debug API dump (set debug_dump: true on the Configuration page) ----------------
 # Vehicle-telemetry endpoints only. Deliberately excludes get_location (GPS),
 # get_contracts and get_notification_settings — those carry location / contact / account
-# PII with no sensor-mapping diagnostic value.
+# PII with no sensor-mapping diagnostic value. No-arg readers below; date-ranged (charges,
+# charge-history) and raw (alerts) endpoints are probed separately in dump_api.
 _DEBUG_METHODS = [
-    "get_details", "get_battery_status", "get_battery_soc", "get_cockpit",
-    "get_hvac_status", "get_hvac_settings", "get_charge_schedule", "get_charge_mode",
-    "get_charging_settings", "get_tyre_pressure", "get_lock_status", "get_res_state",
+    "get_details", "get_car_adapter", "get_battery_status", "get_battery_soc", "get_cockpit",
+    "get_hvac_status", "get_hvac_settings", "get_hvac_history", "get_hvac_sessions",
+    "get_charge_schedule", "get_charge_mode", "get_charging_settings", "get_tyre_pressure",
+    "get_lock_status", "get_res_state",
 ]
+_DEBUG_RANGE_DAYS = 30
 # Keys masked regardless of value type — identifiers / contact / location fields.
 _DEBUG_REDACT_KEYS = {
     "registrationnumber", "vin", "tcucode", "radiocode", "siret", "msisdn", "phonenumber",
@@ -541,25 +624,47 @@ def _debug_redact(obj, secrets):
     return obj
 
 
+async def _dump_one(out, name, call, secrets):
+    """Run one debug probe, mask its raw payload, store the result; never fatal."""
+    try:
+        res = await call()
+        if isinstance(res, dict):
+            raw = res
+        elif isinstance(res, list):
+            raw = [getattr(x, "raw_data", x) for x in res]
+        else:
+            raw = getattr(res, "raw_data", None) or {"_repr": str(res)}
+        out[name] = _debug_redact(raw, secrets)
+    except Exception as err:  # noqa: BLE001
+        out[name] = {"_error": f"{type(err).__name__}: {err}"}
+
+
 async def dump_api(vehicle):
     """DEBUG: fetch the telemetry endpoints, mask IDs/secrets, log the lot. Never fatal."""
     secrets = [v for v in (cfg("R5_VIN"), cfg("R5_ACCOUNT_ID"), cfg("R5_USERNAME")) if v]
     out = {}
     for meth in _DEBUG_METHODS:
         fn = getattr(vehicle, meth, None)
-        if fn is None:
-            continue
-        try:
-            res = await fn()
-            if isinstance(res, dict):
-                raw = res
-            elif isinstance(res, list):
-                raw = [getattr(x, "raw_data", x) for x in res]
-            else:
-                raw = getattr(res, "raw_data", None) or {"_repr": str(res)}
-            out[meth] = _debug_redact(raw, secrets)
-        except Exception as err:  # noqa: BLE001
-            out[meth] = {"_error": f"{type(err).__name__}: {err}"}
+        if fn is not None:
+            await _dump_one(out, meth, lambda _f=fn: _f(), secrets)
+    # Date-ranged + raw endpoints can't be called arg-less; probe them explicitly. alerts has
+    # no convenience method, so resolve its per-model path and raw-GET it (forbidden -> _error).
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=_DEBUG_RANGE_DAYS)
+
+    async def _alerts():
+        return await vehicle.http_get(await vehicle.get_full_endpoint("alerts"))
+
+    specials = (
+        ("get_charges", getattr(vehicle, "get_charges", None),
+         lambda: vehicle.get_charges(start, end)),
+        ("get_charge_history", getattr(vehicle, "get_charge_history", None),
+         lambda: vehicle.get_charge_history(start, end, "month")),
+        ("alerts", getattr(vehicle, "http_get", None), _alerts),
+    )
+    for name, present, call in specials:
+        if present is not None:
+            await _dump_one(out, name, call, secrets)
     LOG.warning("API DEBUG DUMP — may contain personal data; redaction is best-effort, do NOT "
                 "paste publicly. One-shot per restart; turn debug_dump off when done.\n%s",
                 json.dumps(out, indent=2, default=str, ensure_ascii=False))
@@ -732,6 +837,21 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
     return data, location_attrs
 
 
+HEALTH_PORT = 8099
+
+
+async def start_health_server():
+    """/healthz on the poll loop — backs the Dockerfile HEALTHCHECK: a deadlocked event loop
+    can't answer, so the Supervisor marks the container unhealthy and restarts it."""
+    app = web.Application()
+    app.router.add_get("/healthz", lambda _req: web.Response(text="ok"))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    await web.TCPSite(runner, "0.0.0.0", HEALTH_PORT).start()  # nosec B104
+    LOG.info("Health endpoint listening on :%d/healthz", HEALTH_PORT)
+    return runner
+
+
 async def main():
     global _LOOP
     setup_logging()
@@ -752,6 +872,7 @@ async def main():
     for sig in (signal.SIGTERM, signal.SIGINT):   # honour shutdown during startup too
         _LOOP.add_signal_handler(sig, stop.set)
 
+    health = await start_health_server()
     state = load_state()
     vsession = VehicleSession(locale)
     supported = await detect_supported(vsession)
@@ -763,7 +884,9 @@ async def main():
     while not stop.is_set():
         try:
             t0 = time.monotonic()
-            data, location_attrs = await poll_once(vsession, state, capacity, supported, dist_unit)
+            data, location_attrs = await asyncio.wait_for(   # a hung poll can't stall the loop
+                poll_once(vsession, state, capacity, supported, dist_unit),
+                timeout=max(30, interval - 10))
             state["last_success"] = now_ts()
             data["api_auth_failure"] = "off"
             data["data_stale"] = "off"
@@ -799,6 +922,7 @@ async def main():
 
     LOG.info("Shutting down")
     await vsession.close()
+    await health.cleanup()
     client.publish(AVAIL_TOPIC, "offline", retain=True)
     client.loop_stop()
     client.disconnect()

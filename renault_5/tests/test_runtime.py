@@ -103,9 +103,11 @@ def test_on_message_dispatches(monkeypatch):
     monkeypatch.setattr(main, "_LOOP", object())
     monkeypatch.setattr(main.asyncio, "run_coroutine_threadsafe",
                         lambda coro, loop: captured.update(coro=coro, loop=loop))
-    monkeypatch.setattr(main, "run_command", lambda cmd: ("CO", cmd))
-    main._on_message(None, None, _obj(topic=main.CMD_PREFIX + "horn"))
-    assert captured["coro"] == ("CO", "horn")
+    monkeypatch.setattr(main, "run_command", lambda cmd, payload="": ("CO", cmd, payload))
+    main._on_message(None, None, _obj(topic=main.CMD_PREFIX + "horn", payload=b""))
+    assert captured["coro"] == ("CO", "horn", "")
+    main._on_message(None, None, _obj(topic=main.CMD_PREFIX + "soc_max_target", payload=b"90"))
+    assert captured["coro"] == ("CO", "soc_max_target", "90")
 
 
 def test_on_message_ignores_non_command_and_no_loop(monkeypatch):
@@ -236,6 +238,7 @@ def test_detect_supported_probes_endpoints():
         sup = await main.detect_supported(Sess())
         assert "charge-mode" in sup and "pressure" not in sup
         assert actions <= sup
+        assert main.SOC_ENDPOINT in sup          # soc-levels probed and supported
 
     asyncio.run(scenario())
 
@@ -359,6 +362,103 @@ def test_run_command_failure_is_logged_not_raised(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# charge-limit numbers (set_battery_soc)
+# --------------------------------------------------------------------------- #
+class _SocVehicle:
+    def __init__(self):
+        self.soc_set = None
+
+    async def get_battery_soc(self):
+        return _obj(socTarget=80, socMin=20)
+
+    async def set_battery_soc(self, *, min, target):
+        self.soc_set = (min, target)
+
+
+def _soc_login(monkeypatch, vehicle):
+    monkeypatch.setattr(main.aiohttp, "ClientSession", lambda *a, **k: _CmdSession())
+
+    async def login(ws, loc):
+        return vehicle
+
+    monkeypatch.setattr(main, "_login_vehicle", login)
+
+
+def test_set_soc_max_target_sends_both_limits(monkeypatch):
+    v = _SocVehicle()
+    _soc_login(monkeypatch, v)
+    asyncio.run(main.run_command("soc_max_target", "90"))
+    assert v.soc_set == (20, 90)         # min unchanged, target updated
+
+
+def test_set_soc_min_target_sends_both_limits(monkeypatch):
+    v = _SocVehicle()
+    _soc_login(monkeypatch, v)
+    asyncio.run(main.run_command("soc_min_target", "30"))
+    assert v.soc_set == (30, 80)         # target unchanged, min updated
+
+
+def test_set_soc_ignores_non_numeric(monkeypatch):
+    v = _SocVehicle()
+    _soc_login(monkeypatch, v)
+    asyncio.run(main.run_command("soc_max_target", "not-a-number"))
+    assert v.soc_set is None             # never written
+
+
+def test_set_soc_bails_when_opposing_limit_missing(monkeypatch):
+    class _NoLimits(_SocVehicle):
+        async def get_battery_soc(self):
+            return _obj(socTarget=None, socMin=None)
+
+    v = _NoLimits()
+    _soc_login(monkeypatch, v)
+    asyncio.run(main.run_command("soc_max_target", "90"))
+    assert v.soc_set is None             # bailed: current limits unavailable
+
+
+def test_set_soc_error_is_swallowed(monkeypatch):
+    monkeypatch.setattr(main.aiohttp, "ClientSession", lambda *a, **k: _CmdSession())
+
+    async def login(ws, loc):
+        raise RuntimeError("auth failed")
+
+    monkeypatch.setattr(main, "_login_vehicle", login)
+    asyncio.run(main.run_command("soc_max_target", "90"))   # no raise
+
+
+def test_concurrent_soc_sets_do_not_clobber(monkeypatch):
+    car = {"min": 20, "target": 80}
+
+    class V:
+        async def get_battery_soc(self):
+            return _obj(socMin=car["min"], socTarget=car["target"])
+
+        async def set_battery_soc(self, *, min, target):
+            await asyncio.sleep(0)               # yield — interleaves without the lock
+            car["min"], car["target"] = min, target
+
+    _soc_login(monkeypatch, V())
+
+    async def both():
+        await asyncio.gather(main.run_command("soc_min_target", "30"),
+                             main.run_command("soc_max_target", "90"))
+
+    asyncio.run(both())
+    assert car == {"min": 30, "target": 90}      # both survived -> writes serialised
+
+
+def test_numbers_not_debounced(monkeypatch):
+    # A number set must not be dropped by the button debounce window.
+    main._last_command.clear()
+    monkeypatch.setattr(main, "now_ts", lambda: 1000.0)
+    v = _SocVehicle()
+    _soc_login(monkeypatch, v)
+    asyncio.run(main.run_command("soc_max_target", "70"))
+    asyncio.run(main.run_command("soc_max_target", "75"))   # immediate repeat still applies
+    assert v.soc_set == (20, 75)
+
+
+# --------------------------------------------------------------------------- #
 # debug API dump
 # --------------------------------------------------------------------------- #
 def test_dump_api_redacts_secrets_and_never_raises(monkeypatch, caplog):
@@ -385,6 +485,35 @@ def test_dump_api_redacts_secrets_and_never_raises(monkeypatch, caplog):
     assert "VF1SECRET" not in caplog.text             # secret scrubbed everywhere
     assert "R5 E-Tech" in caplog.text                 # telemetry kept
     assert "hvac boom" in caplog.text                 # endpoint error captured, not fatal
+
+
+def test_dump_api_probes_ranged_and_alerts(monkeypatch, caplog):
+    monkeypatch.setenv("R5_VIN", "VF1SECRET")
+    captured = {}
+
+    class V:
+        async def get_charges(self, start, end):
+            captured["window"] = (start, end)
+            return [_obj(raw_data={"chargeEnergyRecovered": 12})]
+
+        async def get_charge_history(self, start, end, period):
+            raise RuntimeError("forbidden")           # exercises the error branch
+
+        async def get_full_endpoint(self, key):
+            captured["alerts_key"] = key
+            return "/resolved/alerts"
+
+        async def http_get(self, path):
+            captured["alerts_path"] = path
+            return {"alerts": ["x"]}
+
+    with caplog.at_level(logging.WARNING, logger="renault_5"):
+        asyncio.run(main.dump_api(V()))
+    start, end = captured["window"]
+    assert (end - start).days == main._DEBUG_RANGE_DAYS   # charges window ~30 days
+    assert captured["alerts_key"] == "alerts"             # alerts path resolved by key
+    assert captured["alerts_path"] == "/resolved/alerts"  # then raw-GET
+    assert "chargeEnergyRecovered" in caplog.text         # charges payload captured
 
 
 def test_maybe_dump_api_runs_once_per_restart(monkeypatch):
@@ -566,6 +695,21 @@ def test_poll_once_survives_every_secondary_endpoint_failing():
 # --------------------------------------------------------------------------- #
 # main() — one full poll cycle (success + failure branch)
 # --------------------------------------------------------------------------- #
+def test_health_server_serves_200():
+    import aiohttp
+
+    async def scenario():
+        runner = await main.start_health_server()
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.get(f"http://127.0.0.1:{main.HEALTH_PORT}/healthz") as r:
+                    assert r.status == 200 and (await r.text()) == "ok"
+        finally:
+            await runner.cleanup()
+
+    asyncio.run(scenario())
+
+
 def _wire_main(monkeypatch, tmp_path, poll):
     for k, v in {"R5_USERNAME": "u", "R5_PASSWORD": "p", "R5_VIN": "VF1",
                  "MQTT_HOST": "broker", "R5_LOCALE": "en_GB"}.items():
@@ -583,6 +727,14 @@ def _wire_main(monkeypatch, tmp_path, poll):
         return None
 
     monkeypatch.setattr(main.deploy, "run_deploy", fake_deploy)
+
+    async def fake_health():                       # don't bind a real port in the loop test
+        class _Runner:
+            async def cleanup(self):
+                pass
+        return _Runner()
+
+    monkeypatch.setattr(main, "start_health_server", fake_health)
 
     created = {}
     real_event = main.asyncio.Event
