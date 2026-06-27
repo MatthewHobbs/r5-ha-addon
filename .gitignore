@@ -20,3 +20,10 @@ secrets.yaml
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Personal/local settings only
+*.local.json
+
+# Editor / IDE
+.vscode/
+.idea/
