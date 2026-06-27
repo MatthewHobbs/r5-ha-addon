@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.10.1
+
+- **Fix: add-on failed to start after updating to 0.9.8 (AppArmor).** The custom AppArmor
+  profile introduced earlier was too strict — it granted only execute (not read) on the
+  s6-overlay boot chain, so the container's own `/init` script could not be opened
+  (`can't open '/init': Permission denied`) and the add-on would not start after an update.
+  The profile is now based on Home Assistant's reference add-on profile (broad `file`/
+  `capability` access so the supervision tree and bashio always boot), while still denying
+  the escalation primitives that carry real value: **no mount, no ptrace, no raw packet
+  sockets**, and a constrained outbound network. The Supervisor security rating is unchanged
+  (still **8/8**). CI now compiles the profile with `apparmor_parser` so a broken profile
+  can't ship again. Thanks to @Dutchy-79 for the report (#12).
+
 ## 0.10.0
 
 - **Read-only status panel in the sidebar (ingress)** (ported from the A290). The add-on now
