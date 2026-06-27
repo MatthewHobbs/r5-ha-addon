@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.0
+
+- **Fix dashboard text truncation on phones** (ported from the A290). The Mushroom tile
+  labels/values sit in a 2-column grid that leaves a ~70px text column on a phone, and
+  Mushroom clips with `text-overflow: ellipsis`, so text was cut off on narrow screens. Both
+  the **standard** and **bubble** dashboards now let those labels **wrap** instead of clip.
+- **Automated responsive UI testing in CI.** New `ui-tests/` harness renders the bundled
+  dashboards in a real Home Assistant (custom cards loaded) across the **top mobile device
+  sizes** (iPhone 15 Pro Max/Pro/15/SE, Pixel 8/7a, Galaxy S24/S23/A54, + a 360px narrow
+  bound) and **fails on any text truncation or broken card**, saving a screenshot per device
+  as a CI artifact. Runs as the **UI Tests** workflow whenever the dashboards change.
+
 ## 0.8.2
 
 - Refine 0.8.1: only drop the `distance` device_class when the unit is **miles**
