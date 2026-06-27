@@ -249,6 +249,42 @@ def test_buttons_cleared_when_action_endpoint_unsupported():
         assert c.pub[f"homeassistant/button/{main.NODE}/{node}/config"] == ""
 
 
+# --------------------------------------------------------------------------- #
+# writable charge-limit numbers
+# --------------------------------------------------------------------------- #
+def test_numbers_published_when_soc_supported():
+    c = StubClient()
+    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS) | {main.SOC_ENDPOINT}, "mi")
+    for obj, (name, _icon, _role, mn, mx, step) in main.NUMBERS.items():
+        short = obj.removeprefix("r5_")
+        conf = json.loads(c.pub[f"homeassistant/number/{main.NODE}/{short}/config"])
+        assert conf["name"] == name
+        assert conf["command_topic"] == f"{main.CMD_PREFIX}{short}"
+        assert conf["value_template"] == "{{ value_json.%s }}" % short
+        assert (conf["min"], conf["max"], conf["step"]) == (mn, mx, step)
+        assert conf["device_class"] == "battery" and conf["unit_of_measurement"] == "%"
+
+
+def test_numbers_cleared_when_soc_unsupported():
+    c = StubClient()
+    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS), "mi")   # soc-levels not supported
+    for obj in main.NUMBERS:
+        assert c.pub[f"homeassistant/number/{main.NODE}/{obj.removeprefix('r5_')}/config"] == ""
+
+
+def test_retired_soc_sensors_are_cleared():
+    c = StubClient()
+    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS) | {main.SOC_ENDPOINT}, "mi")
+    for obj in ("r5_soc_max_target", "r5_soc_min_target"):
+        assert c.pub[f"homeassistant/sensor/{main.NODE}/{obj}/config"] == ""
+
+
+def test_number_cmds_and_roles():
+    assert main.NUMBER_CMDS == {obj.removeprefix("r5_") for obj in main.NUMBERS}
+    assert main._NUMBER_ROLE["soc_min_target"] == "min"
+    assert main._NUMBER_ROLE["soc_max_target"] == "target"
+
+
 def test_command_actions_dispatch_to_real_methods():
     import asyncio
 
