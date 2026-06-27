@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.8
+
+- **Auto-deployed dashboards are now pinned to the release** (ported from the A290). When the
+  add-on installs a dashboard it rewrites the fetch/CDN refs to this release's **`v<version>`
+  git tag** (created by the release workflow) instead of `@main`, so a deployed dashboard is
+  **reproducible** and can't shift under you when `main` moves. Dev/untagged builds still use
+  `@main`. Mirrors **a290-ha-addon v1.4.8**.
+
 ## 0.9.7
 
 - **Pre-built, signed images — faster, more reliable installs** (ported from the A290). The

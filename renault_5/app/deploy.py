@@ -21,9 +21,11 @@ import yaml
 LOG = logging.getLogger("renault_5.deploy")
 
 REPO = "MatthewHobbs/r5-ha-addon"
-# Pin to the add-on's release tag (set by main.py before run_deploy) for a reproducible
-# dashboard; falls back to the default below for an untagged/dev checkout.
-REF = os.environ.get("R5_ADDON_REF", "main")
+# Pin dashboard assets to this release's git tag (created by release.yaml) so a deployed
+# dashboard is reproducible per version; fall back to main for a dev/untagged build.
+# (R5_VERSION defaults to "dev"; release.yaml passes the real version as BUILD_VERSION.)
+_VERSION = os.environ.get("R5_VERSION", "dev")
+REF = f"v{_VERSION}" if _VERSION not in ("", "dev") else "main"
 RAW = f"https://raw.githubusercontent.com/{REPO}/{REF}/dashboards"
 CDN = f"https://cdn.jsdelivr.net/gh/{REPO}@{REF}/dashboards"
 FONT_URL = "https://fonts.googleapis.com/css2?family=Zen+Dots&display=swap"
