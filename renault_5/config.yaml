@@ -39,6 +39,6 @@ schema:
   log_level: list(trace|debug|info|notice|warning|error|fatal)
   debug_dump: bool
   deploy_dashboard: list(none|standard|bubble|both)
-  dashboard_url_path: match(^\s*[A-Za-z0-9][A-Za-z0-9_-]*-[A-Za-z0-9_-]*\s*$)
+  dashboard_url_path: str
   redeploy_dashboard: bool
   car_render: list(artic-white-evolution|black-evolution|pop-green-evolution|pop-yellow-evolution|artic-white-iconic|black-iconic|black-iconic-titanium|midnight-blue-iconic|pop-yellow-iconic|artic-white-roland-garros|black-roland-garros|matte-grey-roland-garros|midnight-blue-roland-garros|artic-white-techno|artic-white-techno-black-roof|black-techno|black-techno-red-trim|midnight-blue-techno|pop-green-techno|pop-green-techno-black-roof|pop-yellow-techno|pop-yellow-techno-black-roof)
