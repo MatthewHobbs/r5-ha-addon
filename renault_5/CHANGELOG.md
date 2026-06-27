@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.3
+
+- **Bubble dashboard — location parity** (ported from the A290). The **Vehicle Status** pop-up
+  now shows the car **map** below its LOCATION text, and the **Location** pop-up gains the
+  yellow **LOCATION** separator heading for parity with the other sections. Reuses the existing
+  map/separator cards — no new dependencies. Re-deploy the bubble dashboard (or set
+  `redeploy_dashboard: true` once) to pick it up. Mirrors **a290-ha-addon v1.4.3**.
+
 ## 0.9.2
 
 - **Privacy:** the account **password is added to the `debug_dump` redaction list** so it can
