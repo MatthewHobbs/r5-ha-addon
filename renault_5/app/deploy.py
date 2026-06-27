@@ -34,8 +34,8 @@ DASHBOARDS = {"standard": "front-end.txt", "bubble": "front-end-bubble.txt"}
 # /local/backgrounds/<file> -> repo path (the dashboards reference images as
 # /local/backgrounds/<file>; the repo keeps them in typed subfolders under dashboards/).
 IMG_MAP = {
-    "r5_background.png": "Images/Background/r5_background.png",
-    "r5_side.png": "Images/Background/r5_side.png",
+    "r5_background.webp": "Images/Background/r5_background.webp",
+    "r5_side.webp": "Images/Background/r5_side.webp",
     "charge-indicator.png": "Images/Charging/charge-indicator.png",
 }
 
@@ -50,7 +50,7 @@ def _selected_render():
     stem = os.environ.get("R5_CAR_RENDER", "").strip().lower()
     for key, trim in _RENDER_TRIMS:
         if key in stem:
-            return f"Images/Models/{trim}/{stem}.png"
+            return f"Images/Models/{trim}/{stem}.webp"
     return None
 
 
@@ -61,7 +61,7 @@ def _cdnify(text):
 
     def repl(m):
         name = m.group(1)
-        if render and name in ("r5_background.png", "r5_side.png"):
+        if render and name in ("r5_background.webp", "r5_side.webp"):
             return f"{CDN}/{render}"
         path = IMG_MAP.get(name)
         if not path:

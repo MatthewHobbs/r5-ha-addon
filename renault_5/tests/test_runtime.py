@@ -901,8 +901,8 @@ class _FakeCS:
 _DASH_YAML = (
     "- title: Main\n"
     "  cards:\n"
-    "    - image: /local/backgrounds/r5_background.png\n"
-    "    - image: /local/backgrounds/r5_side.png\n"
+    "    - image: /local/backgrounds/r5_background.webp\n"
+    "    - image: /local/backgrounds/r5_side.webp\n"
     "    - image: /local/backgrounds/charge-indicator.png\n"
     "    - image: /local/backgrounds/unmapped.png\n"
 )
@@ -932,7 +932,7 @@ def test_run_deploy_creates_dashboard_and_rewrites_assets(monkeypatch):
     assert ws.created_dashboard is not None          # url_path was absent => created
     assert ws.saved is not None
     txt = json.dumps(ws.saved["config"])
-    assert "cdn.jsdelivr.net/gh/MatthewHobbs/r5-ha-addon@main/dashboards/Images/Background/r5_background.png" in txt
+    assert "cdn.jsdelivr.net/gh/MatthewHobbs/r5-ha-addon@main/dashboards/Images/Background/r5_background.webp" in txt
     assert "/local/backgrounds/unmapped.png" in txt  # unmapped reference left untouched
 
 
@@ -987,7 +987,7 @@ def test_run_deploy_render_override_and_redeploy(monkeypatch):
     assert ws.created_dashboard is None              # already existed => not recreated
     assert ws.saved is not None                      # redeploy overwrote config
     txt = json.dumps(ws.saved["config"])
-    assert "Images/Models/Iconic/midnight-blue-iconic.png" in txt   # render override applied
+    assert "Images/Models/Iconic/midnight-blue-iconic.webp" in txt   # render override applied
 
 
 def test_run_deploy_leaves_existing_dashboard_alone(monkeypatch):
