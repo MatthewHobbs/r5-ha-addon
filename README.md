@@ -16,20 +16,20 @@ once on the Configuration page, no files to edit.
 A maintained Home Assistant app for the **Renault 5 E-Tech**. Its real purpose is to be
 an **updated data layer** for
 [**Topolino65/renault-5-dashboard-view**](https://github.com/Topolino65/renault-5-dashboard-view)
-— full credit to Topolino65 for the original dashboards, assets and design.
+— full credit to [Topolino65](https://github.com/Topolino65) for the original dashboards, assets and design.
 
 It replaces that project's fragile `venv` + `renault-api` CLI + shell-script data layer with
-a proper **Home Assistant app** that polls the Renault/Kamereon API and publishes
-`sensor.r5_*` entities over **MQTT auto-discovery**. Credentials are entered once on the app's
-config page. Entity names follow Topolino's naming,
-so **his UI binds straight to these entities** — keep using his dashboards and let this
+a proper **Home Assistant app** that polls the
+[Renault/Kamereon API](https://github.com/hacf-fr/renault-api) and publishes
+`sensor.r5_*` entities over **MQTT auto-discovery**. Entity names follow Topolino65's naming,
+so **their UI binds straight to these entities** — keep using their dashboards and let this
 app feed them fresh data.
 
 It can **also** auto-deploy a dashboard for you (`deploy_dashboard`, off by default) — a
-**modified version of Topolino's UI**, ported from the maintainer's
+**modified version of Topolino65's UI**, ported from the maintainer's
 [Alpine A290 app](https://github.com/MatthewHobbs/a290-ha-addon) (the R5 E-Tech and Alpine
 A290 share the same Renault EV platform). It's a bonus, not the point: use it, or keep
-Topolino's own.
+Topolino65's own.
 
 Every control is sent **natively** by the app (charge, lights, horn, HVAC, refresh
 location) — **you do not need Home Assistant's `renault` integration**.
@@ -94,7 +94,7 @@ key needed.
 
 ## Install
 
-1. **Install the dependencies first** — so a card dashboard (Topolino's or a bundled one)
+1. **Install the dependencies first** — so a card dashboard (Topolino65's or a bundled one)
    renders immediately instead of as "custom element doesn't exist":
    - **Mosquitto broker** (Settings → Apps → App Store) — the app auto-discovers it.
    - **[HACS](https://hacs.xyz)** and the frontend cards from [Requirements](#requirements)
@@ -108,10 +108,10 @@ key needed.
    you have multiple accounts — it's auto-discovered otherwise), then **Start**. The
    `sensor.r5_*` / `binary_sensor.r5_*` entities and `button.r5_*` controls appear under an
    **R5** device within a minute.
-4. **Get a dashboard:** use **Topolino's [renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view)**
-   (the entities follow his naming, so they bind straight to it), **or** set `deploy_dashboard`
+4. **Get a dashboard:** use **[Topolino65's renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view)**
+   (the entities follow their naming, so they bind straight to it), **or** set `deploy_dashboard`
    to `standard`, `bubble`, or `both` to have this app install its own (a modified version
-   of his UI) and restart — it installs the dashboard + assets via CDN, nothing to copy — **or**
+   of their UI) and restart — it installs the dashboard + assets via CDN, nothing to copy — **or**
    copy `renault_5/dashboards/front-end*.txt` into a new dashboard's raw config manually. With
    `both`, the standard dashboard lands at your `dashboard_url_path` and the bubble one gets a
    `-bubble` suffix (e.g. `renault-5` and `renault-5-bubble`).
