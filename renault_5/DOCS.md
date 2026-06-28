@@ -23,7 +23,7 @@ or ignore it and keep Topolino's — either way the data comes from this app.
 
 ## Before you start — install these first
 
-The app only needs the **Mosquitto broker** add-on (its MQTT connection is auto-discovered
+The app only needs the **Mosquitto broker** app (its MQTT connection is auto-discovered
 from it). It publishes the entities; **you choose the dashboard**:
 
 - **Topolino's [renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view)** —
@@ -83,7 +83,7 @@ dashboards remain the richer view; the panel is the quick glance.
 
 ## Requirements
 
-- The **Mosquitto broker** add-on (the MQTT connection is auto-discovered).
+- The **Mosquitto broker** app (the MQTT connection is auto-discovered).
 
 ## Entities
 
