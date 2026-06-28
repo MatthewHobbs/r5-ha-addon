@@ -51,9 +51,10 @@ ruff.toml / repository.yaml / README.md / LICENSE
 **Do not bump `renault-api` casually.** Per-model endpoint support is hard-coded in the
 library at `renault_api/kamereon/models.py` → `_VEHICLE_ENDPOINTS` (R5 is model `R5E1VE`,
 A290 is `A5E1AE`). That map — not the readthedocs pages — is the authoritative source for
-what each car exposes. The R5 supports **all five native controls** — charge-start (KCM
-instant-charge), flash lights, sound horn, and HVAC start/stop — **unlike the A290, which
-forbids charge-start**; charge-mode and tyre-pressure are optional and may not be exposed.
+what each car exposes. The R5 supports **all six native controls** — charge-start (KCM
+instant-charge), flash lights, sound horn, HVAC start/stop, and refresh location —
+**unlike the A290, which forbids charge-start**; charge-mode and tyre-pressure are
+**forbidden** on the R5 (`R5E1VE`) and are not published.
 The add-on probes `supports_endpoint()` at startup and only publishes what's available.
 
 **Platform caveats (R5 E-Tech / CMF-BEV, KCM):** `batteryCapacity` is always 0 (the add-on
