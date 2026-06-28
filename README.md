@@ -90,20 +90,27 @@ key needed.
 
 ## Install
 
-1. **Add the add-on repo:** Settings → Add-ons → Add-on Store → ⋮ → **Repositories**, add
-   `https://github.com/MatthewHobbs/r5-ha-addon`. Install **Mosquitto broker** (if needed)
-   and the **Renault 5** add-on.
-2. **Configure + start:** on the add-on's **Configuration** tab set your My Renault
-   `username`/`password`, `vin`, `locale`, and `battery_capacity_kwh`, then **Start**.
-   The `sensor.r5_*` / `binary_sensor.r5_*` entities and `button.r5_*` controls appear
-   under an **R5** device within a minute.
-3. **Install the HACS cards** above (do this *before* deploying a dashboard, or it renders
-   as "custom element doesn't exist").
-4. **Get a dashboard:** set `deploy_dashboard` to `standard`, `bubble`, or `both` and
-   restart the add-on (it installs the dashboard + assets via CDN, nothing to copy), **or**
-   copy `renault_5/dashboards/front-end*.txt` into a new dashboard's raw config manually. With `both`,
-   the standard dashboard lands at `dashboard_url_path` and the bubble one at that path with
-   `-bubble` appended (e.g. `renault-5-bubble`).
+1. **Install the dependencies first** — so a card dashboard (Topolino's or a bundled one)
+   renders immediately instead of as "custom element doesn't exist":
+   - **Mosquitto broker** (Settings → Add-ons → Add-on Store) — the add-on auto-discovers it.
+   - **[HACS](https://hacs.xyz)** and the frontend cards from [Requirements](#requirements)
+     above (card-mod, Mushroom, Button Card, Browser Mod, plus Bubble Card for the bubble
+     dashboard).
+2. **Add the add-on repo + install it:** Settings → Add-ons → Add-on Store → ⋮ →
+   **Repositories**, add `https://github.com/MatthewHobbs/r5-ha-addon`, then install the
+   **Renault 5** add-on.
+3. **Configure + start:** on the **Configuration** tab set your My Renault
+   `username`/`password`, `vin`, `locale`, `battery_capacity_kwh` (and `account_id` only if
+   you have multiple accounts — it's auto-discovered otherwise), then **Start**. The
+   `sensor.r5_*` / `binary_sensor.r5_*` entities and `button.r5_*` controls appear under an
+   **R5** device within a minute.
+4. **Get a dashboard:** use **Topolino's [renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view)**
+   (the entities follow his naming, so they bind straight to it), **or** set `deploy_dashboard`
+   to `standard`, `bubble`, or `both` to have this add-on install its own (a modified version
+   of his UI) and restart — it installs the dashboard + assets via CDN, nothing to copy — **or**
+   copy `renault_5/dashboards/front-end*.txt` into a new dashboard's raw config manually. With
+   `both`, the standard dashboard lands at your `dashboard_url_path` and the bubble one gets a
+   `-bubble` suffix (e.g. `renault-5-bubble`).
 
 ## What it provides
 
