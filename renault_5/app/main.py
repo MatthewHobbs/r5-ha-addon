@@ -68,7 +68,7 @@ GPS_PRECISION = max(1, min(6, int(_GPS_P))) if _GPS_P.isdigit() else 4
 # Device name "R5" is deliberate: HA builds entity_ids from slug(device + entity name) and
 # ignores object_id, so this yields sensor.r5_<name> (what the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
-VERSION = "0.15.0"
+VERSION = "0.16.0"
 
 _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
 
@@ -318,6 +318,42 @@ def _charge_schedule_fields(settings):
         "scheduled_charge_start": _fmt_hhmm(settings.get("chargeTimeStart")),
         "scheduled_charge_duration": _num(settings.get("chargeDuration")),
     }
+
+
+_HVAC_DAYS = (("monday", "Mon"), ("tuesday", "Tue"), ("wednesday", "Wed"), ("thursday", "Thu"),
+              ("friday", "Fri"), ("saturday", "Sat"), ("sunday", "Sun"))
+
+
+def _fmt_ready(t):
+    """Normalise an HVAC readyAtTime ('T07:00Z' / '0700' / '07:00:00') to 'HH:MM'."""
+    if t is None:
+        return None
+    s = str(t).strip().lstrip("T").rstrip("Z")
+    if len(s) >= 5 and s[2] == ":":
+        return s[:5]
+    return _fmt_hhmm(s)
+
+
+def _hvac_schedule_fields(settings):
+    """Summarise get_hvac_settings() into the climate mode + the active schedule's per-day
+    ready times ('Mon 07:00, Fri 08:00'). Reads the typed HvacSettingsData defensively
+    (getattr), so a stub / None / no active schedule just yields None values."""
+    mode = getattr(settings, "mode", None)
+    out = {
+        "climate_schedule_mode": mode.replace("_", " ").title() if isinstance(mode, str) and mode else None,
+        "climate_ready_time": None,
+    }
+    active = next((s for s in (getattr(settings, "schedules", None) or [])
+                   if getattr(s, "activated", False)), None)
+    if active is not None:
+        parts = []
+        for day, abbr in _HVAC_DAYS:
+            ds = getattr(active, day, None)
+            t = _fmt_ready(getattr(ds, "readyAtTime", None)) if ds is not None else None
+            if t:
+                parts.append(f"{abbr} {t}")
+        out["climate_ready_time"] = ", ".join(parts) or None
+    return out
 
 
 def _enum_label(enum_val, labels, raw):
@@ -859,6 +895,10 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
         data.update(_charge_schedule_fields(p))
     except Exception as err:  # noqa: BLE001
         LOG.warning("ev/settings unavailable: %s", err)
+    try:
+        data.update(_hvac_schedule_fields(await vehicle.get_hvac_settings()))
+    except Exception as err:  # noqa: BLE001
+        LOG.warning("hvac-settings unavailable: %s", err)
     try:
         soc_lvl = await vehicle.get_battery_soc()
         data["soc_max_target"] = getattr(soc_lvl, "socTarget", None)
