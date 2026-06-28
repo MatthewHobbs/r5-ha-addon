@@ -9,7 +9,7 @@ in several trims/colours). All renders are included in [`Images/Models/`](Images
 If the app installs the dashboard for you (`deploy_dashboard: standard|bubble`), you
 don't need to touch any files:
 
-1. **Settings → Add-ons → Renault 5 → Configuration → `car_render`** — pick your trim/colour
+1. **Settings → Apps → Renault 5 → Configuration → `car_render`** — pick your trim/colour
    (e.g. `midnight-blue-iconic`).
 2. Set **`redeploy_dashboard: true`** and **Restart** the app so the dashboard
    re-deploys with your render. (Set it back to `false` afterwards if you want your manual
@@ -36,7 +36,7 @@ auto-deploy), the dashboards reference the render as **`r5_background.webp`** (m
 and **`r5_side.webp`** (the Bubble side tile):
 
 1. Pick your render, e.g. `Models/Iconic/midnight-blue-iconic.webp`.
-2. With the **File Editor** add-on or **Samba**, copy it into `/config/www/backgrounds/`
+2. With the **File Editor** app or **Samba**, copy it into `/config/www/backgrounds/`
    **twice**, renamed `r5_background.webp` and `r5_side.webp`.
 3. Hard-refresh the dashboard (Ctrl/Cmd-Shift-R). No YAML editing needed.
 
