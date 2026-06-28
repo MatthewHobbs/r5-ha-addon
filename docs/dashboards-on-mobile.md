@@ -21,5 +21,14 @@ Pixel 7a, Galaxy S24, Galaxy S23, Galaxy A54, and a 360 px narrow Android bound.
 | --- | --- |
 | ![Bubble dashboard on iPhone 15 Pro](screenshots/bubble-iphone-15-pro.png) | ![Bubble dashboard on Galaxy S24](screenshots/bubble-galaxy-s24.png) |
 
-> Screenshots are produced by the **UI Tests** workflow ([`ui-tests/`](../ui-tests/)) with
-> representative sample data; the full per-device set is uploaded as a build artifact on every run.
+## Smart Charging (optional)
+
+With the `charger_*` options set, the Smart Charging controls appear on both dashboards — a
+pop-up "tab" on the bubble dashboard (below) and a matching block on the standard one.
+
+![Smart Charging pop-up on the bubble dashboard](screenshots/smart-charging-iphone-15-pro.png)
+
+> Screenshots are produced by the **UI Tests** workflow ([`ui-tests/`](../ui-tests/)) in dark
+> mode with representative sample data (no real account/location data). The full per-device set
+> is uploaded as a build artifact on every run, and the shots above are **auto-refreshed** on
+> any PR that changes the dashboards (committed back to the PR branch), so they never go stale.

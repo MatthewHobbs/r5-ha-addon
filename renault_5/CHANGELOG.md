@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.0.0
+
+**Feature parity with the Alpine A290 add-on** — the R5 add-on graduates to 1.0.
+
+- **Smart Charging is now first-class on both dashboards** (mirroring the A290). When you set
+  the `charger_*` options:
+  - **Bubble dashboard** — a **"Smart Charging" tab** in the main menu: smart/bump-charge as
+    compact toggles, a charge-target **slider** with the live **%** and an **80%** recommended
+    marker, a target-time **dropdown**, and an **off-peak badge** showing the current rate
+    (green "Now: Off-peak" / red "Now: Peak rate") plus the cheap-window times in 24-hour. The
+    **Location** button moves to a full-width row.
+  - **Standard dashboard** — a styled **"SMART CHARGING" heading + Mushroom cards** matching
+    the Climate/Charging Presets (no more clashing white inputs), with the off-peak badge.
+  - New optional **`charger_dispatching`** option for the off-peak badge (an off-peak tariff
+    `binary_sensor` is the best fit).
+- Both dashboards are verified by the UI-test render gate; nothing changes unless the
+  `charger_*` options are set.
+
 ## 0.16.0
 
 - **New: climate (preconditioning) schedule sensors.** Two new sensors surface the car's
