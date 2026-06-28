@@ -131,6 +131,9 @@ Names follow the Topolino project (minus the legacy `_api`/`_mi` suffixes):
   `…_gps_last_activity`.
 - Charge limits (writable sliders, set via `set_battery_soc`):
   `number.r5_soc_min_target` (15–45 %), `number.r5_soc_max_target` (55–100 %).
+- Scheduled charging (read from the car's settings — the programmed schedule, not a control):
+  `…_charge_schedule_mode`, `…_scheduled_charge_start`, `…_scheduled_charge_duration`. Show
+  *unavailable* if the car has no schedule programmed.
 - Last charge: `…_last_charge_start/end`, `…_start_soc/end_soc`,
   `…_start_energy/end_energy`, `…_duration`, `…_soc_recovered/energy_recovered`,
   `…_average_power`, `…_type`. When the car exposes Renault's recent-charges history these
