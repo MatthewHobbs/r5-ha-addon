@@ -72,6 +72,35 @@ start**, so everything renders correctly the first time.
 | `dashboard_url_path` | URL slug for the deployed dashboard (default `renault-5`). With `deploy_dashboard: both` the bubble dashboard is installed at `<this>-bubble` (e.g. `renault-5-bubble`). |
 | `redeploy_dashboard` | `true` re-pushes the dashboard config on next start. Default `false`. |
 | `car_render` | The trim/colour render shown on the dashboard (e.g. `midnight-blue-iconic`), used when auto-deploying. Default `pop-yellow-techno`. See [Customising](https://github.com/MatthewHobbs/r5-ha-addon/tree/main/renault_5/dashboards/CUSTOMISING.md). |
+| `charger_smart_charge` | *(optional)* entity id of your EV charger's **smart-charge** switch — see [Smart Charging](#smart-charging-card) below. |
+| `charger_bump_charge` | *(optional)* entity id of your charger's **bump/boost-charge** switch. |
+| `charger_target_soc` | *(optional)* entity id of your charger's **charge-target %** number. |
+| `charger_target_time` | *(optional)* entity id of your charger's **target-time** (ready-by) control. |
+
+## Smart Charging card
+
+If you control charging through a smart-charging integration — e.g. **[Octopus Energy /
+Intelligent Octopus](https://github.com/BottlecapDave/HomeAssistant-OctopusEnergy)**, Ohme,
+Zappi, Wallbox — you can show those controls on a bundled dashboard next to the car's data.
+Set the `charger_*` options above to your charger's entity ids and the dashboard gains a
+**"Smart Charging"** card (a built-in `entities` card — no extra HACS card needed). Leave them
+blank (the default) and no card is added; each blank one is skipped, so you can map just the
+controls you have. (This only affects the add-on's own bundled dashboards — it doesn't change
+Topolino's dashboards.)
+
+For example, with the Octopus Intelligent entities from your account:
+
+```yaml
+charger_smart_charge: switch.octopus_energy_<account>_intelligent_smart_charge
+charger_bump_charge:  switch.octopus_energy_<account>_intelligent_bump_charge
+charger_target_soc:   number.octopus_energy_<account>_intelligent_charge_target
+charger_target_time:  select.octopus_energy_<account>_intelligent_target_time
+```
+
+(Find the exact ids in **Developer Tools → States**.) The card is read-write — toggling a
+switch or changing the target there controls your charger directly. It's added when the
+dashboard is deployed, so set `redeploy_dashboard: true` (and restart once) if you add the
+entities after the dashboard already exists.
 
 ## Status panel
 
