@@ -621,7 +621,8 @@ class _ChargingVehicle:
                     hvacStatus="on", socThreshold=40, lastUpdateTime="t")
 
     async def get_charge_schedule(self):
-        return {"preconditioningTemperature": 20}
+        return {"preconditioningTemperature": 20, "chargeModeRq": "scheduled_charge",
+                "chargeTimeStart": "0230", "chargeDuration": 360}
 
     async def get_battery_soc(self):
         return _obj(socTarget=90, socMin=10)
@@ -636,6 +637,8 @@ def test_poll_once_charging_and_no_gps_fix():
     assert data["charger_status"] == "Charging"
     assert data["charging_flap_status"] == "Open: Plugged In"
     assert data["battery_last_activity"] is not None      # iso(now_ts()) fallback
+    assert data["charge_schedule_mode"] == "Scheduled Charge"   # from the KCM ev/settings payload
+    assert data["scheduled_charge_start"] == "02:30" and data["scheduled_charge_duration"] == 360
     assert loc is None                                    # lat/lon both None => no tracker attrs
 
 

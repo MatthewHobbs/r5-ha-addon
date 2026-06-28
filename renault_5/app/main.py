@@ -68,7 +68,7 @@ GPS_PRECISION = max(1, min(6, int(_GPS_P))) if _GPS_P.isdigit() else 4
 # Device name "R5" is deliberate: HA builds entity_ids from slug(device + entity name) and
 # ignores object_id, so this yields sensor.r5_<name> (what the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
-VERSION = "0.14.0"
+VERSION = "0.15.0"
 
 _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
 
@@ -296,6 +296,28 @@ def _find_precond(obj, _depth=0):
         if found:
             return found
     return {}
+
+
+def _fmt_hhmm(v):
+    """A bare 'HHMM' charge time (the KCM format) -> 'HH:MM'; anything else returned as-is."""
+    if v is None:
+        return None
+    s = str(v).strip()
+    return f"{s[:2]}:{s[2:]}" if s.isdigit() and len(s) == 4 else (s or None)
+
+
+def _charge_schedule_fields(settings):
+    """KCM ev/settings charge-schedule summary — the chargeModeRq / chargeTimeStart /
+    chargeDuration siblings of the preconditioning* fields (field names per renault-api's KCM
+    charge-schedule CLI). Absent fields -> None, so a car that doesn't populate them just shows
+    the sensors as unavailable rather than erroring. No extra API call: reuses the poll's
+    existing get_charge_schedule() payload."""
+    mode = settings.get("chargeModeRq")
+    return {
+        "charge_schedule_mode": mode.replace("_", " ").title() if isinstance(mode, str) and mode else None,
+        "scheduled_charge_start": _fmt_hhmm(settings.get("chargeTimeStart")),
+        "scheduled_charge_duration": _num(settings.get("chargeDuration")),
+    }
 
 
 def _enum_label(enum_val, labels, raw):
@@ -834,6 +856,7 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
         rhd = locale.lower() in RHD_LOCALES
         data["heated_seat_driver"] = _bool_on(right if rhd else left)
         data["heated_seat_passenger"] = _bool_on(left if rhd else right)
+        data.update(_charge_schedule_fields(p))
     except Exception as err:  # noqa: BLE001
         LOG.warning("ev/settings unavailable: %s", err)
     try:
