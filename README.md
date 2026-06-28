@@ -4,10 +4,10 @@
 [![Version](https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FMatthewHobbs%2Fr5-ha-addon%2Fmain%2Frenault_5%2Fconfig.yaml&query=%24.version&label=version&color=41BDF5)](renault_5/config.yaml)
 [![Coverage](https://img.shields.io/badge/coverage-%E2%89%A590%25-brightgreen)](https://github.com/MatthewHobbs/r5-ha-addon/actions/workflows/ci.yaml)
 [![License: MIT](https://img.shields.io/github/license/MatthewHobbs/r5-ha-addon?color=blue)](LICENSE)
-[![Home Assistant Add-on](https://img.shields.io/badge/Home%20Assistant-Add--on-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/addons/)
+[![Home Assistant App](https://img.shields.io/badge/Home%20Assistant-App-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/addons/)
 [![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-informational)](renault_5/config.yaml)
 
-[![Open your Home Assistant instance and add this add-on repository.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FMatthewHobbs%2Fr5-ha-addon)
+[![Open your Home Assistant instance and add this app repository.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FMatthewHobbs%2Fr5-ha-addon)
 
 This app logs in to your car's **My Renault** account, reads its data (battery, charging,
 location, climate) every few minutes, and shows it in Home Assistant — you enter your login
@@ -60,7 +60,7 @@ location) — **you do not need Home Assistant's `renault` integration**.
 
 Install these **before** the dashboards will render correctly.
 
-### Add-ons (Settings → Add-ons)
+### Apps (Settings → Apps)
 
 | Dependency | Why | Required? |
 | --- | --- | --- |
@@ -96,11 +96,11 @@ key needed.
 
 1. **Install the dependencies first** — so a card dashboard (Topolino's or a bundled one)
    renders immediately instead of as "custom element doesn't exist":
-   - **Mosquitto broker** (Settings → Add-ons → Add-on Store) — the app auto-discovers it.
+   - **Mosquitto broker** (Settings → Apps → App Store) — the app auto-discovers it.
    - **[HACS](https://hacs.xyz)** and the frontend cards from [Requirements](#requirements)
      above (card-mod, Mushroom, Button Card, Browser Mod, plus Bubble Card for the bubble
      dashboard).
-2. **Add the app repo + install it:** Settings → Add-ons → Add-on Store → ⋮ →
+2. **Add the app repo + install it:** Settings → Apps → App Store → ⋮ →
    **Repositories**, add `https://github.com/MatthewHobbs/r5-ha-addon`, then install the
    **Renault 5** app.
 3. **Configure + start:** on the **Configuration** tab set your My Renault
