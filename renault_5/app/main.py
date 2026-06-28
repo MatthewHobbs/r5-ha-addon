@@ -34,6 +34,17 @@ import aiohttp
 import deploy
 import paho.mqtt.client as mqtt
 from aiohttp import web
+from catalog import (
+    ACTION_BUTTONS,
+    BINARY_SENSORS,
+    DEFAULT_DISABLED_SENSORS,
+    ICONS,
+    NUMBERS,
+    OPTIONAL_ENDPOINTS,
+    RETIRED_SENSORS,
+    SENSORS,
+    SOC_ENDPOINT,
+)
 from renault_api.kamereon.enums import ChargeState, PlugState
 from renault_api.renault_client import RenaultClient
 
@@ -47,115 +58,18 @@ TRACKER_STATE_TOPIC = f"{NODE}/location/state"
 AVAIL_TOPIC = f"{NODE}/availability"
 CMD_PREFIX = f"{NODE}/cmd/"          # button commands: renault_5/cmd/<suffix>
 STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
+# Decimal places the published GPS is rounded to before it goes on the retained MQTT topic
+# (privacy — coarsens an otherwise full-precision home location). 4 dp ≈ 11 m. Default 4.
+# Tolerate the option being absent on an upgraded install (bashio can export "" or "null").
+_GPS_P = os.environ.get("R5_GPS_PRECISION", "4").strip()
+GPS_PRECISION = max(1, min(6, int(_GPS_P))) if _GPS_P.isdigit() else 4
 
 # Device name "R5" is deliberate: HA builds entity_ids from slug(device + entity name) and
 # ignores object_id, so this yields sensor.r5_<name> (what the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
-VERSION = "0.12.0"
+VERSION = "0.13.0"
 
 _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
-
-# object_id -> (name, device_class, unit, state_class). Object_ids follow the Topolino
-# R5 naming (minus the legacy _api/_mi suffixes); units are locale-aware (see publish).
-SENSORS = {
-    "r5_battery_level":          ("Battery Level", "battery", "%", "measurement"),
-    "r5_battery_autonomy":       ("Battery Autonomy", "distance", "km", "measurement"),
-    "r5_battery_temperature":    ("Battery Temperature", "temperature", "°C", "measurement"),
-    "r5_charging_rate":          ("Charging Rate", "power", "kW", "measurement"),
-    "r5_charging_remaining_time": ("Charging Remaining Time", "duration", "min", "measurement"),
-    "r5_available_energy":       ("Available Energy", "energy_storage", "kWh", "measurement"),
-    "r5_charger_plug_status":    ("Charger Plug Status", None, None, None),
-    "r5_charger_status":         ("Charger Status", None, None, None),
-    "r5_charging_flap_status":   ("Charging Flap Status", None, None, None),
-    "r5_drive_side":             ("Drive Side", None, None, None),
-    "r5_vehicle_mileage":        ("Vehicle Mileage", "distance", "km", "total_increasing"),
-    "r5_preconditioning_temperature": ("Preconditioning Temperature", "temperature", "°C", None),
-    "r5_hvac_last_activity":     ("HVAC Last Activity", "timestamp", None, None),
-    "r5_gps_last_activity":      ("GPS Last Activity", "timestamp", None, None),
-    "r5_external_temperature":   ("Outside Temperature", "temperature", "°C", "measurement"),
-    "r5_cabin_temperature":      ("Cabin Temperature", "temperature", "°C", "measurement"),
-    "r5_hvac_status":            ("HVAC Status", None, None, None),
-    "r5_hvac_soc_threshold":     ("HVAC SoC Threshold", "battery", "%", None),
-    "r5_charge_mode":            ("Charge Mode", None, None, None),
-    "r5_tyre_pressure_fl":       ("Tyre Pressure Front Left", None, None, "measurement"),
-    "r5_tyre_pressure_fr":       ("Tyre Pressure Front Right", None, None, "measurement"),
-    "r5_tyre_pressure_rl":       ("Tyre Pressure Rear Left", None, None, "measurement"),
-    "r5_tyre_pressure_rr":       ("Tyre Pressure Rear Right", None, None, "measurement"),
-    "r5_battery_last_activity":  ("Battery Last Activity", "timestamp", None, None),
-    "r5_last_charge_start":          ("Last Charge Start", "timestamp", None, None),
-    "r5_last_charge_end":            ("Last Charge End", "timestamp", None, None),
-    "r5_last_charge_start_soc":      ("Last Charge Start SoC", "battery", "%", None),
-    "r5_last_charge_end_soc":        ("Last Charge End SoC", "battery", "%", None),
-    "r5_last_charge_start_energy":   ("Last Charge Start Energy", "energy", "kWh", None),
-    "r5_last_charge_end_energy":     ("Last Charge End Energy", "energy", "kWh", None),
-    "r5_last_charge_recovered_pct":  ("Last Charge SoC Recovered", None, "%", None),
-    "r5_last_charge_recovered_kwh":  ("Last Charge Energy Recovered", "energy", "kWh", None),
-    "r5_last_charge_duration_min":   ("Last Charge Duration", "duration", "min", None),
-    "r5_last_charge_average_power":  ("Last Charge Average Power", "power", "kW", None),
-    "r5_last_charge_type":           ("Last Charge Type", None, None, None),
-}
-# object_id -> (name, device_class)
-BINARY_SENSORS = {
-    "r5_charging":              ("Charging", "battery_charging"),
-    "r5_heated_steering_wheel": ("Heated Steering Wheel", None),
-    "r5_heated_seat_driver":    ("Heated Seat Driver", None),
-    "r5_heated_seat_passenger": ("Heated Seat Passenger", None),
-    "r5_plug_suspect":          ("Plug State Suspect", "problem"),
-    "r5_api_auth_failure":      ("API Auth Failure", "problem"),
-    "r5_data_stale":            ("Data Stale", "problem"),
-}
-
-# Icons for text/status sensors that would otherwise fall back to HA's generic mdi:eye.
-ICONS = {
-    "r5_charger_plug_status":   "mdi:power-plug",
-    "r5_charger_status":        "mdi:battery-charging",
-    "r5_charging_flap_status":  "mdi:ev-plug-type2",
-    "r5_drive_side":            "mdi:steering",
-    "r5_hvac_status":           "mdi:fan",
-    "r5_charge_mode":           "mdi:ev-station",
-    "r5_last_charge_type":      "mdi:ev-station",
-    "r5_heated_steering_wheel": "mdi:steering",
-    "r5_heated_seat_driver":    "mdi:car-seat-heater",
-    "r5_heated_seat_passenger": "mdi:car-seat-heater",
-}
-
-# Optional endpoints some models don't expose — gated on supports_endpoint().
-OPTIONAL_ENDPOINTS = {
-    "charge-mode": ["r5_charge_mode"],
-    "pressure": ["r5_tyre_pressure_fl", "r5_tyre_pressure_fr",
-                 "r5_tyre_pressure_rl", "r5_tyre_pressure_rr"],
-}
-
-# suffix (renault_5/cmd/<key>) -> (object_id, node-segment, name, icon, action endpoint).
-# Published only when supports_endpoint() is true, so a forbidden control is never shown.
-ACTION_BUTTONS = {
-    "charge_start": ("r5_charge_start", "charge_start", "Start Charging", "mdi:ev-station", "actions/charge-start"),
-    "lights":       ("r5_flash_lights", "flash_lights", "Flash Lights", "mdi:car-light-high", "actions/lights-start"),
-    "horn":         ("r5_sound_horn", "sound_horn", "Sound Horn", "mdi:bullhorn", "actions/horn-start"),
-    "hvac_start":   ("r5_start_air_conditioner", "start_air_conditioner", "Start Air Conditioner", "mdi:air-conditioner", "actions/hvac-start"),
-    "hvac_stop":    ("r5_stop_air_conditioner", "stop_air_conditioner", "Stop Air Conditioner", "mdi:fan-off", "actions/hvac-stop"),
-    "refresh_location": ("r5_refresh_location", "refresh_location", "Refresh Location", "mdi:crosshairs-gps", "actions/refresh-location"),
-}
-
-# Writable charge-limit controls. State comes from the poll's soc-levels read (data key =
-# object_id without the r5_ prefix); a slider move writes via set_battery_soc(). Gated on
-# SOC_ENDPOINT, so a model that rejects the write never ships the control.
-# object_id -> (name, icon, role, min, max, step); role ("min"/"target") selects the arg.
-SOC_ENDPOINT = "soc-levels"
-NUMBERS = {
-    "r5_soc_min_target": ("SOC Min Target", "mdi:battery-arrow-down", "min",    15, 45,  5),
-    "r5_soc_max_target": ("SOC Max Target", "mdi:battery-arrow-up",   "target", 55, 100, 5),
-}
-
-# Sensor object_ids a previous version published but no longer ships. Their retained
-# discovery config is cleared on startup so upgraded installs don't keep a dead entity.
-# soc_*_target moved from SENSORS to NUMBERS, so clear their old sensor configs.
-RETIRED_SENSORS = ["r5_soc_max_target", "r5_soc_min_target"]
-
-# Published but disabled in the entity registry by default — mapping artifacts with no
-# user-meaningful state. drive_side is just RHD/LHD derived from locale (used internally for
-# heated-seat mapping); it adds noise to the entity list. Users who want it can re-enable it.
-DEFAULT_DISABLED_SENSORS = {"r5_drive_side"}
 
 HOME_POWER_MAX_KW = 7.4
 # Friendly labels for the ChargeState/PlugState enums (every member mapped, so float
@@ -832,7 +746,9 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
         data["gps_last_activity"] = getattr(loc, "lastUpdateTime", None)
         lat, lon = getattr(loc, "gpsLatitude", None), getattr(loc, "gpsLongitude", None)
         if lat is not None and lon is not None:
-            location_attrs = {"latitude": lat, "longitude": lon, "gps_accuracy": 10,
+            location_attrs = {"latitude": round(lat, GPS_PRECISION),
+                              "longitude": round(lon, GPS_PRECISION),
+                              "gps_accuracy": max(10, round(111_000 / 10 ** GPS_PRECISION)),
                               "last_update": getattr(loc, "lastUpdateTime", None)}
     except Exception as err:  # noqa: BLE001
         LOG.warning("location unavailable: %s", err)

@@ -29,6 +29,7 @@ export R5_LOCALE="$(bashio::config 'locale')"
 export R5_POLL_INTERVAL="$(bashio::config 'poll_interval')"
 export R5_BATTERY_CAPACITY_KWH="$(bashio::config 'battery_capacity_kwh')"
 export R5_STALE_HOURS="$(bashio::config 'stale_hours')"
+export R5_GPS_PRECISION="$(bashio::config 'gps_precision')"
 export R5_LOG_LEVEL="$(bashio::config 'log_level')"
 export R5_DEBUG_DUMP="$(bashio::config 'debug_dump')"
 
