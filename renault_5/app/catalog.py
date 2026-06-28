@@ -91,6 +91,11 @@ ACTION_BUTTONS = {
 # SOC_ENDPOINT, so a model that rejects the write never ships the control.
 # object_id -> (name, icon, role, min, max, step); role ("min"/"target") selects the arg.
 SOC_ENDPOINT = "soc-levels"
+# Authoritative recent-charge-sessions endpoint (renault_api get_charges). Supported by the
+# R5 (R5E1VE) and A290 (A5E1AE) in _VEHICLE_ENDPOINTS; probed at startup so a model that
+# forbids it falls back to the live-inferred Last Charge instead. (charge-history is forbidden
+# on both, so only charges is used.)
+CHARGES_ENDPOINT = "charges"
 NUMBERS = {
     "r5_soc_min_target": ("SOC Min Target", "mdi:battery-arrow-down", "min",    15, 45,  5),
     "r5_soc_max_target": ("SOC Max Target", "mdi:battery-arrow-up",   "target", 55, 100, 5),

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.14.0
+
+- **Accurate Last Charge from Renault's own records.** When the car exposes its recent-charges
+  history, the **Last Charge** sensors now use Renault's **authoritative per-session record**
+  (start/end, SoC and energy recovered, duration, average power) instead of figures inferred
+  from live battery polls. The live estimate stays as a fallback for a just-finished session
+  the history hasn't posted yet — newest session wins, so the tiles populate immediately and
+  settle on the official numbers once available. Automatic; no configuration needed.
+
 ## 0.13.0
 
 - **Privacy: the car's GPS is rounded before publishing** to the retained MQTT topic —
