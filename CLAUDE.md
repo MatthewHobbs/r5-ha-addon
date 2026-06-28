@@ -19,12 +19,13 @@ API differences), and vice-versa.
 renault_5/                   the add-on (this is what HA installs)
   app/
     main.py                  asyncio poller, MQTT discovery, controls, charge-limit numbers,
-                             debug_dump, health endpoint (/healthz). The entity tables
-                             (SENSORS / BINARY_SENSORS / ACTION_BUTTONS / NUMBERS, endpoint
-                             constants, RETIRED_* cleanup lists) live here — there is NO
-                             separate catalog.py (unlike the A290 add-on). State (plug
+                             debug_dump, health endpoint (/healthz). State (plug
                              stuck-detection, charge-session tracking, health) persists to
                              /data/state.json.
+    catalog.py               entity tables — SENSORS / BINARY_SENSORS / ICONS / NUMBERS /
+                             ACTION_BUTTONS / OPTIONAL_ENDPOINTS / RETIRED_SENSORS /
+                             DEFAULT_DISABLED_SENSORS / SOC_ENDPOINT (extracted from main.py
+                             to match the A290 add-on's structure — lockstep).
     deploy.py                optional dashboard auto-deploy via the HA core API
     requirements.txt         pinned deps (see "Dependencies")
   tests/                     pytest — conftest.py, test_main.py, test_runtime.py
