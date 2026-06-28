@@ -1089,52 +1089,8 @@ def test_fetch_dashboard_rejects_non_list(monkeypatch, tmp_path):
         asyncio.run(deploy._fetch_dashboard("standard"))
 
 
-def test_charger_card_none_when_no_entities_set(monkeypatch):
-    for env, _ in deploy._CHARGER_ENTITIES:
-        monkeypatch.delenv(env, raising=False)
-    assert deploy._charger_card() is None
-
-
-def test_charger_card_skips_blank_and_null(monkeypatch):
-    monkeypatch.setenv("R5_CHARGER_SMART_CHARGE", "switch.octopus_intelligent_smart_charge")
-    monkeypatch.setenv("R5_CHARGER_BUMP_CHARGE", "")        # blank -> skipped
-    monkeypatch.setenv("R5_CHARGER_TARGET_SOC", "null")     # bashio empty -> skipped
-    monkeypatch.setenv("R5_CHARGER_TARGET_TIME", "select.octopus_intelligent_target_time")
-    card = deploy._charger_card()
-    assert card["type"] == "entities" and card["title"] == "Smart Charging"
-    assert [r["name"] for r in card["entities"]] == ["Smart Charge", "Target Time"]
-
-
-def test_fetch_dashboard_appends_charger_card_when_configured(monkeypatch, tmp_path):
-    (tmp_path / "front-end.txt").write_text("- title: Home\n  cards: []\n", encoding="utf-8")
-    monkeypatch.setattr(deploy, "DASHBOARD_DIR", str(tmp_path))
-    monkeypatch.setenv("R5_CHARGER_SMART_CHARGE", "switch.x")
-    cfg = asyncio.run(deploy._fetch_dashboard("standard"))
-    last = cfg["views"][0]["cards"][-1]
-    assert last["type"] == "entities" and last["title"] == "Smart Charging"
-
-
-def test_fetch_dashboard_no_charger_card_when_unset(monkeypatch, tmp_path):
-    for env, _ in deploy._CHARGER_ENTITIES:
-        monkeypatch.delenv(env, raising=False)
-    (tmp_path / "front-end.txt").write_text("- title: Home\n  cards: []\n", encoding="utf-8")
-    monkeypatch.setattr(deploy, "DASHBOARD_DIR", str(tmp_path))
-    cfg = asyncio.run(deploy._fetch_dashboard("standard"))
-    assert cfg["views"][0]["cards"] == []
-
-
-def test_add_card_sections_layout():
-    # the standard dashboard is a `sections` view — the card must land in a new grid section
-    view = {"type": "sections", "sections": [{"type": "grid", "cards": []}]}
-    deploy._add_card(view, {"type": "entities", "title": "Smart Charging"})
-    assert view["sections"][-1] == {"type": "grid", "cards": [{"type": "entities", "title": "Smart Charging"}]}
-
-
-def test_add_card_cards_layout():
-    # the bubble dashboard is a plain `cards` view — the card is appended to cards
-    view = {"cards": [{"type": "x"}]}
-    deploy._add_card(view, {"type": "entities", "title": "Smart Charging"})
-    assert view["cards"][-1]["title"] == "Smart Charging"
+# (Smart Charging deploy tests moved to test_deploy.py — they cover the Mushroom standard
+# block + bubble pop-up that replaced the old plain entities card.)
 
 
 def test_ws_cmd_raises_on_unsuccessful_result():

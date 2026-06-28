@@ -31,6 +31,13 @@ It can **also** auto-deploy a dashboard for you (`deploy_dashboard`, off by defa
 A290 share the same Renault EV platform). It's a bonus, not the point: use it, or keep
 Topolino65's own.
 
+| Standard dashboard | Bubble dashboard | Smart Charging |
+| --- | --- | --- |
+| [![Standard dashboard](docs/screenshots/standard-iphone-15-pro.png)](docs/dashboards-on-mobile.md) | [![Bubble dashboard](docs/screenshots/bubble-iphone-15-pro.png)](docs/dashboards-on-mobile.md) | [![Smart Charging](docs/screenshots/smart-charging-iphone-15-pro.png)](docs/dashboards-on-mobile.md) |
+
+> The bundled dashboards start from Topolino65's design; where they go **beyond** it (the Smart
+> Charging tab/block) that's the add-on **mirroring the Alpine A290** — not Topolino65's work.
+
 Every control is sent **natively** by the app (charge, lights, horn, HVAC, refresh
 location) — **you do not need Home Assistant's `renault` integration**.
 

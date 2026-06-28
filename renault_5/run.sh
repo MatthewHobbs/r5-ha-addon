@@ -46,5 +46,6 @@ export R5_CHARGER_SMART_CHARGE="$(bashio::config 'charger_smart_charge')"
 export R5_CHARGER_BUMP_CHARGE="$(bashio::config 'charger_bump_charge')"
 export R5_CHARGER_TARGET_SOC="$(bashio::config 'charger_target_soc')"
 export R5_CHARGER_TARGET_TIME="$(bashio::config 'charger_target_time')"
+export R5_CHARGER_DISPATCHING="$(bashio::config 'charger_dispatching')"
 
 exec python3 -u /app/main.py

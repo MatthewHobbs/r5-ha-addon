@@ -7,6 +7,17 @@ on the Configuration page, no files to edit.
 Polls your **Renault 5 E-Tech** through the Renault/Kamereon API and publishes its data
 to Home Assistant via MQTT auto-discovery.
 
+## What it looks like
+
+The app can auto-deploy a ready-made, phone-friendly dashboard (standard and/or a Bubble Card
+version). With the optional `charger_*` options set, a **Smart Charging** section is added.
+
+| Standard dashboard | Bubble dashboard | Smart Charging |
+| --- | --- | --- |
+| ![Standard dashboard](https://raw.githubusercontent.com/MatthewHobbs/r5-ha-addon/main/docs/screenshots/standard-iphone-15-pro.png) | ![Bubble dashboard](https://raw.githubusercontent.com/MatthewHobbs/r5-ha-addon/main/docs/screenshots/bubble-iphone-15-pro.png) | ![Smart Charging pop-up](https://raw.githubusercontent.com/MatthewHobbs/r5-ha-addon/main/docs/screenshots/smart-charging-iphone-15-pro.png) |
+
+*(Rendered by the UI-test harness with sample data — no real account or location data.)*
+
 **What this app is really for.** Its primary purpose is to be an **updated, maintained
 data layer** for the Renault 5 — a drop-in replacement for the fragile `venv` +
 `renault-api` CLI + shell-script layer behind [Topolino65](https://github.com/Topolino65)'s
@@ -20,6 +31,11 @@ dashboard for you (`deploy_dashboard`) — a **modified version of Topolino65's 
 from the maintainer's [Alpine A290 app](https://github.com/MatthewHobbs/a290-ha-addon)
 (the R5 and A290 share the same Renault EV platform). Use it if you want a ready-made layout,
 or ignore it and keep Topolino65's — either way the data comes from this app.
+
+> **A note on the bundled dashboards:** they start from Topolino65's design, but where they
+> go **beyond** it (e.g. the Smart Charging tab/block below) that's the add-on **mirroring the
+> functionality built for the Alpine A290** — not part of Topolino65's original work. Full
+> credit to Topolino65 for the base; the extensions are the add-on's own.
 
 ## Before you start — install these first
 
@@ -77,31 +93,49 @@ start**, so everything renders correctly the first time.
 | `charger_bump_charge` | *(optional)* entity id of your charger's **bump/boost-charge** switch. |
 | `charger_target_soc` | *(optional)* entity id of your charger's **charge-target %** number. |
 | `charger_target_time` | *(optional)* entity id of your charger's **target-time** (ready-by) control. |
+| `charger_dispatching` | *(optional)* entity id of any **on/off** entity that's `on` when electricity is cheap — drives the green "Off-peak now" / red "Peak rate" badge. An **off-peak tariff** sensor is the best fit; a `binary_sensor` or `calendar` both work. |
 
 ## Smart Charging card
 
 If you control charging through a smart-charging integration — e.g. **[Octopus Energy /
 Intelligent Octopus](https://github.com/BottlecapDave/HomeAssistant-OctopusEnergy)**, Ohme,
 Zappi, Wallbox — you can show those controls on a bundled dashboard next to the car's data.
-Set the `charger_*` options above to your charger's entity ids and the dashboard gains a
-**"Smart Charging"** card (a built-in `entities` card — no extra HACS card needed). Leave them
-blank (the default) and no card is added; each blank one is skipped, so you can map just the
-controls you have. (This only affects the add-on's own bundled dashboards — it doesn't change
-Topolino65's dashboards.)
+Set the `charger_*` options above to your charger's entity ids; leave them blank (the default)
+and nothing is added. Each blank one is skipped, so you can map just the controls you have.
+(This only affects the add-on's own bundled dashboards — it doesn't change Topolino65's.)
+Where they appear depends on the dashboard:
 
-For example, with the Octopus Intelligent entities from your account:
+- **Standard dashboard** — a **"Smart Charging"** block (a heading + Mushroom cards styled to
+  match the Climate/Charging Presets — coloured icons, no light inputs) is inserted **directly
+  beneath the Climate/Charging Presets** section, including the off-peak badge.
+- **Bubble dashboard** — a **"Smart Charging"** tab is added to the main menu, opening a
+  pop-up: smart/bump-charge as **compact toggles on one line**, a **charge-target slider**
+  showing the live **%** with a marker at **80%** (the recommended target) to drag to, a
+  **target-time dropdown**, and — if `charger_dispatching` is set — an **off-peak rate badge**
+  (green **"Now: Off-peak"** / red **"Now: Peak rate"**) plus the cheap-window times in
+  **24-hour** (e.g. `Off-peak 23:30–05:30`). The **Location** button moves to a full-width row.
+
+Both are read-write — toggling a switch or moving the slider controls your charger directly.
+
+**Filling in the entity ids.** Open **Developer Tools → States**, filter on `intelligent` (or
+your charger's integration), and copy the exact ids. For Octopus Intelligent they look like
+the example below — note `<charger-id>` is your **charger's serial** (a UUID), *not* your
+account number, and the domains differ:
 
 ```yaml
-charger_smart_charge: switch.octopus_energy_<account>_intelligent_smart_charge
-charger_bump_charge:  switch.octopus_energy_<account>_intelligent_bump_charge
-charger_target_soc:   number.octopus_energy_<account>_intelligent_charge_target
-charger_target_time:  select.octopus_energy_<account>_intelligent_target_time
+# <charger-id> is your charger's serial, e.g. 00000000_0009_4000_XXXX_XXXXXXXXXXXX
+charger_smart_charge: switch.octopus_energy_<charger-id>_intelligent_smart_charge
+charger_bump_charge:  switch.octopus_energy_<charger-id>_intelligent_bump_charge
+charger_target_soc:   number.octopus_energy_<charger-id>_intelligent_charge_target
+charger_target_time:  select.octopus_energy_<charger-id>_intelligent_target_time
+# Off-peak badge — point at your tariff's off-peak sensor (<meter-id> is your electricity
+# meter serial, a different id from the charger above):
+charger_dispatching:  binary_sensor.octopus_energy_electricity_<meter-id>_off_peak
 ```
 
-(Find the exact ids in **Developer Tools → States**.) The card is read-write — toggling a
-switch or changing the target there controls your charger directly. It's added when the
-dashboard is deployed, so set `redeploy_dashboard: true` (and restart once) if you add the
-entities after the dashboard already exists.
+Paste each id exactly — a stray trailing space shows as **"Entity not found"**. The controls
+are added when the dashboard is deployed, so set `redeploy_dashboard: true` (and restart once)
+if you add the entities after the dashboard already exists.
 
 ## Status panel
 
