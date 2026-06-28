@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.0
+
+- **New: optional "Smart Charging" card on the bundled dashboard.** If you control charging
+  through a smart-charging integration (e.g. **Octopus Intelligent**, Ohme, Zappi, Wallbox),
+  set the new `charger_smart_charge` / `charger_bump_charge` / `charger_target_soc` /
+  `charger_target_time` options to your charger's entity ids and the deployed dashboard gains a
+  **Smart Charging** card showing those controls next to the car's data. It's a built-in
+  `entities` card (no extra HACS card needed), each blank option is skipped, and leaving them
+  all blank (the default) adds nothing. Only affects the add-on's own bundled dashboards, not
+  Topolino's. See DOCS for the Octopus example.
+
 ## 0.11.1
 
 - **More reliable dashboard auto-deploy.** The dashboard YAML is now **bundled in the add-on

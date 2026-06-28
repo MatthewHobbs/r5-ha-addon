@@ -1,5 +1,5 @@
 name: Renault 5
-version: "0.11.1"
+version: "0.12.0"
 slug: renault_5
 description: Polls your Renault 5 (Renault/Kamereon API) and publishes its data to Home Assistant via MQTT auto-discovery. Credentials are entered once on the Configuration page.
 url: https://github.com/MatthewHobbs/r5-ha-addon/tree/main/renault_5
@@ -36,6 +36,10 @@ options:
   dashboard_url_path: renault-5
   redeploy_dashboard: false
   car_render: pop-yellow-techno
+  charger_smart_charge: ""
+  charger_bump_charge: ""
+  charger_target_soc: ""
+  charger_target_time: ""
 schema:
   username: str
   password: password
@@ -50,4 +54,8 @@ schema:
   deploy_dashboard: list(none|standard|bubble|both)
   dashboard_url_path: str
   redeploy_dashboard: bool
+  charger_smart_charge: str?
+  charger_bump_charge: str?
+  charger_target_soc: str?
+  charger_target_time: str?
   car_render: list(artic-white-evolution|black-evolution|pop-green-evolution|pop-yellow-evolution|artic-white-iconic|black-iconic|black-iconic-titanium|midnight-blue-iconic|pop-yellow-iconic|artic-white-roland-garros|black-roland-garros|matte-grey-roland-garros|midnight-blue-roland-garros|artic-white-techno|artic-white-techno-black-roof|black-techno|black-techno-red-trim|midnight-blue-techno|pop-green-techno|pop-green-techno-black-roof|pop-yellow-techno|pop-yellow-techno-black-roof)
