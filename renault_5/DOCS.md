@@ -133,7 +133,10 @@ Names follow the Topolino project (minus the legacy `_api`/`_mi` suffixes):
   `number.r5_soc_min_target` (15–45 %), `number.r5_soc_max_target` (55–100 %).
 - Last charge: `…_last_charge_start/end`, `…_start_soc/end_soc`,
   `…_start_energy/end_energy`, `…_duration`, `…_soc_recovered/energy_recovered`,
-  `…_average_power`, `…_type`.
+  `…_average_power`, `…_type`. When the car exposes Renault's recent-charges history these
+  use the **authoritative per-session record**; otherwise (or until the history posts a
+  just-finished session) they fall back to figures worked out live from the battery polls,
+  then settle on the official numbers. Automatic — no configuration needed.
 - Health: `binary_sensor.r5_api_auth_failure`, `…_data_stale`, `…_plug_state_suspect`.
 - Actions (6 native buttons — **no Home Assistant `renault` integration required**):
   **Start Charging**, **Flash Lights**, **Sound Horn**, **Start Air Conditioner**,

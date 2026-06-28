@@ -692,6 +692,37 @@ class _AllSecondaryFail:
         raise RuntimeError("loc down")
 
 
+def test_poll_once_uses_charges_endpoint_when_supported(monkeypatch):
+    monkeypatch.setattr(main, "now_ts", lambda: 1000.0)
+
+    class _ChargesVehicle(_ChargingVehicle):
+        async def get_charges(self, start, end):
+            return _obj(raw_data={"charges": [{
+                "chargeStartDate": "2026-06-21T00:00:00+00:00",
+                "chargeEndDate": "2026-06-21T03:00:00+00:00",
+                "chargeStartBatteryLevel": 35, "chargeEndBatteryLevel": 80,
+                "chargeBatteryLevelRecovered": 45, "chargeEnergyRecovered": 23.4,
+            }]})
+
+    state = {}
+    data, _ = asyncio.run(main.poll_once(_Sess(_ChargesVehicle()), state, 52.0, {"charges"}, "km"))
+    assert data["last_charge_end"] == "2026-06-21T03:00:00+00:00"
+    assert data["last_charge_recovered_pct"] == 45
+    assert data["last_charge_duration_min"] == 180          # 3 h from timestamps
+    assert state["real_last_charge"]["last_charge_end_soc"] == 80
+    assert state["charges_last_fetch"] == 1000.0
+
+
+def test_poll_once_charges_failure_is_non_fatal():
+    class _ChargesFailVehicle(_ChargingVehicle):
+        async def get_charges(self, start, end):
+            raise RuntimeError("charges forbidden")
+
+    data, _ = asyncio.run(main.poll_once(_Sess(_ChargesFailVehicle()), {}, 52.0, {"charges"}, "km"))
+    assert data["battery_level"] == 55      # poll still succeeds despite the charges error
+    assert "last_charge_end" not in data
+
+
 def test_poll_once_survives_every_secondary_endpoint_failing():
     data, loc = asyncio.run(
         main.poll_once(_Sess(_AllSecondaryFail()), {}, 52.0, {"pressure", "charge-mode"}, "km"))
