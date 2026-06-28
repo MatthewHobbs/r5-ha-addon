@@ -237,6 +237,52 @@ def test_fmt_hhmm_only_reformats_bare_four_digits():
 
 
 # --------------------------------------------------------------------------- #
+# HVAC preconditioning schedule (get_hvac_settings)
+# --------------------------------------------------------------------------- #
+class _Day:
+    def __init__(self, ready):
+        self.readyAtTime = ready
+
+
+class _Sched:
+    def __init__(self, activated, **days):
+        self.activated = activated
+        for d in ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"):
+            setattr(self, d, days.get(d))
+
+
+class _HvacSettings:
+    def __init__(self, mode, schedules):
+        self.mode, self.schedules = mode, schedules
+
+
+def test_hvac_schedule_fields_active_schedule():
+    settings = _HvacSettings("scheduled_value", [
+        _Sched(False, monday=_Day("T06:00Z")),                       # inactive -> ignored
+        _Sched(True, monday=_Day("T07:00Z"), friday=_Day("0830")),   # active
+    ])
+    out = main._hvac_schedule_fields(settings)
+    assert out["climate_schedule_mode"] == "Scheduled Value"
+    assert out["climate_ready_time"] == "Mon 07:00, Fri 08:30"       # only the active schedule
+    expected = {obj[len("r5_"):] for obj in main.SENSORS if obj.startswith("r5_climate_")}
+    assert set(out) == expected
+
+
+def test_hvac_schedule_fields_none_and_no_active():
+    assert main._hvac_schedule_fields(None) == {"climate_schedule_mode": None,
+                                                "climate_ready_time": None}
+    out = main._hvac_schedule_fields(_HvacSettings("none", [_Sched(False, monday=_Day("T06:00Z"))]))
+    assert out["climate_schedule_mode"] == "None" and out["climate_ready_time"] is None
+
+
+def test_fmt_ready_normalises_time_forms():
+    assert main._fmt_ready("T07:00Z") == "07:00"
+    assert main._fmt_ready("08:30:00") == "08:30"
+    assert main._fmt_ready("0915") == "09:15"
+    assert main._fmt_ready(None) is None
+
+
+# --------------------------------------------------------------------------- #
 # plug stuck-detection
 # --------------------------------------------------------------------------- #
 def test_plug_suspect_disconnected_but_charging():
@@ -561,6 +607,12 @@ class _FakeVehicle:
         self._maybe("sched")
         return {"preconditioningTemperature": 21, "preconditioningHeatedStrgWheel": True,
                 "preconditioningHeatedLeftSeat": False, "preconditioningHeatedRightSeat": True}
+
+    async def get_hvac_settings(self):
+        self._maybe("hvac_settings")
+        sched = _obj(activated=True, monday=_obj(readyAtTime="T07:00Z"), tuesday=None,
+                     wednesday=None, thursday=None, friday=None, saturday=None, sunday=None)
+        return _obj(mode="scheduled", schedules=[sched])
 
     async def get_battery_soc(self):
         self._maybe("soc")

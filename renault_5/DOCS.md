@@ -134,6 +134,9 @@ Names follow the Topolino project (minus the legacy `_api`/`_mi` suffixes):
 - Scheduled charging (read from the car's settings — the programmed schedule, not a control):
   `…_charge_schedule_mode`, `…_scheduled_charge_start`, `…_scheduled_charge_duration`. Show
   *unavailable* if the car has no schedule programmed.
+- Scheduled climate / preconditioning: `…_climate_schedule_mode`, `…_climate_ready_time` (the
+  days + times the cabin is set to be ready, e.g. `Mon 07:00, Fri 08:30`). Also read-only,
+  *unavailable* with no schedule set.
 - Last charge: `…_last_charge_start/end`, `…_start_soc/end_soc`,
   `…_start_energy/end_energy`, `…_duration`, `…_soc_recovered/energy_recovered`,
   `…_average_power`, `…_type`. When the car exposes Renault's recent-charges history these
