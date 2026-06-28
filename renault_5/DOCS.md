@@ -1,30 +1,34 @@
-# Renault 5 add-on
+# Renault 5 app
+
+Logs in to your **My Renault** account, reads your car's data (battery, charging, location,
+climate) every few minutes, and publishes it to Home Assistant — you enter your login once
+on the Configuration page, no files to edit.
 
 Polls your **Renault 5 E-Tech** through the Renault/Kamereon API and publishes its data
-to Home Assistant via MQTT auto-discovery — no venv, CLI, shell scripts or `secrets.yaml`.
+to Home Assistant via MQTT auto-discovery.
 
-**What this add-on is really for.** Its primary purpose is to be an **updated, maintained
+**What this app is really for.** Its primary purpose is to be an **updated, maintained
 data layer** for the Renault 5 — a drop-in replacement for the fragile `venv` +
-`renault-api` CLI + shell-script layer behind Topolino65's
+`renault-api` CLI + shell-script layer behind [Topolino65](https://github.com/Topolino65)'s
 [renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view). Entity
 names deliberately follow that project (modernised, locale-aware), so **Topolino's own UI
 binds straight to these `sensor.r5_*` entities** — keep using his dashboards and just let
-this add-on feed them fresh data.
+this app feed them fresh data.
 
-**The bundled dashboards are a bonus, not the point.** The add-on can also auto-deploy a
+**The bundled dashboards are a bonus, not the point.** The app can also auto-deploy a
 dashboard for you (`deploy_dashboard`) — a **modified version of Topolino's UI**, adapted
-from the maintainer's [Alpine A290 add-on](https://github.com/MatthewHobbs/a290-ha-addon)
-(the R5 and A290 share the CMF-BEV / KCM platform). Use it if you want a ready-made layout,
-or ignore it and keep Topolino's — either way the data comes from this add-on.
+from the maintainer's [Alpine A290 app](https://github.com/MatthewHobbs/a290-ha-addon)
+(the R5 and A290 share the same Renault EV platform). Use it if you want a ready-made layout,
+or ignore it and keep Topolino's — either way the data comes from this app.
 
 ## Before you start — install these first
 
-The add-on only needs the **Mosquitto broker** add-on (its MQTT connection is auto-discovered
+The app only needs the **Mosquitto broker** add-on (its MQTT connection is auto-discovered
 from it). It publishes the entities; **you choose the dashboard**:
 
 - **Topolino's [renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view)** —
-  this add-on's entities follow that project's naming, so its dashboards bind straight to them.
-- **or** one of this add-on's **bundled dashboards** — set `deploy_dashboard` to `standard`,
+  this app's entities follow that project's naming, so its dashboards bind straight to them.
+- **or** one of this app's **bundled dashboards** — set `deploy_dashboard` to `standard`,
   `bubble`, or `both` (off by default).
 
 Either way, if you use a card-based dashboard you must **first install its frontend cards via
@@ -34,7 +38,8 @@ For the bundled dashboards:
 | Install via HACS → Frontend | Needed for |
 | --- | --- |
 | **card-mod** + **Mushroom** | both bundled dashboards |
-| **Button Card** + **Browser Mod** | the **standard** bundled dashboard (tiles + pop-ups) |
+| **Button Card** | **both** bundled dashboards |
+| **Browser Mod** | pop-ups on the **standard** bundled dashboard |
 | **Bubble Card** | the **bubble** bundled dashboard only |
 
 Install Mosquitto (and, if you enable a bundled dashboard, the cards above) **before first
@@ -45,8 +50,8 @@ start**, so everything renders correctly the first time.
 - **VIN** (required): the 17-character vehicle identification number — on your **My Renault**
   app (vehicle details), your registration document (V5C), or the windscreen base. Enter it
   in **uppercase**.
-- **account id** (optional): leave it **blank** and the add-on auto-discovers your
-  MyRenault/Kamereon account on login. Only set it if you have multiple accounts and need to
+- **account id** (optional): leave it **blank** and the app auto-discovers your
+  My Renault/Kamereon account on login. Only set it if you have multiple accounts and need to
   pin a specific one.
 
 ## Configuration
@@ -62,16 +67,16 @@ start**, so everything renders correctly the first time.
 | `battery_capacity_kwh` | `52` or `40`. Must be set — the API reports capacity as 0; used to derive charge-session energy. |
 | `stale_hours` | Mark data stale after this many hours without a successful poll (default 6). |
 | `log_level` | `info` normally; `debug` for troubleshooting. |
-| `debug_dump` | `true` logs every readable API endpoint to the add-on Log **once per restart** (IDs/secrets/location redacted, best-effort). It may still contain personal data — do not paste the log publicly. Off by default. |
-| `deploy_dashboard` | `none` (default), `standard`, `bubble`, or `both`. Off by default so the add-on stays a neutral data layer (use Topolino's dashboards, or set this to install a bundled one). Auto-installs the chosen dashboard(s) for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. With `both`, the standard dashboard lands at `dashboard_url_path` and the bubble one at the same path with `-bubble` appended. |
+| `debug_dump` | `true` logs every readable API endpoint to the app Log **once per restart** (IDs/secrets/location redacted, best-effort). It may still contain personal data — do not paste the log publicly. Off by default. |
+| `deploy_dashboard` | `none` (default), `standard`, `bubble`, or `both`. Off by default so the app stays a neutral data layer (use Topolino's dashboards, or set this to install a bundled one). Auto-installs the chosen dashboard(s) for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. With `both`, the standard dashboard lands at `dashboard_url_path` and the bubble one at the same path with `-bubble` appended. |
 | `dashboard_url_path` | URL slug for the deployed dashboard (default `renault-5`). With `deploy_dashboard: both` the bubble dashboard is installed at `<this>-bubble` (e.g. `renault-5-bubble`). |
 | `redeploy_dashboard` | `true` re-pushes the dashboard config on next start. Default `false`. |
-| `car_render` | The trim/colour render shown on the dashboard (e.g. `midnight-blue-iconic`), used when auto-deploying. Default `pop-yellow-techno`. See [Customising](dashboards/CUSTOMISING.md). |
+| `car_render` | The trim/colour render shown on the dashboard (e.g. `midnight-blue-iconic`), used when auto-deploying. Default `pop-yellow-techno`. See [Customising](https://github.com/MatthewHobbs/r5-ha-addon/tree/main/renault_5/dashboards/CUSTOMISING.md). |
 
 ## Status panel
 
-The add-on adds a **read-only "Renault 5" panel to the Home Assistant sidebar** (via ingress).
-It shows the latest poll at a glance — battery, range, charging, plug, climate, charge limits
+The app adds a **read-only "Renault 5" panel to the Home Assistant sidebar**. It shows
+the latest poll at a glance — battery, range, charging, plug, climate, charge limits
 and diagnostics — without needing a dashboard. It is **read-only** (it never changes anything),
 **auth-gated by Home Assistant**, and stores no credentials or precise location. The bundled
 dashboards remain the richer view; the panel is the quick glance.
@@ -109,13 +114,13 @@ Names follow the Topolino project (minus the legacy `_api`/`_mi` suffixes):
 
 ### Cabin temperature
 
-The R5's HVAC endpoint populates `internalTemperature`, but often only shortly after
-HVAC/preconditioning activity — so `sensor.r5_cabin_temperature` may read unavailable
-between sessions. That's expected.
+The R5's HVAC (climate — heating / air-con) endpoint populates `internalTemperature`, but
+often only shortly after HVAC/preconditioning activity — so `sensor.r5_cabin_temperature`
+may read unavailable between sessions. That's expected.
 
 ### Self-contained — no Home Assistant `renault` integration
 
-Every control on the dashboards is sent **natively** by the add-on: Start Charging, Flash
+Every control on the dashboards is sent **natively** by the app: Start Charging, Flash
 Lights, Sound Horn, HVAC Start, HVAC Stop and Refresh Location. You do **not** need Home Assistant's `renault` integration installed. The only thing the platform doesn't expose is
 **charge-stop**, so there's no charge-stop button. (HVAC-stop works but, per the platform,
 can be flaky.)
@@ -125,5 +130,5 @@ packages (not Home Assistant's `renault` integration) — install them only if y
 
 ### Kamereon account id
 
-Leave `account_id` blank and the add-on auto-discovers your MyRenault/Kamereon account on
+Leave `account_id` blank and the app auto-discovers your My Renault/Kamereon account on
 login. Only set it if you have multiple accounts and need to pin a specific one.

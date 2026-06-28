@@ -6,12 +6,12 @@ in several trims/colours). All renders are included in [`Images/Models/`](Images
 
 ## Easiest — the `car_render` dropdown (auto-deploy)
 
-If the add-on installs the dashboard for you (`deploy_dashboard: standard|bubble`), you
+If the app installs the dashboard for you (`deploy_dashboard: standard|bubble`), you
 don't need to touch any files:
 
 1. **Settings → Add-ons → Renault 5 → Configuration → `car_render`** — pick your trim/colour
    (e.g. `midnight-blue-iconic`).
-2. Set **`redeploy_dashboard: true`** and **Restart** the add-on so the dashboard
+2. Set **`redeploy_dashboard: true`** and **Restart** the app so the dashboard
    re-deploys with your render. (Set it back to `false` afterwards if you want your manual
    dashboard edits protected.)
 

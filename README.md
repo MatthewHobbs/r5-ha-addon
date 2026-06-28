@@ -1,4 +1,4 @@
-# Renault 5 — Home Assistant add-on + dashboards
+# Renault 5 — Home Assistant app + dashboards
 
 [![CI](https://github.com/MatthewHobbs/r5-ha-addon/actions/workflows/ci.yaml/badge.svg)](https://github.com/MatthewHobbs/r5-ha-addon/actions/workflows/ci.yaml)
 [![Version](https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FMatthewHobbs%2Fr5-ha-addon%2Fmain%2Frenault_5%2Fconfig.yaml&query=%24.version&label=version&color=41BDF5)](renault_5/config.yaml)
@@ -9,31 +9,35 @@
 
 [![Open your Home Assistant instance and add this add-on repository.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FMatthewHobbs%2Fr5-ha-addon)
 
-A maintained Home Assistant add-on for the **Renault 5 E-Tech**. Its real purpose is to be
+This app logs in to your car's **My Renault** account, reads its data (battery, charging,
+location, climate) every few minutes, and shows it in Home Assistant — you enter your login
+once on the Configuration page, no files to edit.
+
+A maintained Home Assistant app for the **Renault 5 E-Tech**. Its real purpose is to be
 an **updated data layer** for
 [**Topolino65/renault-5-dashboard-view**](https://github.com/Topolino65/renault-5-dashboard-view)
 — full credit to Topolino65 for the original dashboards, assets and design.
 
 It replaces that project's fragile `venv` + `renault-api` CLI + shell-script data layer with
-a proper **Home Assistant add-on** that polls the Renault/Kamereon API and publishes
-`sensor.r5_*` entities over **MQTT auto-discovery** — no scripts, no `secrets.yaml`,
-credentials entered once on the add-on's config page. Entity names follow Topolino's naming,
+a proper **Home Assistant app** that polls the Renault/Kamereon API and publishes
+`sensor.r5_*` entities over **MQTT auto-discovery**. Credentials are entered once on the app's
+config page. Entity names follow Topolino's naming,
 so **his UI binds straight to these entities** — keep using his dashboards and let this
-add-on feed them fresh data.
+app feed them fresh data.
 
 It can **also** auto-deploy a dashboard for you (`deploy_dashboard`, off by default) — a
 **modified version of Topolino's UI**, ported from the maintainer's
-[Alpine A290 add-on](https://github.com/MatthewHobbs/a290-ha-addon) (the R5 E-Tech and Alpine
-A290 share the CMF-BEV / KCM platform). It's a bonus, not the point: use it, or keep
+[Alpine A290 app](https://github.com/MatthewHobbs/a290-ha-addon) (the R5 E-Tech and Alpine
+A290 share the same Renault EV platform). It's a bonus, not the point: use it, or keep
 Topolino's own.
 
-Every control is sent **natively** by the add-on (charge, lights, horn, HVAC, refresh
+Every control is sent **natively** by the app (charge, lights, horn, HVAC, refresh
 location) — **you do not need Home Assistant's `renault` integration**.
 
 > [!IMPORTANT]
 > **Untested on an actual Renault 5 — I don't own one.** I drive an **Alpine A290**, and
-> this add-on is back-ported from the [A290 add-on](https://github.com/MatthewHobbs/a290-ha-addon),
-> which *does* work on my car. The R5 E-Tech and A290 share the CMF-BEV / KCM platform, so
+> this app is back-ported from the [A290 app](https://github.com/MatthewHobbs/a290-ha-addon),
+> which *does* work on my car. The R5 E-Tech and A290 share the same Renault EV platform, so
 > this **should** work on an R5 — but I can't verify it on real hardware. Please give it a
 > go and **[open an issue](https://github.com/MatthewHobbs/r5-ha-addon/issues)** to let me
 > know whether it does or doesn't. I'm very happy to work with an R5 owner to fix anything
@@ -41,11 +45,11 @@ location) — **you do not need Home Assistant's `renault` integration**.
 
 ## What's here
 
-- **The add-on:** [`renault_5/`](renault_5/) — the MQTT data layer + control buttons.
+- **The app:** [`renault_5/`](renault_5/) — the MQTT data layer + control buttons.
   See [`renault_5/DOCS.md`](renault_5/DOCS.md) for the full entity/option list.
 - **The dashboards:** [`renault_5/dashboards/`](renault_5/dashboards/) — a **standard** dashboard
   (`front-end.txt`) and a **Bubble Card** dashboard (`front-end-bubble.txt`), both fed by
-  the add-on. The add-on can install either — or **both** — for you
+  the app. The app can install either — or **both** — for you
   (`deploy_dashboard: standard|bubble|both`), or copy them in manually. Assets (R5 renders,
   map markers, Zen Dots font) live under `renault_5/dashboards/`. To show the render matching your
   trim/colour, see
@@ -60,7 +64,7 @@ Install these **before** the dashboards will render correctly.
 
 | Dependency | Why | Required? |
 | --- | --- | --- |
-| **Mosquitto broker** | The MQTT broker the add-on publishes to (auto-discovered). | ✅ Required |
+| **Mosquitto broker** | The MQTT broker the app publishes to (auto-discovered). | ✅ Required |
 | **Renault 5** (this repo) | The data layer + control buttons. | ✅ Required |
 
 ### Frontend cards (via [HACS](https://hacs.xyz) → Frontend)
@@ -92,13 +96,13 @@ key needed.
 
 1. **Install the dependencies first** — so a card dashboard (Topolino's or a bundled one)
    renders immediately instead of as "custom element doesn't exist":
-   - **Mosquitto broker** (Settings → Add-ons → Add-on Store) — the add-on auto-discovers it.
+   - **Mosquitto broker** (Settings → Add-ons → Add-on Store) — the app auto-discovers it.
    - **[HACS](https://hacs.xyz)** and the frontend cards from [Requirements](#requirements)
      above (card-mod, Mushroom, Button Card, Browser Mod, plus Bubble Card for the bubble
      dashboard).
-2. **Add the add-on repo + install it:** Settings → Add-ons → Add-on Store → ⋮ →
+2. **Add the app repo + install it:** Settings → Add-ons → Add-on Store → ⋮ →
    **Repositories**, add `https://github.com/MatthewHobbs/r5-ha-addon`, then install the
-   **Renault 5** add-on.
+   **Renault 5** app.
 3. **Configure + start:** on the **Configuration** tab set your My Renault
    `username`/`password`, `vin`, `locale`, `battery_capacity_kwh` (and `account_id` only if
    you have multiple accounts — it's auto-discovered otherwise), then **Start**. The
@@ -106,30 +110,31 @@ key needed.
    **R5** device within a minute.
 4. **Get a dashboard:** use **Topolino's [renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view)**
    (the entities follow his naming, so they bind straight to it), **or** set `deploy_dashboard`
-   to `standard`, `bubble`, or `both` to have this add-on install its own (a modified version
+   to `standard`, `bubble`, or `both` to have this app install its own (a modified version
    of his UI) and restart — it installs the dashboard + assets via CDN, nothing to copy — **or**
    copy `renault_5/dashboards/front-end*.txt` into a new dashboard's raw config manually. With
    `both`, the standard dashboard lands at your `dashboard_url_path` and the bubble one gets a
-   `-bubble` suffix (e.g. `renault-5-bubble`).
+   `-bubble` suffix (e.g. `renault-5` and `renault-5-bubble`).
 
 ## What it provides
 
-- **Sensors:** battery level/autonomy/temperature, charge rate/remaining/flap/plug/status,
-  cabin + outside temperature, HVAC status/threshold, preconditioning, SoC min/max,
-  mileage, last-charge stats, GPS/HVAC/battery last-activity, and health
-  (`api_auth_failure`, `data_stale`, `plug_state_suspect`).
+- **Sensors:** battery level/range/temperature, charge rate/remaining/flap/plug/status,
+  cabin + outside temperature, HVAC (climate) status/threshold, preconditioning, State of
+  Charge (SoC — how full the battery is, as a %) min/max, mileage, last-charge stats,
+  GPS/HVAC/battery last-activity, and health (`api_auth_failure`, `data_stale`,
+  `plug_state_suspect`).
 - **Location:** `device_tracker.r5_location`.
 - **Native controls (no Home Assistant `renault` integration):** `button.r5_start_charging`,
   `…_flash_lights`, `…_sound_horn`, `…_start_air_conditioner`, `…_stop_air_conditioner`,
   `…_refresh_location` — each gated on what the platform supports.
 - **Debug:** set `debug_dump: true` to log every readable API endpoint (secrets redacted)
-  to the add-on Log — the safe way to inspect the API (unlike `log_level: debug`, which the
+  to the app Log — the safe way to inspect the API (unlike `log_level: debug`, which the
   library uses to print access tokens).
 
 ## Renault 5 API support
 
 What the Renault 5 E-Tech (model `R5E1VE`) exposes through the Renault/Kamereon API. The
-add-on probes `supports_endpoint()` at startup and only publishes what's available, so a
+app probes `supports_endpoint()` at startup and only publishes what's available, so a
 control the platform forbids is never shown.
 
 | Feature | Endpoint | Renault 5 |
@@ -137,13 +142,13 @@ control the platform forbids is never shown.
 | Battery / charge / plug status | `battery-status` | ✅ |
 | Mileage | `cockpit` | ✅ |
 | HVAC + outside temperature | `hvac-status` | ✅ |
-| Charge target / min SoC | `soc-levels` | ✅ |
+| Charge target / min SoC (read **and** set) | `soc-levels` | ✅ |
 | Preconditioning + heated seats | `ev/settings` (`charge-schedule`) | ✅ |
 | GPS location | `location` | ✅ |
 | Start charging | `actions/charge-start` | ✅ (KCM via-settings) |
 | Sound horn | `actions/horn-start` | ✅ |
 | Flash lights | `actions/lights-start` | ✅ |
-| Start / stop climate | `actions/hvac-start` · `hvac-stop` | ✅ |
+| Start / stop climate | `actions/hvac-start` · `actions/hvac-stop` | ✅ |
 | Refresh location | `actions/refresh-location` | ✅ |
 | Stop charging | `actions/charge-stop` | ❌ not exposed — stop at the charger |
 | Tyre pressure (TPMS) | `pressure` | ❌ forbidden |
@@ -151,7 +156,7 @@ control the platform forbids is never shown.
 
 ✅ supported · ❌ Renault forbids it (or doesn't expose it) on the R5
 
-> Unlike the [Alpine A290](https://github.com/MatthewHobbs/a290-ha-addon) this is ported
+> Unlike the [Alpine A290 app](https://github.com/MatthewHobbs/a290-ha-addon) this is ported
 > from — where Renault forbids remote charge-start — the **R5 ships a genuine Start
 > Charging button and a genuine Refresh Location**. Set `debug_dump: true` to log the
 > decoded response of every readable endpoint (secrets redacted) if Renault changes what
