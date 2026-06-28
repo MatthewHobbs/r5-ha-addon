@@ -98,6 +98,9 @@ def run():
     init = auth_script(args.base, tokens)
 
     failures = []
+    # The truncation gate runs in light mode (stable); set UI_TESTS_DARK=1 to render in dark
+    # mode instead (used to produce the documentation screenshots).
+    colour_scheme = "dark" if os.environ.get("UI_TESTS_DARK") else "light"
     with sync_playwright() as p:
         browser = p.chromium.launch(args=["--no-sandbox"])
         for dev in devices:
@@ -106,7 +109,7 @@ def run():
                 viewport={"width": dev["width"], "height": dev["height"]},
                 device_scale_factor=dev.get("deviceScaleFactor", 2),
                 is_mobile=dev.get("isMobile", True), has_touch=dev.get("hasTouch", True),
-                user_agent=ua)
+                color_scheme=colour_scheme, user_agent=ua)
             ctx.add_init_script(init)
             page = ctx.new_page()
             for dash in args.dashboards:
@@ -127,6 +130,25 @@ def run():
                     page.wait_for_timeout(1200)  # settle layout + late cards
                     issues = page.evaluate(JS_DETECT)
                     page.screenshot(path=shot, full_page=True)
+                    if dash == "renault-5-bubble":
+                        # Open the Smart Charging pop-up "tab" (hash navigation) and check +
+                        # capture it too — a broken Bubble Card config renders an error card.
+                        page.evaluate("() => { location.hash = '#r5-charging'; }")
+                        # Wait for the pop-up's inner cards to actually paint (Bubble Card
+                        # lazy-renders them), else the capture can catch an empty shell.
+                        try:
+                            page.wait_for_selector("text=Charge Target", timeout=8000)
+                        except Exception:
+                            pass
+                        page.wait_for_timeout(800)
+                        pshot = os.path.join(args.out, f"{dash}__smart_charging__{slug}.png")
+                        page.screenshot(path=pshot, full_page=True)
+                        # Best-effort error-card scan; the hash re-render can tear down the JS
+                        # context on slower viewports — the screenshot above is the deliverable.
+                        try:
+                            issues = issues + page.evaluate(JS_DETECT)
+                        except Exception:
+                            pass
                 except Exception as err:
                     issues = [{"type": "render-error", "tag": "-", "text": f"{type(err).__name__}: {err}"}]
                     try:
