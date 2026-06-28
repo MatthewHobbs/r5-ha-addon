@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.13.0
+
+- **Privacy: the car's GPS is rounded before publishing** to the retained MQTT topic —
+  configurable `gps_precision` (default **4 dp ≈ 11 m**) instead of full precision; raise it
+  for a more precise map pin, lower it for more privacy.
+- **Internal (architecture): entity tables extracted into `catalog.py`** (out of `main.py`),
+  matching the Alpine A290 add-on's structure — reduces lockstep drift. No behaviour change.
+- **Internal: a contract test pins the renault-api fields the poller reads**, so a future
+  library bump that renames a model field fails CI instead of silently breaking a sensor.
+  (The R5 already auto-reconnected to MQTT; the A290 gained that in 1.8.0.)
+
 ## 0.12.0
 
 - **New: optional "Smart Charging" card on the bundled dashboard.** If you control charging

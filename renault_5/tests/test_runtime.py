@@ -639,6 +639,16 @@ def test_poll_once_charging_and_no_gps_fix():
     assert loc is None                                    # lat/lon both None => no tracker attrs
 
 
+def test_poll_once_rounds_gps_for_privacy():
+    class _GpsVehicle(_ChargingVehicle):
+        async def get_location(self):
+            return _obj(gpsLatitude=51.512345, gpsLongitude=-0.123456, lastUpdateTime="t")
+
+    _data, loc = asyncio.run(main.poll_once(_Sess(_GpsVehicle()), {}, 52.0, set(), "km"))
+    assert loc["latitude"] == 51.5123 and loc["longitude"] == -0.1235   # rounded to 4 dp
+    assert loc["gps_accuracy"] == 11                                    # ~11 m at 4 dp
+
+
 class _MinBattery:
     batteryLevel = 70
     batteryAutonomy = 180
