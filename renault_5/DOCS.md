@@ -11,22 +11,22 @@ to Home Assistant via MQTT auto-discovery.
 data layer** for the Renault 5 — a drop-in replacement for the fragile `venv` +
 `renault-api` CLI + shell-script layer behind [Topolino65](https://github.com/Topolino65)'s
 [renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view). Entity
-names deliberately follow that project (modernised, locale-aware), so **Topolino's own UI
-binds straight to these `sensor.r5_*` entities** — keep using his dashboards and just let
+names deliberately follow that project (modernised, locale-aware), so **Topolino65's own UI
+binds straight to these `sensor.r5_*` entities** — keep using their dashboards and just let
 this app feed them fresh data.
 
 **The bundled dashboards are a bonus, not the point.** The app can also auto-deploy a
-dashboard for you (`deploy_dashboard`) — a **modified version of Topolino's UI**, adapted
+dashboard for you (`deploy_dashboard`) — a **modified version of Topolino65's UI**, adapted
 from the maintainer's [Alpine A290 app](https://github.com/MatthewHobbs/a290-ha-addon)
 (the R5 and A290 share the same Renault EV platform). Use it if you want a ready-made layout,
-or ignore it and keep Topolino's — either way the data comes from this app.
+or ignore it and keep Topolino65's — either way the data comes from this app.
 
 ## Before you start — install these first
 
 The app only needs the **Mosquitto broker** app (its MQTT connection is auto-discovered
 from it). It publishes the entities; **you choose the dashboard**:
 
-- **Topolino's [renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view)** —
+- **[Topolino65's renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view)** —
   this app's entities follow that project's naming, so its dashboards bind straight to them.
 - **or** one of this app's **bundled dashboards** — set `deploy_dashboard` to `standard`,
   `bubble`, or `both` (off by default).
@@ -69,7 +69,7 @@ start**, so everything renders correctly the first time.
 | `gps_precision` | Decimal places the car's GPS is rounded to before publishing (1–6, default **4** ≈ 11 m). Coarsens the location on the retained MQTT topic for privacy; raise to 5–6 for a more precise map pin, lower to 2–3 for more privacy. |
 | `log_level` | `info` normally; `debug` for troubleshooting. |
 | `debug_dump` | `true` logs every readable API endpoint to the app Log **once per restart** (IDs/secrets/location redacted, best-effort). It may still contain personal data — do not paste the log publicly. Off by default. |
-| `deploy_dashboard` | `none` (default), `standard`, `bubble`, or `both`. Off by default so the app stays a neutral data layer (use Topolino's dashboards, or set this to install a bundled one). Auto-installs the chosen dashboard(s) for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. With `both`, the standard dashboard lands at `dashboard_url_path` and the bubble one at the same path with `-bubble` appended. |
+| `deploy_dashboard` | `none` (default), `standard`, `bubble`, or `both`. Off by default so the app stays a neutral data layer (use Topolino65's dashboards, or set this to install a bundled one). Auto-installs the chosen dashboard(s) for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. With `both`, the standard dashboard lands at `dashboard_url_path` and the bubble one at the same path with `-bubble` appended. |
 | `dashboard_url_path` | URL slug for the deployed dashboard (default `renault-5`). With `deploy_dashboard: both` the bubble dashboard is installed at `<this>-bubble` (e.g. `renault-5-bubble`). |
 | `redeploy_dashboard` | `true` re-pushes the dashboard config on next start. Default `false`. |
 | `car_render` | The trim/colour render shown on the dashboard (e.g. `midnight-blue-iconic`), used when auto-deploying. Default `pop-yellow-techno`. See [Customising](https://github.com/MatthewHobbs/r5-ha-addon/tree/main/renault_5/dashboards/CUSTOMISING.md). |
@@ -87,7 +87,7 @@ Set the `charger_*` options above to your charger's entity ids and the dashboard
 **"Smart Charging"** card (a built-in `entities` card — no extra HACS card needed). Leave them
 blank (the default) and no card is added; each blank one is skipped, so you can map just the
 controls you have. (This only affects the add-on's own bundled dashboards — it doesn't change
-Topolino's dashboards.)
+Topolino65's dashboards.)
 
 For example, with the Octopus Intelligent entities from your account:
 
@@ -119,7 +119,7 @@ dashboards remain the richer view; the panel is the quick glance.
 
 Published via MQTT discovery under the **R5** device (entity_ids are built by Home
 Assistant from the device name + the friendly name, so they read `sensor.r5_<name>`).
-Names follow the Topolino project (minus the legacy `_api`/`_mi` suffixes):
+Names follow the [Topolino65](https://github.com/Topolino65) project (minus the legacy `_api`/`_mi` suffixes):
 
 - Battery: `sensor.r5_battery_level`, `…_battery_autonomy`, `…_available_energy`,
   `…_battery_temperature`, `…_battery_last_activity`.

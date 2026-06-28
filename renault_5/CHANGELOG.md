@@ -45,7 +45,7 @@
   **Smart Charging** card showing those controls next to the car's data. It's a built-in
   `entities` card (no extra HACS card needed), each blank option is skipped, and leaving them
   all blank (the default) adds nothing. Only affects the add-on's own bundled dashboards, not
-  Topolino's. See DOCS for the Octopus example.
+  Topolino65's. See DOCS for the Octopus example.
 
 ## 0.11.1
 
@@ -62,9 +62,9 @@ UX pass — a fresh product + design review of the current dashboards, mirrored 
 Alpine A290 add-on (1.6.0) in lockstep.
 
 - **`deploy_dashboard` stays off by default** (unlike the A290 add-on, which now defaults to
-  `standard`). This add-on is a data layer for Topolino's `renault-5-dashboard-view`, so it
+  `standard`). This add-on is a data layer for Topolino65's `renault-5-dashboard-view`, so it
   doesn't presume to auto-deploy its own bundled dashboard — set `deploy_dashboard` to
-  `standard`/`bubble`/`both` if you want one. DOCS now make the Topolino-vs-bundled choice
+  `standard`/`bubble`/`both` if you want one. DOCS now make the Topolino65-vs-bundled choice
   explicit and explain where to find your VIN.
 - **Last Charge tiles are now self-describing** (`Started / Ended / Duration`,
   `SoC Start / SoC End / SoC Gain`, `Energy Start / Energy End / Energy Added`) instead of
