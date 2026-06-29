@@ -68,7 +68,7 @@ GPS_PRECISION = max(1, min(6, int(_GPS_P))) if _GPS_P.isdigit() else 4
 # Device name "R5" is deliberate: HA builds entity_ids from slug(device + entity name) and
 # ignores object_id, so this yields sensor.r5_<name> (what the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
 
@@ -579,6 +579,15 @@ _DEBUG_REDACT_KEYS = {
     "phone", "mobile", "email", "firstname", "lastname", "gigyaid", "personid", "accountid",
     "iccid", "imei", "contractid", "address", "postcode", "zipcode", "city", "country",
     "gpslatitude", "gpslongitude", "latitude", "longitude",
+    # Vehicle-lifecycle / privacy / build-spec — quasi-identifying or owner-private. The
+    # `assets` block carries 3dv.renault.com render URLs that embed the build-spec (VCD)
+    # code in the path; mask the whole subtree (it has no sensor-mapping diagnostic value).
+    "deliverydate", "firstregistrationdate", "vehicleid", "batterycode",
+    "privacymode", "privacymodeupdatedate", "svtflag", "svtblockflag", "assets",
+    # Defense-in-depth: token/credential field names. The endpoint allowlist + logger floor
+    # already keep tokens out of the dump; this guards a future token-bearing payload too.
+    "token", "accesstoken", "refreshtoken", "idtoken", "jwt", "authorization", "apikey",
+    "secret", "password", "gigyacookievalue",
 }
 _DEBUG_STATE = {"dumped": False}
 

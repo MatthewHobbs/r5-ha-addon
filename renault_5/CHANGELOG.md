@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.1
+
+- **Privacy: `debug_dump` redaction now covers more personal fields.** In addition to your
+  VIN/account id/credentials/contact fields and GPS, the dump now masks vehicle **delivery
+  and registration dates**, the **privacy-mode** setting, `vehicleId`/`batteryCode`, the
+  stolen-vehicle-tracking flags, and the **`assets` block** (whose render URLs embedded the
+  car's build-spec code). Added defense-in-depth masking of token/credential field names too.
+- **Docs:** the `debug_dump` description now names what's redacted and that the whole dump
+  should be treated as personal data — share privately, don't paste publicly. (Mirrors A290 v1.15.1.)
+
 ## 1.0.0
 
 **Feature parity with the Alpine A290 add-on** — the R5 add-on graduates to 1.0.
