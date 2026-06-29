@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1.0
+
+Catch-up release bringing the R5 add-on in line with the Alpine A290 (v1.15.1 → v1.16.2 + infra),
+now that the shared runtime is verified on hardware.
+
+- **Base image moved off end-of-life Alpine 3.19 to current Alpine 3.24** (`ghcr.io/home-assistant/base:3.24`,
+  multi-arch). Alpine 3.19 stopped receiving security updates in Nov 2025; 3.24 is supported until
+  June 2028. Python runtime moves **3.11 → 3.14**; the pinned deps are unchanged and install/run
+  cleanly on 3.14. The base is now pinned in the Dockerfile (no more `build.yaml`).
+- **Privacy: `debug_dump` redaction now covers more personal fields** — vehicle delivery/registration
+  dates, privacy-mode setting, `vehicleId`/`batteryCode`, stolen-vehicle-tracking flags, the build-spec
+  `assets` block, plus defense-in-depth token/credential field names. Docs updated to match.
+- **Off-peak badge** shows "Schedule unavailable" instead of a blank sub-line when the charger
+  exposes no off-peak window times.
+- **Internal:** dashboard render-test harness hardened (transient-truncation stability filter +
+  isolated pop-up capture; HA startup toasts stripped from docs screenshots), and the CI screenshot
+  auto-refresh moved to a trusted `workflow_run` so its PAT never runs PR code.
+
 ## 1.0.0
 
 **Feature parity with the Alpine A290 add-on** — the R5 add-on graduates to 1.0.
