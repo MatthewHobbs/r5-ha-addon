@@ -30,8 +30,7 @@ renault_5/                   the add-on (this is what HA installs)
     requirements.txt         pinned deps (see "Dependencies")
   tests/                     pytest — conftest.py, test_main.py, test_runtime.py
   config.yaml                add-on manifest: version, options + schema
-  build.yaml                 base-image map for the multi-arch build
-  Dockerfile                 alpine base, HEALTHCHECK, root user
+  Dockerfile                 pinned base (FROM ghcr.io/home-assistant/base:<tag>), HEALTHCHECK, root user
   run.sh                     bashio entrypoint (reads /data/options.json)
   DOCS.md / CHANGELOG.md     the add-on's HA docs page + changelog
   dashboards/                front-end.txt + front-end-bubble.txt + Images/ — bundled into the
@@ -91,7 +90,7 @@ ui-tests) is run with `ui-tests/run.sh` — it boots a throwaway HA container, s
 and uses Playwright across ~10 phone viewports to fail on any text truncation or
 `hui-error-card`. Run it whenever you touch `renault_5/dashboards/` or `ui-tests/`.
 
-Ruff config (`ruff.toml`): line-length 120, target py311, `select = E,F,W,B,I`,
+Ruff config (`ruff.toml`): line-length 120, target py314, `select = E,F,W,B,I`,
 `ignore = E501,B008`.
 
 ## Reviews — Claude + codex, compared
@@ -116,9 +115,10 @@ tagged and published. A version-bump / runtime PR is therefore **not** considere
 by CI alone — build and boot the image locally and observe the changed behaviour first:
 
 ```sh
-docker buildx build --platform linux/amd64 \
-  --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.19 \
-  -t r5-local renault_5
+# The base image is pinned in renault_5/Dockerfile (FROM ghcr.io/home-assistant/base:<tag>,
+# the single source of truth) — no --build-arg needed (build.yaml/BUILD_FROM were removed when
+# Supervisor 2026.04 dropped the BUILD_FROM default).
+docker buildx build --platform linux/amd64 -t r5-local renault_5
 # then run with a stub /data/options.json and curl http://localhost:<port>/healthz, check logs, etc.
 ```
 

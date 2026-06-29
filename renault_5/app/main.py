@@ -68,7 +68,7 @@ GPS_PRECISION = max(1, min(6, int(_GPS_P))) if _GPS_P.isdigit() else 4
 # Device name "R5" is deliberate: HA builds entity_ids from slug(device + entity name) and
 # ignores object_id, so this yields sensor.r5_<name> (what the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
-VERSION = "1.0.1"
+VERSION = os.environ.get("R5_VERSION", "dev")  # injected via the Dockerfile (BUILD_VERSION)
 
 _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
 
