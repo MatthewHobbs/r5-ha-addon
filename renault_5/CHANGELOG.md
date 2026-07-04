@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.1
+
+- **Bundled `tempio` rebuilt to clear inherited CVEs.** The stock `/usr/bin/tempio` in the HA
+  base image was compiled against an old `golang.org/x/crypto` on a stale Go toolchain, so
+  vulnerability scanners flagged it for a batch of CVEs (all in the unused `crypto/ssh` path,
+  plus Go stdlib — never reached at runtime). The add-on now rebuilds `tempio` from a pinned
+  upstream commit on a current Go toolchain with `x/crypto >= 0.52.0` and overwrites the base
+  copy. Verified: trivy reports 0 CVEs on the result. No behaviour change — purely supply-chain
+  hygiene of the shipped image. (Mirrors A290 v1.16.3.)
+
 ## 1.1.0
 
 Catch-up release bringing the R5 add-on in line with the Alpine A290 (v1.15.1 → v1.16.2 + infra),
