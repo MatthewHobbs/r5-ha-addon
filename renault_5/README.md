@@ -11,11 +11,15 @@ are entered once on the **Configuration** tab.
 
 - **Native controls** — charge, lights, horn, HVAC, refresh location — plus **writable
   charge-limit sliders**. You do **not** need Home Assistant's `renault` integration.
+- **Location is opt-out** — `device_tracker.r5_location` publishes by default (coarsened per
+  `gps_precision`); set `publish_location: false` to fetch none and clear any previously-retained
+  GPS from the broker, for a zero location footprint.
 - **Optional bundled dashboards** — a **modified version of Topolino65's UI**, ported from the
   maintainer's [Alpine A290 app](https://github.com/MatthewHobbs/a290-ha-addon). Set
   `deploy_dashboard` and the app installs a **standard** or **Bubble Card** dashboard for
   you (both phone-verified in CI) — or leave it off (the default) and keep Topolino65's own.
-- **Pre-built, Cosign-signed image** pulled by the Supervisor — no slow on-device build.
+- **Pre-built multi-arch image** pulled by the Supervisor — no slow on-device build (with a
+  keyless build-provenance attestation; verify with `gh attestation verify`).
 
 > **Untested on a real Renault 5** — back-ported from the
 > [Alpine A290 app](https://github.com/MatthewHobbs/a290-ha-addon) (the R5 E-Tech and A290

@@ -193,3 +193,16 @@ def test_fetch_dashboard_bubble_injects_popup(tmp_path, monkeypatch):
     monkeypatch.setenv("R5_CHARGER_SMART_CHARGE", "switch.smart")
     cfg = asyncio.run(deploy._fetch_dashboard("bubble"))
     assert any(c.get("hash") == deploy._CHARGER_HASH for c in cfg["views"][0]["cards"])
+
+
+def test_redact_scrubs_supervisor_token_and_secrets(monkeypatch):
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "supertok-abc123")
+    monkeypatch.setenv("R5_VIN", "VF1DEPLOYVIN")
+    err = RuntimeError("ws auth failed with token supertok-abc123 for VF1DEPLOYVIN")
+    out = deploy._redact(err)
+    assert "supertok-abc123" not in out and "VF1DEPLOYVIN" not in out
+    assert out.count("***") == 2
+    # nothing configured -> passthrough (never blanks arbitrary text)
+    monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+    monkeypatch.delenv("R5_VIN", raising=False)
+    assert deploy._redact("plain error") == "plain error"
