@@ -567,6 +567,9 @@ def test_resolve_account_autodiscovers_myrenault(monkeypatch):
                                   _obj(accountType="MYRENAULT", accountId="ACC-9")])
 
     assert asyncio.run(main.resolve_account(Client())) == "ACC-9"
+    # the discovered id is captured so redact() can mask it in later error URLs
+    assert main._DISCOVERED_ACCOUNT_ID == "ACC-9"
+    assert "ACC-9" not in main.redact("boom /accounts/ACC-9/vehicles/V/x")
 
 
 def test_resolve_account_raises_when_no_myrenault(monkeypatch):
@@ -1124,3 +1127,97 @@ def test_detect_supported_tolerates_action_probe_error():
     sup = asyncio.run(main.detect_supported(Sess()))
     assert "actions/lights-start" in sup          # other actions still detected
     assert "actions/horn-start" not in sup        # the one whose probe errored is omitted
+
+
+# --------------------------------------------------------------------------- #
+# publish_location opt-out + error-snapshot redaction (mirrors the A290 twin)
+# --------------------------------------------------------------------------- #
+def test_poll_once_skips_location_when_publish_disabled(monkeypatch):
+    monkeypatch.setattr(main, "PUBLISH_LOCATION", False)
+
+    class _NoLoc(_ChargingVehicle):
+        async def get_location(self):
+            raise AssertionError("get_location must not be called when location is disabled")
+
+    data, attrs = asyncio.run(main.poll_once(_Sess(_NoLoc()), {}, 52.0, set(), "km"))
+    assert attrs is None                       # nothing published
+    assert "gps_last_activity" not in data     # and no location-derived field set
+
+
+def test_publish_discovery_location_enabled_vs_disabled(monkeypatch):
+    class C:
+        def __init__(self):
+            self.pub = {}
+
+        def publish(self, t, p, retain=False):
+            self.pub[t] = p
+
+    tracker_topic = f"{main.DISCOVERY_PREFIX}/device_tracker/{main.NODE}/location/config"
+
+    # enabled (default): a populated device_tracker config is published
+    monkeypatch.setattr(main, "PUBLISH_LOCATION", True)
+    c = C()
+    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS), "km")
+    assert '"source_type": "gps"' in c.pub[tracker_topic]
+
+    # disabled: the tracker is cleared AND the retained GPS topics are wiped off the broker
+    monkeypatch.setattr(main, "PUBLISH_LOCATION", False)
+    c = C()
+    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS), "km")
+    assert c.pub[tracker_topic] == ""
+    assert c.pub[main.ATTR_TOPIC] == ""
+    assert c.pub[main.TRACKER_STATE_TOPIC] == ""
+
+
+def test_main_redacts_secret_in_error_snapshot(monkeypatch, tmp_path):
+    async def poll(stop, *a, **k):
+        stop.set()                             # end the loop after this iteration
+        # an error carrying the VIN (as a real Kamereon URL error would)
+        raise RuntimeError("403 at https://api/accounts/A/vehicles/SECRETVIN123/charges")
+
+    _wire_main(monkeypatch, tmp_path, poll)
+    monkeypatch.setenv("R5_VIN", "SECRETVIN123")
+    asyncio.run(main.main())
+    # the status-panel snapshot (served unauth to co-tenant containers) must not carry the VIN
+    assert "SECRETVIN123" not in main._LATEST.get("error", "")
+    assert "***" in main._LATEST.get("error", "")
+
+
+def test_refresh_location_button_cleared_when_location_disabled(monkeypatch):
+    class C:
+        def __init__(self):
+            self.pub = {}
+
+        def publish(self, t, p, retain=False):
+            self.pub[t] = p
+
+    (cmd,) = tuple(main.LOCATION_CMDS)                 # the location-refresh command suffix
+    _oid, node, _name, _icon, _ep = main.ACTION_BUTTONS[cmd]
+    btn_topic = f"{main.DISCOVERY_PREFIX}/button/{main.NODE}/{node}/config"
+    eps = set(main.OPTIONAL_ENDPOINTS) | {main.REFRESH_LOCATION_EP}
+
+    # location on: the refresh-location button is published
+    monkeypatch.setattr(main, "PUBLISH_LOCATION", True)
+    c = C()
+    main.publish_discovery(c, eps, "km")
+    assert "command_topic" in c.pub[btn_topic]
+
+    # location off: the button is cleared even though the endpoint is supported
+    monkeypatch.setattr(main, "PUBLISH_LOCATION", False)
+    c = C()
+    main.publish_discovery(c, eps, "km")
+    assert c.pub[btn_topic] == ""
+
+
+def test_run_command_rejects_refresh_location_when_location_disabled(monkeypatch):
+    monkeypatch.setattr(main, "PUBLISH_LOCATION", False)
+    called = {"n": 0}
+
+    async def fake_login(ws, locale):
+        called["n"] += 1
+        return object()
+
+    monkeypatch.setattr(main, "_login_vehicle", fake_login)
+    (cmd,) = tuple(main.LOCATION_CMDS)
+    asyncio.run(main.run_command(cmd))
+    assert called["n"] == 0            # rejected before any login/dispatch
