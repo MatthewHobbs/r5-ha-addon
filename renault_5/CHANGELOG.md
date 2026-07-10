@@ -5,9 +5,9 @@
 - **Location is now fully opt-out — new `publish_location` option (default on).** Set
   `publish_location: false` and the add-on fetches no GPS, publishes no `device_tracker`, and
   **clears any previously-retained location** off the MQTT broker (the retained tracker config
-  and the two `renault_5/location/*` topics are wiped). Privacy-minded users can now run with
-  **zero location footprint** on the broker. `gps_precision` still coarsens the fix when location
-  is on.
+  and the two `renault_5/location/*` topics are wiped), and the **Refresh Location** button is
+  removed (its command is ignored too). Privacy-minded users can now run with **zero location
+  footprint** on the broker. `gps_precision` still coarsens the fix when location is on.
 - **Error messages are redacted before they're logged or served.** Renault/Kamereon request URLs
   embed the VIN and account id, so an ordinary transient API/HTTP error string could previously
   carry them into the container log and the status panel's `/api/state`. Those error strings are

@@ -80,6 +80,9 @@ def _opt_flag(name, default):
 # no location is fetched or published and any previously-retained GPS topics are cleared, so a
 # privacy-minded user can run the add-on with no location footprint on the broker at all.
 PUBLISH_LOCATION = _opt_flag("R5_PUBLISH_LOCATION", True)
+# The location-refresh action's endpoint. When location publishing is off we also suppress this
+# button + its MQTT command, so an opted-out install can't trigger a location refresh at all.
+REFRESH_LOCATION_EP = "actions/refresh-location"
 
 # Device name "R5" is deliberate: HA builds entity_ids from slug(device + entity name) and
 # ignores object_id, so this yields sensor.r5_<name> (what the dashboards expect).
@@ -263,7 +266,8 @@ def publish_discovery(client, supported_eps, dist_unit):
     shipped = []
     for cmd_suffix, (oid, node, name, icon, ep) in ACTION_BUTTONS.items():
         topic = f"{DISCOVERY_PREFIX}/button/{NODE}/{node}/config"
-        if ep in supported_eps:
+        # Suppress the location-refresh button too when the user has opted out of location.
+        if ep in supported_eps and not (ep == REFRESH_LOCATION_EP and not PUBLISH_LOCATION):
             conf = {"name": name, "object_id": oid, "unique_id": oid,
                     "command_topic": f"{CMD_PREFIX}{cmd_suffix}", "availability_topic": AVAIL_TOPIC,
                     "icon": icon, "device": DEVICE}
@@ -522,6 +526,10 @@ COMMAND_ACTIONS = {
 COMMAND_DEBOUNCE_S = 5
 _last_command = {}
 
+# Command-topic suffixes that trigger a location refresh — rejected when location publishing is
+# off (the button is also cleared in publish_discovery), so an opted-out install can't refresh.
+LOCATION_CMDS = {suffix for suffix, vals in ACTION_BUTTONS.items() if vals[-1] == REFRESH_LOCATION_EP}
+
 # Command-topic suffixes that map to writable numbers, and each one's set_battery_soc role.
 NUMBER_CMDS = {oid.removeprefix(OBJ_PREFIX) for oid in NUMBERS}
 _NUMBER_ROLE = {oid.removeprefix(OBJ_PREFIX): role
@@ -576,6 +584,9 @@ async def run_command(cmd, payload=""):
     to set_battery_soc. Never fatal."""
     if cmd in NUMBER_CMDS:
         await set_soc_level(cmd, payload)
+        return
+    if cmd in LOCATION_CMDS and not PUBLISH_LOCATION:
+        LOG.info("Ignoring '%s' — location is disabled (publish_location: false)", cmd)
         return
     action = COMMAND_ACTIONS.get(cmd)
     if action is None:
