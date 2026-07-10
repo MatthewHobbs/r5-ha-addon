@@ -20,6 +20,18 @@ import yaml
 
 LOG = logging.getLogger("renault_5.deploy")
 
+
+def _redact(text):
+    """Mask the SUPERVISOR_TOKEN (and any configured Renault secrets, in case they surface in
+    an error) before a deploy error string is logged. Defense-in-depth for the never-fatal
+    except handler below."""
+    s = str(text)
+    for secret in (os.environ.get("SUPERVISOR_TOKEN"), os.environ.get("R5_VIN"),
+                   os.environ.get("R5_ACCOUNT_ID"), os.environ.get("R5_USERNAME")):
+        if secret and secret in s:
+            s = s.replace(secret, "***")
+    return s
+
 REPO = "MatthewHobbs/r5-ha-addon"
 # Pin dashboard assets to this release's git tag (created by release.yaml) so a deployed
 # dashboard is reproducible per version; fall back to main for a dev/untagged build.
@@ -482,4 +494,4 @@ async def run_deploy():
                 for st, path, title in _deploy_targets(style, url_path):
                     await _deploy_one(api, st, path, title, redeploy)
     except Exception as err:  # noqa: BLE001 — deploy must never break the poller
-        LOG.warning("Dashboard auto-deploy skipped (%s): %s", type(err).__name__, err)
+        LOG.warning("Dashboard auto-deploy skipped (%s): %s", type(err).__name__, _redact(err))

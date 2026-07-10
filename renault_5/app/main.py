@@ -41,6 +41,7 @@ from catalog import (
     DEFAULT_DISABLED_SENSORS,
     ICONS,
     NUMBERS,
+    OBJ_PREFIX,
     OPTIONAL_ENDPOINTS,
     RETIRED_SENSORS,
     SENSORS,
@@ -65,12 +66,31 @@ STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
 _GPS_P = os.environ.get("R5_GPS_PRECISION", "4").strip()
 GPS_PRECISION = max(1, min(6, int(_GPS_P))) if _GPS_P.isdigit() else 4
 
+
+def _opt_flag(name, default):
+    """Read a boolean add-on option, tolerating bashio exporting '', 'null', or unset on an
+    upgraded install (in which case the default applies)."""
+    v = os.environ.get(name)
+    if v is None or v.strip().lower() in ("", "null"):
+        return default
+    return v.strip().lower() in ("true", "1", "on")
+
+
+# Publish the car's GPS as a device_tracker + retained location topics? Default on. When off,
+# no location is fetched or published and any previously-retained GPS topics are cleared, so a
+# privacy-minded user can run the add-on with no location footprint on the broker at all.
+PUBLISH_LOCATION = _opt_flag("R5_PUBLISH_LOCATION", True)
+
 # Device name "R5" is deliberate: HA builds entity_ids from slug(device + entity name) and
 # ignores object_id, so this yields sensor.r5_<name> (what the dashboards expect).
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
 VERSION = os.environ.get("R5_VERSION", "dev")  # injected via the Dockerfile (BUILD_VERSION)
 
 _LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
+# The account id auto-discovered by resolve_account() when R5_ACCOUNT_ID is left blank. Held
+# here so redact() can mask it in error strings (the Kamereon URL embeds it) even though it was
+# never a configured value.
+_DISCOVERED_ACCOUNT_ID = None
 
 HOME_POWER_MAX_KW = 7.4
 # Friendly labels for the ChargeState/PlugState enums (every member mapped, so float
@@ -115,6 +135,11 @@ def setup_logging():
     level = cfg("R5_LOG_LEVEL", "info").upper()
     logging.basicConfig(level=getattr(logging, level, logging.INFO),
                         format="%(asctime)s %(levelname)s %(message)s")
+    # Attach the secret-redaction net to the root handler(s): every record (ours + the
+    # library's, which propagates to root) is scrubbed before it's emitted.
+    redactor = _RedactingFilter()
+    for handler in logging.getLogger().handlers:
+        handler.addFilter(redactor)
 
 
 def now_ts():
@@ -199,7 +224,7 @@ def publish_discovery(client, supported_eps, dist_unit):
             if dist_unit == "mi":
                 dev_class = None  # else HA (metric) re-converts our miles back to km
         conf = {"name": name, "object_id": obj, "unique_id": obj,
-                "state_topic": STATE_TOPIC, "value_template": "{{ value_json.%s }}" % obj.removeprefix("r5_"),
+                "state_topic": STATE_TOPIC, "value_template": "{{ value_json.%s }}" % obj.removeprefix(OBJ_PREFIX),
                 "availability_topic": AVAIL_TOPIC, "device": DEVICE}
         if dev_class:
             conf["device_class"] = dev_class
@@ -214,7 +239,7 @@ def publish_discovery(client, supported_eps, dist_unit):
         client.publish(f"{DISCOVERY_PREFIX}/sensor/{NODE}/{obj}/config", json.dumps(conf), retain=True)
     for obj, (name, dev_class) in BINARY_SENSORS.items():
         conf = {"name": name, "object_id": obj, "unique_id": obj,
-                "state_topic": STATE_TOPIC, "value_template": "{{ value_json.%s }}" % obj.removeprefix("r5_"),
+                "state_topic": STATE_TOPIC, "value_template": "{{ value_json.%s }}" % obj.removeprefix(OBJ_PREFIX),
                 "payload_on": "on", "payload_off": "off",
                 "availability_topic": AVAIL_TOPIC, "device": DEVICE}
         if dev_class:
@@ -222,10 +247,18 @@ def publish_discovery(client, supported_eps, dist_unit):
         if obj in ICONS:
             conf["icon"] = ICONS[obj]
         client.publish(f"{DISCOVERY_PREFIX}/binary_sensor/{NODE}/{obj}/config", json.dumps(conf), retain=True)
-    tracker = {"name": "Location", "object_id": "r5_car_location", "unique_id": "r5_car_location",
-               "state_topic": TRACKER_STATE_TOPIC, "json_attributes_topic": ATTR_TOPIC,
-               "availability_topic": AVAIL_TOPIC, "source_type": "gps", "device": DEVICE}
-    client.publish(f"{DISCOVERY_PREFIX}/device_tracker/{NODE}/location/config", json.dumps(tracker), retain=True)
+    tracker_topic = f"{DISCOVERY_PREFIX}/device_tracker/{NODE}/location/config"
+    if PUBLISH_LOCATION:
+        tracker = {"name": "Location", "object_id": "r5_car_location", "unique_id": "r5_car_location",
+                   "state_topic": TRACKER_STATE_TOPIC, "json_attributes_topic": ATTR_TOPIC,
+                   "availability_topic": AVAIL_TOPIC, "source_type": "gps", "device": DEVICE}
+        client.publish(tracker_topic, json.dumps(tracker), retain=True)
+    else:
+        # Location opt-out: remove the tracker entity and clear any GPS previously retained on
+        # the broker so an earlier fix doesn't linger after the user turns location off.
+        client.publish(tracker_topic, "", retain=True)
+        client.publish(ATTR_TOPIC, "", retain=True)
+        client.publish(TRACKER_STATE_TOPIC, "", retain=True)
     # Buttons gated on supports_endpoint(): published when supported, else cleared.
     shipped = []
     for cmd_suffix, (oid, node, name, icon, ep) in ACTION_BUTTONS.items():
@@ -242,7 +275,7 @@ def publish_discovery(client, supported_eps, dist_unit):
     numbers = []
     soc_ok = SOC_ENDPOINT in supported_eps
     for obj, (name, icon, _role, mn, mx, step) in NUMBERS.items():
-        short = obj.removeprefix("r5_")
+        short = obj.removeprefix(OBJ_PREFIX)
         topic = f"{DISCOVERY_PREFIX}/number/{NODE}/{short}/config"
         if soc_ok:
             conf = {"name": name, "object_id": obj, "unique_id": obj,
@@ -256,8 +289,9 @@ def publish_discovery(client, supported_eps, dist_unit):
         else:
             client.publish(topic, "", retain=True)
     LOG.info("Published discovery: %d sensors (%d unsupported cleared), %d binary_sensors, "
-             "device_tracker, buttons=%s, numbers=%s",
-             published, len(skip), len(BINARY_SENSORS), shipped or "none", numbers or "none")
+             "location=%s, buttons=%s, numbers=%s",
+             published, len(skip), len(BINARY_SENSORS),
+             "on" if PUBLISH_LOCATION else "off (cleared)", shipped or "none", numbers or "none")
 
 
 KM_TO_MI = 0.621371
@@ -489,8 +523,8 @@ COMMAND_DEBOUNCE_S = 5
 _last_command = {}
 
 # Command-topic suffixes that map to writable numbers, and each one's set_battery_soc role.
-NUMBER_CMDS = {oid.removeprefix("r5_") for oid in NUMBERS}
-_NUMBER_ROLE = {oid.removeprefix("r5_"): role
+NUMBER_CMDS = {oid.removeprefix(OBJ_PREFIX) for oid in NUMBERS}
+_NUMBER_ROLE = {oid.removeprefix(OBJ_PREFIX): role
                 for oid, (_n, _i, role, _mn, _mx, _s) in NUMBERS.items()}
 
 _soc_lock = None
@@ -534,7 +568,7 @@ async def set_soc_level(which, payload):
                 await vehicle.set_battery_soc(min=int(new_min), target=int(new_target))
             LOG.info("Set charge limits: min=%s%%, target=%s%%", new_min, new_target)
         except Exception as err:  # noqa: BLE001
-            LOG.error("Failed to set %s=%s: %s", which, value, err)
+            LOG.error("Failed to set %s=%s: %s", which, value, redact(err))
 
 
 async def run_command(cmd, payload=""):
@@ -558,7 +592,7 @@ async def run_command(cmd, payload=""):
             await action(vehicle)
         LOG.info("Command '%s' sent", cmd)
     except Exception as err:  # noqa: BLE001
-        LOG.error("Command '%s' failed: %s", cmd, err)
+        LOG.error("Command '%s' failed: %s", cmd, redact(err))
 
 
 # --- Debug API dump (set debug_dump: true on the Configuration page) ----------------
@@ -596,6 +630,42 @@ def debug_enabled():
     return cfg("R5_DEBUG_DUMP", "false").strip().lower() in ("true", "1", "on")
 
 
+def _config_secrets():
+    """The sensitive values to scrub from anything logged or served: VIN, account_id (the
+    configured one AND the auto-discovered one — users are told to leave account_id blank, so
+    the discovered value is the common case), username, password, and the Supervisor token.
+    The Kamereon request URL embeds the VIN + account_id, so an aiohttp error string (which
+    includes the URL) carries them — see redact()."""
+    return [v for v in (cfg("R5_VIN"), cfg("R5_ACCOUNT_ID"), _DISCOVERED_ACCOUNT_ID,
+                        cfg("R5_USERNAME"), cfg("R5_PASSWORD"),
+                        os.environ.get("SUPERVISOR_TOKEN")) if v]
+
+
+def redact(text):
+    """Mask the configured secrets in an arbitrary string before it is logged or placed in the
+    status-panel snapshot. API/HTTP error strings embed the request URL (…/accounts/<account_id>
+    /vehicles/<vin>/…), so an ordinary transient failure would otherwise leak the VIN/account_id
+    to the container log and to GET /api/state. Best-effort substring masking."""
+    s = str(text)
+    for secret in _config_secrets():
+        if secret and secret in s:
+            s = s.replace(secret, "***")
+    return s
+
+
+class _RedactingFilter(logging.Filter):
+    """Redacts configured secrets from EVERY log record — ours and the renault-api library's —
+    at the root handler. A central net so no current or future logging path (any of the
+    per-endpoint poll warnings, a library line that prints a request URL, etc.) can leak the
+    VIN / account id / token embedded in an API URL. Complements the explicit redact() at the
+    error/snapshot paths; idempotent, so double-redaction is harmless."""
+
+    def filter(self, record):
+        record.msg = redact(record.getMessage())
+        record.args = ()
+        return True
+
+
 def _debug_redact(obj, secrets):
     """Mask identifiers (by key, any value type) + configured secret values; keep telemetry."""
     if isinstance(obj, dict):
@@ -630,8 +700,7 @@ async def _dump_one(out, name, call, secrets):
 
 async def dump_api(vehicle):
     """DEBUG: fetch the telemetry endpoints, mask IDs/secrets, log the lot. Never fatal."""
-    secrets = [v for v in (cfg("R5_VIN"), cfg("R5_ACCOUNT_ID"), cfg("R5_USERNAME"),
-                           cfg("R5_PASSWORD")) if v]
+    secrets = _config_secrets()
     out = {}
     for meth in _DEBUG_METHODS:
         fn = getattr(vehicle, meth, None)
@@ -849,8 +918,9 @@ async def resolve_account(client):
     person = await client.get_person()
     for account in person.accounts:
         if account.accountType == "MYRENAULT":
+            global _DISCOVERED_ACCOUNT_ID
+            _DISCOVERED_ACCOUNT_ID = account.accountId   # so redact() can mask it (URL embeds it)
             LOG.info("Auto-discovered MYRENAULT account")
-            LOG.debug("Account id: %s", account.accountId)
             return account.accountId
     raise RuntimeError("No MYRENAULT account found and R5_ACCOUNT_ID not set")
 
@@ -931,17 +1001,18 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
             LOG.warning("charge_mode unavailable: %s", err)
 
     location_attrs = None
-    try:
-        loc = await vehicle.get_location()
-        data["gps_last_activity"] = getattr(loc, "lastUpdateTime", None)
-        lat, lon = getattr(loc, "gpsLatitude", None), getattr(loc, "gpsLongitude", None)
-        if lat is not None and lon is not None:
-            location_attrs = {"latitude": round(lat, GPS_PRECISION),
-                              "longitude": round(lon, GPS_PRECISION),
-                              "gps_accuracy": max(10, round(111_000 / 10 ** GPS_PRECISION)),
-                              "last_update": getattr(loc, "lastUpdateTime", None)}
-    except Exception as err:  # noqa: BLE001
-        LOG.warning("location unavailable: %s", err)
+    if PUBLISH_LOCATION:   # skipped entirely when the user opts out of location publishing
+        try:
+            loc = await vehicle.get_location()
+            data["gps_last_activity"] = getattr(loc, "lastUpdateTime", None)
+            lat, lon = getattr(loc, "gpsLatitude", None), getattr(loc, "gpsLongitude", None)
+            if lat is not None and lon is not None:
+                location_attrs = {"latitude": round(lat, GPS_PRECISION),
+                                  "longitude": round(lon, GPS_PRECISION),
+                                  "gps_accuracy": max(10, round(111_000 / 10 ** GPS_PRECISION)),
+                                  "last_update": getattr(loc, "lastUpdateTime", None)}
+        except Exception as err:  # noqa: BLE001
+            LOG.warning("location unavailable: %s", err)
 
     live_lc = update_charge_session(state, battery, capacity_kwh, charging)
     data.update(await resolve_last_charge(vehicle, state, supported_eps, capacity_kwh, live_lc))
@@ -1043,17 +1114,20 @@ async def main():
                      data.get("plug_suspect"))
         except Exception as err:  # noqa: BLE001
             fails += 1
-            LOG.error("Poll failed (%d in a row): %s", fails, err)
+            LOG.error("Poll failed (%d in a row): %s", fails, redact(err))
             await vsession.invalidate()   # next cycle re-authenticates (self-heal)
             last_ok = state.get("last_success", 0)
             stale = (now_ts() - last_ok) > stale_secs if last_ok else True
-            auth = any(s in str(err).lower() for s in ("login", "password", "credential", "401", "403"))
+            # Prefer the exception type (an HTTP 401/403 is unambiguous); fall back to the
+            # message text for gigya/library errors that aren't raised as ClientResponseError.
+            auth = (isinstance(err, aiohttp.ClientResponseError) and err.status in (401, 403)) or \
+                any(s in str(err).lower() for s in ("login", "password", "credential", "401", "403"))
             client.publish(STATE_TOPIC, json.dumps({
                 "api_auth_failure": "on" if auth else "off",
                 "data_stale": "on" if stale else "off",
             }), retain=True)
             client.publish(AVAIL_TOPIC, "online", retain=True)
-            _LATEST.update(ok=False, last_poll=iso(now_ts()), error=str(err))
+            _LATEST.update(ok=False, last_poll=iso(now_ts()), error=redact(err))
             _LATEST["data"].update(api_auth_failure="on" if auth else "off",
                                    data_stale="on" if stale else "off")
         # exponential backoff on repeated failures (avoid a re-auth storm), capped at 30 min

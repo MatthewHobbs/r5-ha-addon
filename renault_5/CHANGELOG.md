@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.2.0
+
+- **Location is now fully opt-out — new `publish_location` option (default on).** Set
+  `publish_location: false` and the add-on fetches no GPS, publishes no `device_tracker`, and
+  **clears any previously-retained location** off the MQTT broker (the retained tracker config
+  and the two `renault_5/location/*` topics are wiped). Privacy-minded users can now run with
+  **zero location footprint** on the broker. `gps_precision` still coarsens the fix when location
+  is on.
+- **Error messages are redacted before they're logged or served.** Renault/Kamereon request URLs
+  embed the VIN and account id, so an ordinary transient API/HTTP error string could previously
+  carry them into the container log and the status panel's `/api/state`. Those error strings are
+  now scrubbed (VIN / account id / credentials masked) on every log and panel path — via an
+  explicit `redact()` at the error paths plus a central `_RedactingFilter` on the root log
+  handler. Auth failures are also detected by HTTP status (401/403), not only message text.
+- **Reproducible, integrity-checked dependency builds.** The image now installs from a
+  fully-resolved, hash-pinned lockfile (`requirements.txt`, generated from `requirements.in`)
+  with `pip --require-hashes`, and the HA base image is pinned by digest as well as tag.
+- **Docs:** a "Personal data this add-on processes" section, the status-panel trust boundary,
+  and an MQTT command-topic ACL note. Removed the false "Cosign-signed" wording (the image
+  carries a real, verifiable build-provenance attestation instead — see the release notes).
+- Mirrors **A290 v1.17.0**; also picks up the release-pipeline hardening (real provenance +
+  the phantom-version publish-on-PR gate) already shipped separately.
+
 ## 1.1.1
 
 - **Bundled `tempio` rebuilt to clear inherited CVEs.** The stock `/usr/bin/tempio` in the HA

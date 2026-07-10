@@ -4,6 +4,12 @@ prefixed "r5_" (following the Topolino naming, minus the legacy _api/_mi suffixe
 discovery value_template strips that prefix. Kept separate from main.py to match the Alpine
 A290 add-on's structure (lockstep)."""
 
+# The per-model object_id prefix. Every object_id below starts with it, and main.py strips it
+# (obj.removeprefix(OBJ_PREFIX)) to derive the MQTT value_template key / command suffix. This is
+# the ONE place the prefix is defined — the a290 twin sets "a290_" here and nothing else in the
+# shared poll/publish loop changes.
+OBJ_PREFIX = "r5_"
+
 # object_id -> (name, device_class, unit, state_class). Object_ids follow the Topolino
 # R5 naming (minus the legacy _api/_mi suffixes); units are locale-aware (see publish).
 SENSORS = {

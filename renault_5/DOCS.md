@@ -82,7 +82,8 @@ start**, so everything renders correctly the first time.
 | `poll_interval` | Seconds between polls (60–3600, default 300). |
 | `battery_capacity_kwh` | `52` or `40`. Must be set — the API reports capacity as 0; used to derive charge-session energy. |
 | `stale_hours` | Mark data stale after this many hours without a successful poll (default 6). |
-| `gps_precision` | Decimal places the car's GPS is rounded to before publishing (1–6, default **4** ≈ 11 m). Coarsens the location on the retained MQTT topic for privacy; raise to 5–6 for a more precise map pin, lower to 2–3 for more privacy. |
+| `publish_location` | `true` by default — publishes the car's GPS as `device_tracker.r5_location`. Set `false` and the app fetches no location, publishes no `device_tracker`, and clears any previously-retained GPS off the MQTT broker (the tracker's discovery config and its `location/attributes`/`location/state` topics are all cleared), for a zero location footprint. `gps_precision` (below) only applies when this is `true`. |
+| `gps_precision` | Decimal places the car's GPS is rounded to before publishing (1–6, default **4** ≈ 11 m). Coarsens the location on the retained MQTT topic for privacy; raise to 5–6 for a more precise map pin, lower to 2–3 for more privacy. Only relevant when `publish_location: true`. |
 | `log_level` | `info` normally; `debug` for troubleshooting. |
 | `debug_dump` | `true` logs every readable API endpoint to the app Log **once per restart**. Redaction is **best-effort** — it masks IDs, credentials, contact fields, location, vehicle delivery/registration dates, privacy-mode settings and the build-spec render URLs — but can't guarantee every field, so treat the whole dump as personal data and **do not paste it publicly** (share privately if you need help). Off by default. |
 | `deploy_dashboard` | `none` (default), `standard`, `bubble`, or `both`. Off by default so the app stays a neutral data layer (use Topolino65's dashboards, or set this to install a bundled one). Auto-installs the chosen dashboard(s) for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. With `both`, the standard dashboard lands at `dashboard_url_path` and the bubble one at the same path with `-bubble` appended. |
@@ -94,6 +95,30 @@ start**, so everything renders correctly the first time.
 | `charger_target_soc` | *(optional)* entity id of your charger's **charge-target %** number. |
 | `charger_target_time` | *(optional)* entity id of your charger's **target-time** (ready-by) control. |
 | `charger_dispatching` | *(optional)* entity id of any **on/off** entity that's `on` when electricity is cheap — drives the green "Off-peak now" / red "Peak rate" badge. An **off-peak tariff** sensor is the best fit; a `binary_sensor` or `calendar` both work. |
+
+## Personal data this add-on processes
+
+The app is self-hosted — there's no central server, and the maintainer never receives your
+data. Here's what it handles, and where it lives:
+
+- **Credentials** — your My Renault username and password, entered on the Configuration page.
+  Supervisor stores them in the app's options; they're used only to authenticate to the
+  Renault/Kamereon API.
+- **Vehicle identifiers** — your VIN and Kamereon account id.
+- **Location** — the car's GPS, only when `publish_location: true` (the default). It's
+  coarsened per `gps_precision` before being published to a **retained** MQTT topic, so the
+  broker holds the last fix until it's overwritten or cleared — turning `publish_location`
+  off clears it (see above).
+- **Telemetry** — SoC, mileage, plug/charging status, climate schedule, and similar car data.
+- **Where it's stored** — options in Supervisor; poll state in the app's `/data`; entity
+  state in Home Assistant and on the MQTT broker. Nothing leaves your own Home Assistant +
+  broker.
+- **Logs** — normal logs never contain credentials. API/HTTP error strings are **redacted**
+  (VIN and account id masked) before they're logged or shown on the status panel.
+  `debug_dump: true` logs full API responses through a best-effort redactor (see above) —
+  still don't paste those publicly. Never use `log_level: debug` for troubleshooting: the
+  underlying `renault-api` library prints access tokens at that level, which is exactly why
+  `debug_dump` exists.
 
 ## Smart Charging card
 
@@ -144,6 +169,18 @@ the latest poll at a glance — battery, range, charging, plug, climate, charge 
 and diagnostics — without needing a dashboard. It is **read-only** (it never changes anything),
 **auth-gated by Home Assistant**, and stores no credentials or precise location. The bundled
 dashboards remain the richer view; the panel is the quick glance.
+
+The panel's `GET /api/state` JSON (what it polls) is served on the app's health port.
+Home Assistant ingress gates the panel UI, but the port itself sits on the app's container
+network, so another app/container on the same Docker network could read `/api/state`
+directly. It exposes vehicle **telemetry** (SoC, mileage, plug/charging status) but **no
+credentials and no raw GPS**, and any error strings on it are redacted (no VIN/account id).
+
+The buttons and number entities work by the app subscribing to `renault_5/cmd/#` on the
+MQTT broker — anything able to publish to that topic can trigger a control (horn, lights,
+climate, charge start/stop, charge-limit sliders). That's inherent to MQTT discovery, not a
+bug in the app; if your broker is shared with other apps or devices, restrict who can publish
+to `renault_5/cmd/#` with a broker ACL.
 
 ## Requirements
 
