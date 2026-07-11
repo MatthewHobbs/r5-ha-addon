@@ -10,6 +10,21 @@ A290 add-on's structure (lockstep)."""
 # shared poll/publish loop changes.
 OBJ_PREFIX = "r5_"
 
+# The per-model environment-variable prefix the add-on's options are exported under (run.sh
+# exports R5_USERNAME, R5_VIN, …). main.py injects it into the shared core as
+# `config.ENV_PREFIX` so the redaction net reads this model's option names; the a290 twin sets
+# "A290_" here. The ONE place the env prefix is defined.
+ENV_PREFIX = "R5_"
+
+# Per-model MQTT identity, injected into the shared core via mqtt.configure(catalog). NODE is the
+# HA discovery node + topic root; DEVICE is the HA device block (its name drives the entity_id
+# slug — HA ignores object_id); MQTT_KEEPALIVE is the broker keepalive. DIST_UNIT_OBJS names the
+# sensors whose unit follows the locale (mi/km) instead of a fixed one. The a290 twin sets its own.
+NODE = "renault_5"
+DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
+MQTT_KEEPALIVE = 30
+DIST_UNIT_OBJS = ("r5_battery_autonomy", "r5_vehicle_mileage")
+
 # object_id -> (name, device_class, unit, state_class). Object_ids follow the Topolino
 # R5 naming (minus the legacy _api/_mi suffixes); units are locale-aware (see publish).
 SENSORS = {
@@ -91,35 +106,43 @@ OPTIONAL_ENDPOINTS = {
                  "r5_tyre_pressure_rl", "r5_tyre_pressure_rr"],
 }
 
-# suffix (renault_5/cmd/<key>) -> (object_id, node-segment, name, icon, action endpoint).
-# Published only when supports_endpoint() is true, so a forbidden control is never shown.
+# object_id -> (name, icon, action endpoint). Published only when supports_endpoint() is true,
+# so a forbidden control is never shown. The discovery node segment + object_id derive from the
+# object_id; the command suffix is object_id.removeprefix("r5_") unless remapped below.
 ACTION_BUTTONS = {
-    "charge_start": ("r5_charge_start", "charge_start", "Start Charging", "mdi:ev-station", "actions/charge-start"),
-    "lights":       ("r5_flash_lights", "flash_lights", "Flash Lights", "mdi:car-light-high", "actions/lights-start"),
-    "horn":         ("r5_sound_horn", "sound_horn", "Sound Horn", "mdi:bullhorn", "actions/horn-start"),
-    "hvac_start":   ("r5_start_air_conditioner", "start_air_conditioner", "Start Air Conditioner", "mdi:air-conditioner", "actions/hvac-start"),
-    "hvac_stop":    ("r5_stop_air_conditioner", "stop_air_conditioner", "Stop Air Conditioner", "mdi:fan-off", "actions/hvac-stop"),
-    "refresh_location": ("r5_refresh_location", "refresh_location", "Refresh Location", "mdi:crosshairs-gps", "actions/refresh-location"),
+    "r5_charge_start":          ("Start Charging", "mdi:ev-station", "actions/charge-start"),
+    "r5_flash_lights":          ("Flash Lights", "mdi:car-light-high", "actions/lights-start"),
+    "r5_sound_horn":            ("Sound Horn", "mdi:bullhorn", "actions/horn-start"),
+    "r5_start_air_conditioner": ("Start Air Conditioner", "mdi:air-conditioner", "actions/hvac-start"),
+    "r5_stop_air_conditioner":  ("Stop Air Conditioner", "mdi:fan-off", "actions/hvac-stop"),
+    "r5_refresh_location":      ("Refresh Location", "mdi:crosshairs-gps", "actions/refresh-location"),
+}
+# object_id -> command suffix, where the command name differs from the object_id's short form.
+# charge_start / refresh_location need none (cmd == short). Consumed by the core mqtt seam.
+BUTTON_CMD_OVERRIDES = {
+    "r5_flash_lights": "lights",
+    "r5_sound_horn": "horn",
+    "r5_start_air_conditioner": "hvac_start",
+    "r5_stop_air_conditioner": "hvac_stop",
 }
 
 # Writable charge-limit controls. State comes from the poll's soc-levels read (data key =
 # object_id without the r5_ prefix); a slider move writes via set_battery_soc(). Gated on
-# SOC_ENDPOINT, so a model that rejects the write never ships the control.
-# object_id -> (name, icon, role, min, max, step); role ("min"/"target") selects the arg.
+# SOC_ENDPOINT, so a model that rejects the write never ships the control. (name, icon, min,
+# max, step); NUMBER_ROLES maps each object_id to its set_battery_soc arg ("min"/"target").
 SOC_ENDPOINT = "soc-levels"
-# Authoritative recent-charge-sessions endpoint (renault_api get_charges). Supported by the
-# R5 (R5E1VE) and A290 (A5E1AE) in _VEHICLE_ENDPOINTS; probed at startup so a model that
-# forbids it falls back to the live-inferred Last Charge instead. (charge-history is forbidden
-# on both, so only charges is used.)
-CHARGES_ENDPOINT = "charges"
+# (CHARGES_ENDPOINT — the authoritative recent-charge-sessions endpoint — moved to
+# renault_ha_core.charge with the reconciliation logic; it's identical across models. main.py
+# imports it from there for the endpoint-support probe.)
 # The refresh-location action endpoint. Names the ACTION_BUTTONS entry that triggers a GPS
 # refresh; the poller gates both the discovery button and the command on it (and on the
 # location opt-out), so it's shared between the control layer and the MQTT discovery layer.
 REFRESH_LOCATION_EP = "actions/refresh-location"
 NUMBERS = {
-    "r5_soc_min_target": ("SOC Min Target", "mdi:battery-arrow-down", "min",    15, 45,  5),
-    "r5_soc_max_target": ("SOC Max Target", "mdi:battery-arrow-up",   "target", 55, 100, 5),
+    "r5_soc_min_target": ("SOC Min Target", "mdi:battery-arrow-down", 15, 45, 5),
+    "r5_soc_max_target": ("SOC Max Target", "mdi:battery-arrow-up", 55, 100, 5),
 }
+NUMBER_ROLES = {"r5_soc_min_target": "min", "r5_soc_max_target": "target"}
 
 # Sensor object_ids a previous version published but no longer ships. Their retained
 # discovery config is cleared on startup so upgraded installs don't keep a dead entity.

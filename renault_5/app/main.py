@@ -30,26 +30,42 @@ import sys
 import time
 
 import aiohttp
-import config
+import catalog
 import deploy
-import mqtt
 from aiohttp import web
 from catalog import (
     ACTION_BUTTONS,
-    CHARGES_ENDPOINT,
+    ENV_PREFIX,
+    NUMBER_ROLES,
     NUMBERS,
     OBJ_PREFIX,
     OPTIONAL_ENDPOINTS,
     REFRESH_LOCATION_EP,
     SOC_ENDPOINT,
 )
-from charge import resolve_last_charge, update_charge_session
-from config import _RedactingFilter, cfg, redact
-from debug import maybe_dump_api
-from mqtt import ATTR_TOPIC, AVAIL_TOPIC, STATE_TOPIC, TRACKER_STATE_TOPIC
 from renault_api.kamereon.enums import ChargeState, PlugState
 from renault_api.renault_client import RenaultClient
-from util import _num, iso, now_ts
+from renault_ha_core import config, mqtt
+from renault_ha_core.charge import CHARGES_ENDPOINT, resolve_last_charge, update_charge_session
+from renault_ha_core.config import _RedactingFilter, cfg, redact
+from renault_ha_core.debug import maybe_dump_api
+from renault_ha_core.parse import (
+    _bool_on,
+    _charge_schedule_fields,
+    _dist,
+    _enum_label,
+    _find_precond,
+    _hvac_schedule_fields,
+)
+from renault_ha_core.util import _num, iso, now_ts
+
+# Inject this model's env-var prefix into the shared core's redaction net before anything is
+# logged, so config.redact / _config_secrets mask this add-on's configured VIN / account_id /
+# username / password. Set at import time (the add-on's own suite asserts the wiring).
+config.ENV_PREFIX = ENV_PREFIX
+# Hand the shared MQTT seam this model's catalog + identity (NODE / DEVICE / topics / discovery
+# tables). Must follow the ENV_PREFIX injection above — configure() reads PUBLISH_LOCATION under it.
+mqtt.configure(catalog)
 
 LOG = logging.getLogger("renault_5")
 
@@ -125,102 +141,6 @@ def save_state(state):
         os.replace(tmp, STATE_FILE)   # atomic: a kill mid-write never corrupts the state file
     except OSError as err:
         LOG.warning("Could not persist state: %s", err)
-
-
-KM_TO_MI = 0.621371
-
-
-def _mi(km):
-    v = _num(km)
-    return round(v * KM_TO_MI, 1) if v is not None else None
-
-
-def _dist(km, unit):
-    """Convert a km value to the locale unit ('mi' or 'km')."""
-    return _mi(km) if unit == "mi" else _num(km)
-
-
-def _bool_on(v):
-    return "on" if v in (True, "true", "True", "on", "ON", 1, "1") else "off"
-
-
-def _find_precond(obj, _depth=0):
-    """Locate the dict holding preconditioning* fields in the ev/settings payload,
-    regardless of how the kcm response nests it."""
-    if not isinstance(obj, dict) or _depth > 4:
-        return {}
-    if any(k.startswith("preconditioning") for k in obj):
-        return obj
-    for key in ("attributes", "data", "ev"):
-        found = _find_precond(obj.get(key), _depth + 1)
-        if found:
-            return found
-    return {}
-
-
-def _fmt_hhmm(v):
-    """A bare 'HHMM' charge time (the KCM format) -> 'HH:MM'; anything else returned as-is."""
-    if v is None:
-        return None
-    s = str(v).strip()
-    return f"{s[:2]}:{s[2:]}" if s.isdigit() and len(s) == 4 else (s or None)
-
-
-def _charge_schedule_fields(settings):
-    """KCM ev/settings charge-schedule summary — the chargeModeRq / chargeTimeStart /
-    chargeDuration siblings of the preconditioning* fields (field names per renault-api's KCM
-    charge-schedule CLI). Absent fields -> None, so a car that doesn't populate them just shows
-    the sensors as unavailable rather than erroring. No extra API call: reuses the poll's
-    existing get_charge_schedule() payload."""
-    mode = settings.get("chargeModeRq")
-    return {
-        "charge_schedule_mode": mode.replace("_", " ").title() if isinstance(mode, str) and mode else None,
-        "scheduled_charge_start": _fmt_hhmm(settings.get("chargeTimeStart")),
-        "scheduled_charge_duration": _num(settings.get("chargeDuration")),
-    }
-
-
-_HVAC_DAYS = (("monday", "Mon"), ("tuesday", "Tue"), ("wednesday", "Wed"), ("thursday", "Thu"),
-              ("friday", "Fri"), ("saturday", "Sat"), ("sunday", "Sun"))
-
-
-def _fmt_ready(t):
-    """Normalise an HVAC readyAtTime ('T07:00Z' / '0700' / '07:00:00') to 'HH:MM'."""
-    if t is None:
-        return None
-    s = str(t).strip().lstrip("T").rstrip("Z")
-    if len(s) >= 5 and s[2] == ":":
-        return s[:5]
-    return _fmt_hhmm(s)
-
-
-def _hvac_schedule_fields(settings):
-    """Summarise get_hvac_settings() into the climate mode + the active schedule's per-day
-    ready times ('Mon 07:00, Fri 08:00'). Reads the typed HvacSettingsData defensively
-    (getattr), so a stub / None / no active schedule just yields None values."""
-    mode = getattr(settings, "mode", None)
-    out = {
-        "climate_schedule_mode": mode.replace("_", " ").title() if isinstance(mode, str) and mode else None,
-        "climate_ready_time": None,
-    }
-    active = next((s for s in (getattr(settings, "schedules", None) or [])
-                   if getattr(s, "activated", False)), None)
-    if active is not None:
-        parts = []
-        for day, abbr in _HVAC_DAYS:
-            ds = getattr(active, day, None)
-            t = _fmt_ready(getattr(ds, "readyAtTime", None)) if ds is not None else None
-            if t:
-                parts.append(f"{abbr} {t}")
-        out["climate_ready_time"] = ", ".join(parts) or None
-    return out
-
-
-def _enum_label(enum_val, labels, raw):
-    """Friendly label for a decoded enum; fall back to a prettified name, then raw."""
-    if enum_val is not None:
-        return labels.get(enum_val, enum_val.name.replace("_", " ").title())
-    return "Unknown" if raw is None else f"Unknown ({raw})"
 
 
 def charging_status_label(battery):
@@ -300,7 +220,7 @@ async def detect_supported(vsession):
     never gets a dead control button.
     """
     supported = set(OPTIONAL_ENDPOINTS)
-    action_eps = {ep for _oid, _node, _name, _icon, ep in ACTION_BUTTONS.values()}
+    action_eps = {ep for _name, _icon, ep in ACTION_BUTTONS.values()}
     try:
         vehicle = await vsession.vehicle()
         for ep in list(OPTIONAL_ENDPOINTS):
@@ -350,12 +270,12 @@ _last_command = {}
 
 # Command-topic suffixes that trigger a location refresh — rejected when location publishing is
 # off (the button is also cleared in publish_discovery), so an opted-out install can't refresh.
-LOCATION_CMDS = {suffix for suffix, vals in ACTION_BUTTONS.items() if vals[-1] == REFRESH_LOCATION_EP}
+LOCATION_CMDS = {oid.removeprefix(OBJ_PREFIX) for oid, vals in ACTION_BUTTONS.items()
+                 if vals[-1] == REFRESH_LOCATION_EP}
 
 # Command-topic suffixes that map to writable numbers, and each one's set_battery_soc role.
 NUMBER_CMDS = {oid.removeprefix(OBJ_PREFIX) for oid in NUMBERS}
-_NUMBER_ROLE = {oid.removeprefix(OBJ_PREFIX): role
-                for oid, (_n, _i, role, _mn, _mx, _s) in NUMBERS.items()}
+_NUMBER_ROLE = {oid.removeprefix(OBJ_PREFIX): role for oid, role in NUMBER_ROLES.items()}
 
 _soc_lock = None
 _soc_lock_loop = None
@@ -621,6 +541,7 @@ async def main():
     state = load_state()
     vsession = VehicleSession(locale)
     supported = await detect_supported(vsession)
+    mqtt._MQTT_CTX["supported"], mqtt._MQTT_CTX["dist_unit"] = supported, dist_unit
     _LATEST["supported"] = sorted(supported)
     _LATEST["dist_unit"] = dist_unit  # so the status panel can label range/mileage
     client = mqtt.mqtt_connect()
@@ -637,12 +558,12 @@ async def main():
             state["last_success"] = now_ts()
             data["api_auth_failure"] = "off"
             data["data_stale"] = "off"
-            client.publish(STATE_TOPIC, json.dumps(data), retain=True)
+            client.publish(mqtt.STATE_TOPIC, json.dumps(data), retain=True)
             _LATEST.update(ok=True, last_poll=iso(now_ts()), data=data)
             if location_attrs:
-                client.publish(ATTR_TOPIC, json.dumps(location_attrs), retain=True)
-                client.publish(TRACKER_STATE_TOPIC, "online", retain=True)
-            client.publish(AVAIL_TOPIC, "online", retain=True)
+                client.publish(mqtt.ATTR_TOPIC, json.dumps(location_attrs), retain=True)
+                client.publish(mqtt.TRACKER_STATE_TOPIC, "online", retain=True)
+            client.publish(mqtt.AVAIL_TOPIC, "online", retain=True)
             save_state(state)
             fails = 0
             LOG.info("Published in %.1fs: %s%% battery, plug=%s, charging=%s, suspect=%s",
@@ -659,11 +580,11 @@ async def main():
             # message text for gigya/library errors that aren't raised as ClientResponseError.
             auth = (isinstance(err, aiohttp.ClientResponseError) and err.status in (401, 403)) or \
                 any(s in str(err).lower() for s in ("login", "password", "credential", "401", "403"))
-            client.publish(STATE_TOPIC, json.dumps({
+            client.publish(mqtt.STATE_TOPIC, json.dumps({
                 "api_auth_failure": "on" if auth else "off",
                 "data_stale": "on" if stale else "off",
             }), retain=True)
-            client.publish(AVAIL_TOPIC, "online", retain=True)
+            client.publish(mqtt.AVAIL_TOPIC, "online", retain=True)
             _LATEST.update(ok=False, last_poll=iso(now_ts()), error=redact(err))
             _LATEST["data"].update(api_auth_failure="on" if auth else "off",
                                    data_stale="on" if stale else "off")
@@ -677,7 +598,7 @@ async def main():
     LOG.info("Shutting down")
     await vsession.close()
     await health.cleanup()
-    client.publish(AVAIL_TOPIC, "offline", retain=True)
+    client.publish(mqtt.AVAIL_TOPIC, "offline", retain=True)
     client.loop_stop()
     client.disconnect()
 
