@@ -6,7 +6,7 @@ contract. The config/util/debug/charge/mqtt seams are covered in their own test 
 import catalog
 import main
 from renault_api.kamereon.enums import ChargeState, PlugState
-from renault_ha_core import charge
+from renault_mqtt import charge
 
 
 class Battery:

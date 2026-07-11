@@ -2,7 +2,7 @@
 
 ## 1.3.0
 
-- **Internal: adopt the shared `renault-ha-core` package.** The code this add-on runs in
+- **Internal: adopt the shared `renault-mqtt` package.** The code this add-on runs in
   common with its Alpine A290 sibling (config/redaction, MQTT discovery, charge-session
   reconciliation, the API debug dump, and the pure parse/format helpers) now lives in one
   installed package instead of being hand-mirrored between the two repos. No user-facing

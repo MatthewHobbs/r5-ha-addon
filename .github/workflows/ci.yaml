@@ -76,9 +76,9 @@ jobs:
           python3 -m pip install --quiet -r renault_5/app/requirements.txt
           python3 -m pip install --quiet pytest pytest-cov
           CORE_REF="$(sed -n 's/^ARG CORE_REF=//p' renault_5/Dockerfile)"
-          echo "renault-ha-core pinned to ${CORE_REF}"
+          echo "renault-mqtt pinned to ${CORE_REF}"
           python3 -m pip install --quiet --no-deps \
-            "renault-ha-core @ git+https://github.com/MatthewHobbs/renault-ha-core@${CORE_REF}"
+            "renault-mqtt @ git+https://github.com/MatthewHobbs/renault-mqtt@${CORE_REF}"
 
       - name: pytest
         run: python3 -m pytest renault_5/tests -q --cov=renault_5/app --cov-report=term-missing --cov-fail-under=90
