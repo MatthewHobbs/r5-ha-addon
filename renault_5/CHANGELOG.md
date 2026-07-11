@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.1
+
+- **Internal: the shared package was renamed `renault-ha-core` → `renault-mqtt`** (named for what
+  it does — publish Renault telemetry to MQTT for Home Assistant). This add-on now installs it
+  from the renamed repository/package. No user-facing behaviour change — every entity, `object_id`,
+  MQTT topic, and command topic is identical to 1.3.0 (verified by a byte-for-byte discovery diff).
+
 ## 1.3.0
 
 - **Internal: adopt the shared `renault-mqtt` package.** The code this add-on runs in
