@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.2
+
+- **Available Energy now populated ([#30](https://github.com/MatthewHobbs/r5-ha-addon/issues/30)).**
+  The R5's battery data doesn't include `batteryAvailableEnergy`, so the *Available Energy* sensor
+  was always unknown. It now falls back to an estimate from the battery SoC × your configured
+  `battery_capacity_kwh`. (Shared fix via the renault-mqtt package; mirrored in the A290.)
+
 ## 1.3.1
 
 - **Internal: the shared package was renamed `renault-ha-core` → `renault-mqtt`** (named for what

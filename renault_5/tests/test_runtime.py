@@ -496,6 +496,7 @@ def test_poll_once_charging_and_no_gps_fix():
     data, loc = asyncio.run(main.poll_once(_Sess(_ChargingVehicle()), {}, 52.0, set(), "km"))
     assert data["charging"] == "on"
     assert data["charger_status"] == "Charging"
+    assert data["available_energy"] == 28.0               # reported by the car, used verbatim
     assert data["charging_flap_status"] == "Open: Plugged In"
     assert data["battery_last_activity"] is not None      # iso(now_ts()) fallback
     assert data["charge_schedule_mode"] == "Scheduled Charge"   # from the KCM ev/settings payload
@@ -594,6 +595,7 @@ def test_poll_once_survives_every_secondary_endpoint_failing():
         main.poll_once(_Sess(_AllSecondaryFail()), {}, 52.0, {"pressure", "charge-mode"}, "km"))
     # battery-derived keys still present; every degraded endpoint simply omitted
     assert data["battery_level"] == 70
+    assert data["available_energy"] == 36.4   # 70% SoC × 52 kWh — the R5 omits batteryAvailableEnergy
     assert data["charger_plug_status"] == "Disconnected"
     assert "vehicle_mileage" not in data and "cabin_temperature" not in data
     assert "soc_max_target" not in data and "tyre_pressure_fl" not in data
