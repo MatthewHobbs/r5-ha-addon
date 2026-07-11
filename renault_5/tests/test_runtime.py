@@ -1,20 +1,23 @@
 """Runtime-path tests for the Renault 5 poller and dashboard deployer.
 
-Complements test_main.py (pure helpers / discovery contract) by exercising the
-side-effecting paths: the MQTT plumbing and callbacks, the cached-login failure
-modes, command dispatch, the debug dump, account resolution, the main() poll
-loop (success and failure), the extra poll_once endpoint branches, and the whole
-deploy.py WebSocket flow. Tests stay synchronous and drive coroutines with
-asyncio.run (so the suite needs only pytest, not pytest-asyncio).
+Complements test_main.py (pure helpers) by exercising the side-effecting paths that stay in
+main: the cached-login failure modes, endpoint-support detection, command dispatch, account
+resolution, the main() poll loop (success and failure), the extra poll_once endpoint branches,
+and the whole deploy.py WebSocket flow. The config/util/debug/charge/mqtt seams are covered in
+their own test modules (only the retargeted monkeypatch targets appear here). Tests stay
+synchronous and drive coroutines with asyncio.run (so the suite needs only pytest, not
+pytest-asyncio).
 """
 import asyncio
 import json
-import logging
 import os
 import tempfile
 
+import charge
+import config
 import deploy
 import main
+import mqtt
 import pytest
 from renault_api.kamereon.enums import ChargeState, PlugState
 
@@ -26,12 +29,6 @@ def _obj(**attrs):
 # --------------------------------------------------------------------------- #
 # tiny helpers
 # --------------------------------------------------------------------------- #
-def test_now_ts_and_iso():
-    assert isinstance(main.now_ts(), float)
-    assert main.iso(0) is None
-    assert main.iso(1000).startswith("1970-01-01")
-
-
 def test_setup_logging_runs(monkeypatch):
     monkeypatch.setenv("R5_LOG_LEVEL", "debug")
     main.setup_logging()        # exercises the level lookup; basicConfig is a no-op under pytest
@@ -100,64 +97,8 @@ class _FakeClient:
         self.disconnected = True
 
 
-def test_on_message_dispatches(monkeypatch):
-    captured = {}
-    monkeypatch.setattr(main, "_LOOP", object())
-    monkeypatch.setattr(main.asyncio, "run_coroutine_threadsafe",
-                        lambda coro, loop: captured.update(coro=coro, loop=loop))
-    monkeypatch.setattr(main, "run_command", lambda cmd, payload="": ("CO", cmd, payload))
-    main._on_message(None, None, _obj(topic=main.CMD_PREFIX + "horn", payload=b""))
-    assert captured["coro"] == ("CO", "horn", "")
-    main._on_message(None, None, _obj(topic=main.CMD_PREFIX + "soc_max_target", payload=b"90"))
-    assert captured["coro"] == ("CO", "soc_max_target", "90")
-
-
-def test_on_message_ignores_non_command_and_no_loop(monkeypatch):
-    fired = {"n": 0}
-    monkeypatch.setattr(main.asyncio, "run_coroutine_threadsafe",
-                        lambda *a, **k: fired.__setitem__("n", fired["n"] + 1))
-    monkeypatch.setattr(main, "_LOOP", object())
-    main._on_message(None, None, _obj(topic="some/other/topic"))    # wrong prefix
-    monkeypatch.setattr(main, "_LOOP", None)
-    main._on_message(None, None, _obj(topic=main.CMD_PREFIX + "horn"))  # loop not ready
-    assert fired["n"] == 0
-
-
-def test_on_connect_subscribes_and_announces():
-    c = _FakeClient()
-    main._on_connect(c, None, None, 0)
-    assert c.subs == [f"{main.CMD_PREFIX}#"]
-    assert (main.AVAIL_TOPIC, "online") in c.pubs
-    refused = _FakeClient()
-    main._on_connect(refused, None, None, 5)
-    assert refused.subs == [] and refused.pubs == []
-
-
-def test_on_disconnect_logs_both_paths():
-    main._on_disconnect(None, None, None, 0)   # clean
-    main._on_disconnect(None, None, None, 1)   # unexpected (warns)
-
-
-def test_mqtt_connect(monkeypatch):
-    holder = {}
-
-    def factory(*a, **k):
-        c = _FakeClient(*a, **k)
-        holder["c"] = c
-        return c
-
-    monkeypatch.setattr(main.mqtt, "Client", factory)
-    monkeypatch.setenv("MQTT_USER", "u")
-    monkeypatch.setenv("MQTT_PASS", "p")
-    monkeypatch.setenv("MQTT_HOST", "broker")
-    monkeypatch.setenv("MQTT_PORT", "1884")
-    client = main.mqtt_connect()
-    c = holder["c"]
-    assert client is c
-    assert c.creds == ("u", "p")
-    assert c.conn == ("broker", 1884, 30)
-    assert c.delay == {"min_delay": 1, "max_delay": 120}
-    assert c.started is True
+# (MQTT callbacks + connect are covered in test_mqtt.py; _FakeClient stays here because the
+# main() loop tests below wire it in via _wire_main.)
 
 
 # --------------------------------------------------------------------------- #
@@ -460,94 +401,7 @@ def test_numbers_not_debounced(monkeypatch):
     assert v.soc_set == (20, 75)
 
 
-# --------------------------------------------------------------------------- #
-# debug API dump
-# --------------------------------------------------------------------------- #
-def test_dump_api_redacts_secrets_and_never_raises(monkeypatch, caplog):
-    monkeypatch.setenv("R5_VIN", "VF1SECRET")
-    monkeypatch.delenv("R5_ACCOUNT_ID", raising=False)
-    monkeypatch.setenv("R5_USERNAME", "driver@example.com")
-
-    class V:
-        async def get_details(self):
-            return _obj(raw_data={"vin": "VF1SECRET", "model": "R5 E-Tech"})
-
-        async def get_battery_status(self):
-            return {"batteryLevel": 80, "vin": "VF1SECRET"}
-
-        async def get_cockpit(self):
-            return [_obj(raw_data={"totalMileage": 100})]
-
-        async def get_hvac_status(self):
-            raise RuntimeError("hvac boom")
-
-    with caplog.at_level(logging.WARNING, logger="renault_5"):
-        asyncio.run(main.dump_api(V()))
-    assert "API DEBUG DUMP" in caplog.text
-    assert "VF1SECRET" not in caplog.text             # secret scrubbed everywhere
-    assert "R5 E-Tech" in caplog.text                 # telemetry kept
-    assert "hvac boom" in caplog.text                 # endpoint error captured, not fatal
-
-
-def test_dump_api_probes_ranged_and_alerts(monkeypatch, caplog):
-    monkeypatch.setenv("R5_VIN", "VF1SECRET")
-    captured = {}
-
-    class V:
-        async def get_charges(self, start, end):
-            captured["window"] = (start, end)
-            return [_obj(raw_data={"chargeEnergyRecovered": 12})]
-
-        async def get_charge_history(self, start, end, period):
-            raise RuntimeError("forbidden")           # exercises the error branch
-
-        async def get_full_endpoint(self, key):
-            captured["alerts_key"] = key
-            return "/resolved/alerts"
-
-        async def http_get(self, path):
-            captured["alerts_path"] = path
-            return {"alerts": ["x"]}
-
-    with caplog.at_level(logging.WARNING, logger="renault_5"):
-        asyncio.run(main.dump_api(V()))
-    start, end = captured["window"]
-    assert (end - start).days == main._DEBUG_RANGE_DAYS   # charges window ~30 days
-    assert captured["alerts_key"] == "alerts"             # alerts path resolved by key
-    assert captured["alerts_path"] == "/resolved/alerts"  # then raw-GET
-    assert "chargeEnergyRecovered" in caplog.text         # charges payload captured
-
-
-def test_maybe_dump_api_runs_once_per_restart(monkeypatch):
-    main._DEBUG_STATE["dumped"] = False
-    monkeypatch.setenv("R5_DEBUG_DUMP", "true")
-    calls = {"n": 0}
-
-    async def fake_dump(v):
-        calls["n"] += 1
-
-    monkeypatch.setattr(main, "dump_api", fake_dump)
-
-    async def scenario():
-        await main.maybe_dump_api("veh")
-        await main.maybe_dump_api("veh")
-
-    asyncio.run(scenario())
-    assert calls["n"] == 1
-    main._DEBUG_STATE["dumped"] = False
-
-
-def test_maybe_dump_api_skips_when_disabled(monkeypatch):
-    main._DEBUG_STATE["dumped"] = False
-    monkeypatch.setenv("R5_DEBUG_DUMP", "false")
-    calls = {"n": 0}
-
-    async def fake_dump(v):
-        calls["n"] += 1
-
-    monkeypatch.setattr(main, "dump_api", fake_dump)
-    asyncio.run(main.maybe_dump_api("veh"))
-    assert calls["n"] == 0
+# (The debug API dump — dump_api / maybe_dump_api / _debug_redact — is covered in test_debug.py.)
 
 
 # --------------------------------------------------------------------------- #
@@ -567,9 +421,9 @@ def test_resolve_account_autodiscovers_myrenault(monkeypatch):
                                   _obj(accountType="MYRENAULT", accountId="ACC-9")])
 
     assert asyncio.run(main.resolve_account(Client())) == "ACC-9"
-    # the discovered id is captured so redact() can mask it in later error URLs
-    assert main._DISCOVERED_ACCOUNT_ID == "ACC-9"
-    assert "ACC-9" not in main.redact("boom /accounts/ACC-9/vehicles/V/x")
+    # the discovered id is captured (in the config seam) so redact() can mask it in later URLs
+    assert config._DISCOVERED_ACCOUNT_ID == "ACC-9"
+    assert "ACC-9" not in config.redact("boom /accounts/ACC-9/vehicles/V/x")
 
 
 def test_resolve_account_raises_when_no_myrenault(monkeypatch):
@@ -707,6 +561,7 @@ class _AllSecondaryFail:
 
 def test_poll_once_uses_charges_endpoint_when_supported(monkeypatch):
     monkeypatch.setattr(main, "now_ts", lambda: 1000.0)
+    monkeypatch.setattr(charge, "now_ts", lambda: 1000.0)   # charges_last_fetch is stamped in charge's ns
 
     class _ChargesVehicle(_ChargingVehicle):
         async def get_charges(self, start, end):
@@ -798,7 +653,9 @@ def _wire_main(monkeypatch, tmp_path, poll):
         monkeypatch.setenv(k, v)
     monkeypatch.setattr(main, "STATE_FILE", str(tmp_path / "state.json"))
     fc = _FakeClient()
-    monkeypatch.setattr(main, "mqtt_connect", lambda: fc)
+    # main() calls these qualified as mqtt.mqtt_connect() / mqtt.publish_discovery().
+    monkeypatch.setattr(mqtt, "mqtt_connect", lambda: fc)
+    monkeypatch.setattr(mqtt, "publish_discovery", lambda *a, **k: None)
 
     async def fake_detect(vs):
         return set(main.OPTIONAL_ENDPOINTS)
@@ -1133,7 +990,7 @@ def test_detect_supported_tolerates_action_probe_error():
 # publish_location opt-out + error-snapshot redaction (mirrors the A290 twin)
 # --------------------------------------------------------------------------- #
 def test_poll_once_skips_location_when_publish_disabled(monkeypatch):
-    monkeypatch.setattr(main, "PUBLISH_LOCATION", False)
+    monkeypatch.setattr(mqtt, "PUBLISH_LOCATION", False)
 
     class _NoLoc(_ChargingVehicle):
         async def get_location(self):
@@ -1142,31 +999,6 @@ def test_poll_once_skips_location_when_publish_disabled(monkeypatch):
     data, attrs = asyncio.run(main.poll_once(_Sess(_NoLoc()), {}, 52.0, set(), "km"))
     assert attrs is None                       # nothing published
     assert "gps_last_activity" not in data     # and no location-derived field set
-
-
-def test_publish_discovery_location_enabled_vs_disabled(monkeypatch):
-    class C:
-        def __init__(self):
-            self.pub = {}
-
-        def publish(self, t, p, retain=False):
-            self.pub[t] = p
-
-    tracker_topic = f"{main.DISCOVERY_PREFIX}/device_tracker/{main.NODE}/location/config"
-
-    # enabled (default): a populated device_tracker config is published
-    monkeypatch.setattr(main, "PUBLISH_LOCATION", True)
-    c = C()
-    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS), "km")
-    assert '"source_type": "gps"' in c.pub[tracker_topic]
-
-    # disabled: the tracker is cleared AND the retained GPS topics are wiped off the broker
-    monkeypatch.setattr(main, "PUBLISH_LOCATION", False)
-    c = C()
-    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS), "km")
-    assert c.pub[tracker_topic] == ""
-    assert c.pub[main.ATTR_TOPIC] == ""
-    assert c.pub[main.TRACKER_STATE_TOPIC] == ""
 
 
 def test_main_redacts_secret_in_error_snapshot(monkeypatch, tmp_path):
@@ -1183,34 +1015,8 @@ def test_main_redacts_secret_in_error_snapshot(monkeypatch, tmp_path):
     assert "***" in main._LATEST.get("error", "")
 
 
-def test_refresh_location_button_cleared_when_location_disabled(monkeypatch):
-    class C:
-        def __init__(self):
-            self.pub = {}
-
-        def publish(self, t, p, retain=False):
-            self.pub[t] = p
-
-    (cmd,) = tuple(main.LOCATION_CMDS)                 # the location-refresh command suffix
-    _oid, node, _name, _icon, _ep = main.ACTION_BUTTONS[cmd]
-    btn_topic = f"{main.DISCOVERY_PREFIX}/button/{main.NODE}/{node}/config"
-    eps = set(main.OPTIONAL_ENDPOINTS) | {main.REFRESH_LOCATION_EP}
-
-    # location on: the refresh-location button is published
-    monkeypatch.setattr(main, "PUBLISH_LOCATION", True)
-    c = C()
-    main.publish_discovery(c, eps, "km")
-    assert "command_topic" in c.pub[btn_topic]
-
-    # location off: the button is cleared even though the endpoint is supported
-    monkeypatch.setattr(main, "PUBLISH_LOCATION", False)
-    c = C()
-    main.publish_discovery(c, eps, "km")
-    assert c.pub[btn_topic] == ""
-
-
 def test_run_command_rejects_refresh_location_when_location_disabled(monkeypatch):
-    monkeypatch.setattr(main, "PUBLISH_LOCATION", False)
+    monkeypatch.setattr(mqtt, "PUBLISH_LOCATION", False)
     called = {"n": 0}
 
     async def fake_login(ws, locale):

@@ -28,37 +28,31 @@ import os
 import signal
 import sys
 import time
-from datetime import datetime, timedelta, timezone
 
 import aiohttp
+import config
 import deploy
-import paho.mqtt.client as mqtt
+import mqtt
 from aiohttp import web
 from catalog import (
     ACTION_BUTTONS,
-    BINARY_SENSORS,
     CHARGES_ENDPOINT,
-    DEFAULT_DISABLED_SENSORS,
-    ICONS,
     NUMBERS,
     OBJ_PREFIX,
     OPTIONAL_ENDPOINTS,
-    RETIRED_SENSORS,
-    SENSORS,
+    REFRESH_LOCATION_EP,
     SOC_ENDPOINT,
 )
+from charge import resolve_last_charge, update_charge_session
+from config import _RedactingFilter, cfg, redact
+from debug import maybe_dump_api
+from mqtt import ATTR_TOPIC, AVAIL_TOPIC, STATE_TOPIC, TRACKER_STATE_TOPIC
 from renault_api.kamereon.enums import ChargeState, PlugState
 from renault_api.renault_client import RenaultClient
+from util import _num, iso, now_ts
 
 LOG = logging.getLogger("renault_5")
 
-DISCOVERY_PREFIX = "homeassistant"
-NODE = "renault_5"
-STATE_TOPIC = f"{NODE}/state"
-ATTR_TOPIC = f"{NODE}/location/attributes"
-TRACKER_STATE_TOPIC = f"{NODE}/location/state"
-AVAIL_TOPIC = f"{NODE}/availability"
-CMD_PREFIX = f"{NODE}/cmd/"          # button commands: renault_5/cmd/<suffix>
 STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
 # Decimal places the published GPS is rounded to before it goes on the retained MQTT topic
 # (privacy — coarsens an otherwise full-precision home location). 4 dp ≈ 11 m. Default 4.
@@ -67,35 +61,8 @@ _GPS_P = os.environ.get("R5_GPS_PRECISION", "4").strip()
 GPS_PRECISION = max(1, min(6, int(_GPS_P))) if _GPS_P.isdigit() else 4
 
 
-def _opt_flag(name, default):
-    """Read a boolean add-on option, tolerating bashio exporting '', 'null', or unset on an
-    upgraded install (in which case the default applies)."""
-    v = os.environ.get(name)
-    if v is None or v.strip().lower() in ("", "null"):
-        return default
-    return v.strip().lower() in ("true", "1", "on")
-
-
-# Publish the car's GPS as a device_tracker + retained location topics? Default on. When off,
-# no location is fetched or published and any previously-retained GPS topics are cleared, so a
-# privacy-minded user can run the add-on with no location footprint on the broker at all.
-PUBLISH_LOCATION = _opt_flag("R5_PUBLISH_LOCATION", True)
-# The location-refresh action's endpoint. When location publishing is off we also suppress this
-# button + its MQTT command, so an opted-out install can't trigger a location refresh at all.
-REFRESH_LOCATION_EP = "actions/refresh-location"
-
-# Device name "R5" is deliberate: HA builds entity_ids from slug(device + entity name) and
-# ignores object_id, so this yields sensor.r5_<name> (what the dashboards expect).
-DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
 VERSION = os.environ.get("R5_VERSION", "dev")  # injected via the Dockerfile (BUILD_VERSION)
 
-_LOOP = None  # asyncio loop, set in main(), used to bridge paho callbacks
-# The account id auto-discovered by resolve_account() when R5_ACCOUNT_ID is left blank. Held
-# here so redact() can mask it in error strings (the Kamereon URL embeds it) even though it was
-# never a configured value.
-_DISCOVERED_ACCOUNT_ID = None
-
-HOME_POWER_MAX_KW = 7.4
 # Friendly labels for the ChargeState/PlugState enums (every member mapped, so float
 # sub-states never surface raw). Dashboards key on "Charging"/"Connected"/"Disconnected".
 CHARGE_STATUS_LABELS = {
@@ -130,10 +97,6 @@ PLUG_MIN_AGE = 600      # ignore baselines younger than 10 min
 PLUG_MAX_AGE = 12 * 3600  # ...or older than 12 h
 
 
-def cfg(name, default=""):
-    return os.environ.get(name, default)
-
-
 def setup_logging():
     level = cfg("R5_LOG_LEVEL", "info").upper()
     logging.basicConfig(level=getattr(logging, level, logging.INFO),
@@ -143,14 +106,6 @@ def setup_logging():
     redactor = _RedactingFilter()
     for handler in logging.getLogger().handlers:
         handler.addFilter(redactor)
-
-
-def now_ts():
-    return time.time()
-
-
-def iso(ts):
-    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat() if ts else None
 
 
 def load_state():
@@ -172,140 +127,7 @@ def save_state(state):
         LOG.warning("Could not persist state: %s", err)
 
 
-def _on_message(client, userdata, msg):
-    if _LOOP is not None and msg.topic.startswith(CMD_PREFIX):
-        cmd = msg.topic[len(CMD_PREFIX):]
-        payload = msg.payload.decode(errors="replace") if msg.payload else ""
-        LOG.info("Received command: %s %s", cmd, payload)
-        asyncio.run_coroutine_threadsafe(run_command(cmd, payload), _LOOP)
-
-
-def _on_connect(client, userdata, flags, reason_code, properties=None):
-    # Runs on the initial connect *and* every reconnect: re-subscribe + re-announce online.
-    if reason_code == 0:
-        LOG.info("MQTT connected")
-        client.subscribe(f"{CMD_PREFIX}#")
-        client.publish(AVAIL_TOPIC, "online", retain=True)
-    else:
-        LOG.warning("MQTT connect refused: %s", reason_code)
-
-
-def _on_disconnect(client, userdata, flags, reason_code, properties=None):
-    if reason_code != 0:
-        LOG.warning("MQTT disconnected (%s) — reconnecting", reason_code)
-
-
-def mqtt_connect():
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="renault_5_addon")
-    if cfg("MQTT_USER"):
-        client.username_pw_set(cfg("MQTT_USER"), cfg("MQTT_PASS"))
-    client.will_set(AVAIL_TOPIC, "offline", retain=True)
-    client.on_message = _on_message
-    client.on_connect = _on_connect
-    client.on_disconnect = _on_disconnect
-    client.reconnect_delay_set(min_delay=1, max_delay=120)   # bounded backoff on broker drop
-    LOG.info("Connecting to MQTT %s:%s", cfg("MQTT_HOST"), cfg("MQTT_PORT", "1883"))
-    client.connect(cfg("MQTT_HOST"), int(cfg("MQTT_PORT", "1883") or "1883"), keepalive=30)
-    client.loop_start()
-    return client
-
-
-def publish_discovery(client, supported_eps, dist_unit):
-    skip = {obj for ep, objs in OPTIONAL_ENDPOINTS.items()
-            if ep not in supported_eps for obj in objs}
-    # Clear discovery for unsupported + retired entities (removes ones a previous
-    # version may have published with retain=True).
-    for obj in set(skip) | set(RETIRED_SENSORS):
-        client.publish(f"{DISCOVERY_PREFIX}/sensor/{NODE}/{obj}/config", "", retain=True)
-    published = 0
-    for obj, (name, dev_class, unit, state_class) in SENSORS.items():
-        if obj in skip:
-            continue
-        published += 1
-        if obj in ("r5_battery_autonomy", "r5_vehicle_mileage"):
-            unit = dist_unit   # locale-aware (mi for UK, km elsewhere)
-            if dist_unit == "mi":
-                dev_class = None  # else HA (metric) re-converts our miles back to km
-        conf = {"name": name, "object_id": obj, "unique_id": obj,
-                "state_topic": STATE_TOPIC, "value_template": "{{ value_json.%s }}" % obj.removeprefix(OBJ_PREFIX),
-                "availability_topic": AVAIL_TOPIC, "device": DEVICE}
-        if dev_class:
-            conf["device_class"] = dev_class
-        if unit:
-            conf["unit_of_measurement"] = unit
-        if state_class:
-            conf["state_class"] = state_class
-        if obj in ICONS:
-            conf["icon"] = ICONS[obj]
-        if obj in DEFAULT_DISABLED_SENSORS:
-            conf["enabled_by_default"] = False
-        client.publish(f"{DISCOVERY_PREFIX}/sensor/{NODE}/{obj}/config", json.dumps(conf), retain=True)
-    for obj, (name, dev_class) in BINARY_SENSORS.items():
-        conf = {"name": name, "object_id": obj, "unique_id": obj,
-                "state_topic": STATE_TOPIC, "value_template": "{{ value_json.%s }}" % obj.removeprefix(OBJ_PREFIX),
-                "payload_on": "on", "payload_off": "off",
-                "availability_topic": AVAIL_TOPIC, "device": DEVICE}
-        if dev_class:
-            conf["device_class"] = dev_class
-        if obj in ICONS:
-            conf["icon"] = ICONS[obj]
-        client.publish(f"{DISCOVERY_PREFIX}/binary_sensor/{NODE}/{obj}/config", json.dumps(conf), retain=True)
-    tracker_topic = f"{DISCOVERY_PREFIX}/device_tracker/{NODE}/location/config"
-    if PUBLISH_LOCATION:
-        tracker = {"name": "Location", "object_id": "r5_car_location", "unique_id": "r5_car_location",
-                   "state_topic": TRACKER_STATE_TOPIC, "json_attributes_topic": ATTR_TOPIC,
-                   "availability_topic": AVAIL_TOPIC, "source_type": "gps", "device": DEVICE}
-        client.publish(tracker_topic, json.dumps(tracker), retain=True)
-    else:
-        # Location opt-out: remove the tracker entity and clear any GPS previously retained on
-        # the broker so an earlier fix doesn't linger after the user turns location off.
-        client.publish(tracker_topic, "", retain=True)
-        client.publish(ATTR_TOPIC, "", retain=True)
-        client.publish(TRACKER_STATE_TOPIC, "", retain=True)
-    # Buttons gated on supports_endpoint(): published when supported, else cleared.
-    shipped = []
-    for cmd_suffix, (oid, node, name, icon, ep) in ACTION_BUTTONS.items():
-        topic = f"{DISCOVERY_PREFIX}/button/{NODE}/{node}/config"
-        # Suppress the location-refresh button too when the user has opted out of location.
-        if ep in supported_eps and not (ep == REFRESH_LOCATION_EP and not PUBLISH_LOCATION):
-            conf = {"name": name, "object_id": oid, "unique_id": oid,
-                    "command_topic": f"{CMD_PREFIX}{cmd_suffix}", "availability_topic": AVAIL_TOPIC,
-                    "icon": icon, "device": DEVICE}
-            client.publish(topic, json.dumps(conf), retain=True)
-            shipped.append(node)
-        else:
-            client.publish(topic, "", retain=True)
-    # Writable charge-limit numbers, gated on soc-levels support (else cleared).
-    numbers = []
-    soc_ok = SOC_ENDPOINT in supported_eps
-    for obj, (name, icon, _role, mn, mx, step) in NUMBERS.items():
-        short = obj.removeprefix(OBJ_PREFIX)
-        topic = f"{DISCOVERY_PREFIX}/number/{NODE}/{short}/config"
-        if soc_ok:
-            conf = {"name": name, "object_id": obj, "unique_id": obj,
-                    "state_topic": STATE_TOPIC, "value_template": "{{ value_json.%s }}" % short,
-                    "command_topic": f"{CMD_PREFIX}{short}", "availability_topic": AVAIL_TOPIC,
-                    "min": mn, "max": mx, "step": step, "mode": "slider",
-                    "unit_of_measurement": "%", "device_class": "battery",
-                    "optimistic": True, "icon": icon, "device": DEVICE}
-            client.publish(topic, json.dumps(conf), retain=True)
-            numbers.append(short)
-        else:
-            client.publish(topic, "", retain=True)
-    LOG.info("Published discovery: %d sensors (%d unsupported cleared), %d binary_sensors, "
-             "location=%s, buttons=%s, numbers=%s",
-             published, len(skip), len(BINARY_SENSORS),
-             "on" if PUBLISH_LOCATION else "off (cleared)", shipped or "none", numbers or "none")
-
-
 KM_TO_MI = 0.621371
-
-
-def _num(v):
-    try:
-        return round(float(v), 2)
-    except (TypeError, ValueError):
-        return None
 
 
 def _mi(km):
@@ -585,7 +407,7 @@ async def run_command(cmd, payload=""):
     if cmd in NUMBER_CMDS:
         await set_soc_level(cmd, payload)
         return
-    if cmd in LOCATION_CMDS and not PUBLISH_LOCATION:
+    if cmd in LOCATION_CMDS and not mqtt.PUBLISH_LOCATION:
         LOG.info("Ignoring '%s' — location is disabled (publish_location: false)", cmd)
         return
     action = COMMAND_ACTIONS.get(cmd)
@@ -606,147 +428,6 @@ async def run_command(cmd, payload=""):
         LOG.error("Command '%s' failed: %s", cmd, redact(err))
 
 
-# --- Debug API dump (set debug_dump: true on the Configuration page) ----------------
-# Vehicle-telemetry endpoints only. Deliberately excludes get_location (GPS),
-# get_contracts and get_notification_settings — those carry location / contact / account
-# PII with no sensor-mapping diagnostic value. No-arg readers below; date-ranged (charges,
-# charge-history) and raw (alerts) endpoints are probed separately in dump_api.
-_DEBUG_METHODS = [
-    "get_details", "get_car_adapter", "get_battery_status", "get_battery_soc", "get_cockpit",
-    "get_hvac_status", "get_hvac_settings", "get_hvac_history", "get_hvac_sessions",
-    "get_charge_schedule", "get_charge_mode", "get_charging_settings", "get_tyre_pressure",
-    "get_lock_status", "get_res_state",
-]
-_DEBUG_RANGE_DAYS = 30
-# Keys masked regardless of value type — identifiers / contact / location fields.
-_DEBUG_REDACT_KEYS = {
-    "registrationnumber", "vin", "tcucode", "radiocode", "siret", "msisdn", "phonenumber",
-    "phone", "mobile", "email", "firstname", "lastname", "gigyaid", "personid", "accountid",
-    "iccid", "imei", "contractid", "address", "postcode", "zipcode", "city", "country",
-    "gpslatitude", "gpslongitude", "latitude", "longitude",
-    # Vehicle-lifecycle / privacy / build-spec — quasi-identifying or owner-private. The
-    # `assets` block carries 3dv.renault.com render URLs that embed the build-spec (VCD)
-    # code in the path; mask the whole subtree (it has no sensor-mapping diagnostic value).
-    "deliverydate", "firstregistrationdate", "vehicleid", "batterycode",
-    "privacymode", "privacymodeupdatedate", "svtflag", "svtblockflag", "assets",
-    # Defense-in-depth: token/credential field names. The endpoint allowlist + logger floor
-    # already keep tokens out of the dump; this guards a future token-bearing payload too.
-    "token", "accesstoken", "refreshtoken", "idtoken", "jwt", "authorization", "apikey",
-    "secret", "password", "gigyacookievalue",
-}
-_DEBUG_STATE = {"dumped": False}
-
-
-def debug_enabled():
-    return cfg("R5_DEBUG_DUMP", "false").strip().lower() in ("true", "1", "on")
-
-
-def _config_secrets():
-    """The sensitive values to scrub from anything logged or served: VIN, account_id (the
-    configured one AND the auto-discovered one — users are told to leave account_id blank, so
-    the discovered value is the common case), username, password, and the Supervisor token.
-    The Kamereon request URL embeds the VIN + account_id, so an aiohttp error string (which
-    includes the URL) carries them — see redact()."""
-    return [v for v in (cfg("R5_VIN"), cfg("R5_ACCOUNT_ID"), _DISCOVERED_ACCOUNT_ID,
-                        cfg("R5_USERNAME"), cfg("R5_PASSWORD"),
-                        os.environ.get("SUPERVISOR_TOKEN")) if v]
-
-
-def redact(text):
-    """Mask the configured secrets in an arbitrary string before it is logged or placed in the
-    status-panel snapshot. API/HTTP error strings embed the request URL (…/accounts/<account_id>
-    /vehicles/<vin>/…), so an ordinary transient failure would otherwise leak the VIN/account_id
-    to the container log and to GET /api/state. Best-effort substring masking."""
-    s = str(text)
-    for secret in _config_secrets():
-        if secret and secret in s:
-            s = s.replace(secret, "***")
-    return s
-
-
-class _RedactingFilter(logging.Filter):
-    """Redacts configured secrets from EVERY log record — ours and the renault-api library's —
-    at the root handler. A central net so no current or future logging path (any of the
-    per-endpoint poll warnings, a library line that prints a request URL, etc.) can leak the
-    VIN / account id / token embedded in an API URL. Complements the explicit redact() at the
-    error/snapshot paths; idempotent, so double-redaction is harmless."""
-
-    def filter(self, record):
-        record.msg = redact(record.getMessage())
-        record.args = ()
-        return True
-
-
-def _debug_redact(obj, secrets):
-    """Mask identifiers (by key, any value type) + configured secret values; keep telemetry."""
-    if isinstance(obj, dict):
-        return {k: ("***" if k.lower() in _DEBUG_REDACT_KEYS else _debug_redact(v, secrets))
-                for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_debug_redact(v, secrets) for v in obj]
-    if isinstance(obj, str):
-        for s in secrets:
-            if s and s in obj:
-                obj = obj.replace(s, "***")
-        return obj
-    if any(s and s == str(obj) for s in secrets):   # secret value held as a number (e.g. id)
-        return "***"
-    return obj
-
-
-async def _dump_one(out, name, call, secrets):
-    """Run one debug probe, mask its raw payload, store the result; never fatal."""
-    try:
-        res = await call()
-        if isinstance(res, dict):
-            raw = res
-        elif isinstance(res, list):
-            raw = [getattr(x, "raw_data", x) for x in res]
-        else:
-            raw = getattr(res, "raw_data", None) or {"_repr": str(res)}
-        out[name] = _debug_redact(raw, secrets)
-    except Exception as err:  # noqa: BLE001
-        out[name] = {"_error": f"{type(err).__name__}: {err}"}
-
-
-async def dump_api(vehicle):
-    """DEBUG: fetch the telemetry endpoints, mask IDs/secrets, log the lot. Never fatal."""
-    secrets = _config_secrets()
-    out = {}
-    for meth in _DEBUG_METHODS:
-        fn = getattr(vehicle, meth, None)
-        if fn is not None:
-            await _dump_one(out, meth, lambda _f=fn: _f(), secrets)
-    # Date-ranged + raw endpoints can't be called arg-less; probe them explicitly. alerts has
-    # no convenience method, so resolve its per-model path and raw-GET it (forbidden -> _error).
-    end = datetime.now(timezone.utc)
-    start = end - timedelta(days=_DEBUG_RANGE_DAYS)
-
-    async def _alerts():
-        return await vehicle.http_get(await vehicle.get_full_endpoint("alerts"))
-
-    specials = (
-        ("get_charges", getattr(vehicle, "get_charges", None),
-         lambda: vehicle.get_charges(start, end)),
-        ("get_charge_history", getattr(vehicle, "get_charge_history", None),
-         lambda: vehicle.get_charge_history(start, end, "month")),
-        ("alerts", getattr(vehicle, "http_get", None), _alerts),
-    )
-    for name, present, call in specials:
-        if present is not None:
-            await _dump_one(out, name, call, secrets)
-    LOG.warning("API DEBUG DUMP — may contain personal data; redaction is best-effort, do NOT "
-                "paste publicly. One-shot per restart; turn debug_dump off when done.\n%s",
-                json.dumps(out, indent=2, default=str, ensure_ascii=False))
-
-
-async def maybe_dump_api(vehicle):
-    """Run the debug dump once per restart when debug_dump is on (not every poll)."""
-    if debug_enabled() and not _DEBUG_STATE["dumped"]:
-        _DEBUG_STATE["dumped"] = True
-        await dump_api(vehicle)
-
-
 def detect_plug_suspect(state, plug, mileage, soc, charging):
     """Connected-but-driven / Disconnected-but-charging detection. `plug` is a PlugState
     (matches the rest of the poll). Returns 'on'/'off'. State stores a JSON-safe string."""
@@ -765,163 +446,6 @@ def detect_plug_suspect(state, plug, mileage, soc, charging):
     return "on" if stuck else "off"
 
 
-def update_charge_session(state, battery, capacity_kwh, charging):
-    soc = battery.batteryLevel
-    power = _num(getattr(battery, "chargingInstantaneousPower", None)) or 0
-    energy = _num(getattr(battery, "batteryAvailableEnergy", None))
-    if energy is None and soc is not None:
-        energy = round(soc / 100.0 * capacity_kwh, 2)
-
-    if charging and not state.get("session_active"):
-        LOG.info("Charge session START (soc=%s%%, power=%skW)", soc, power)
-        state.update(session_active=True, start_ts=now_ts(), start_soc=soc,
-                     start_energy=energy, start_power=power, pwr_accum=0.0, pwr_count=0)
-    if charging and state.get("session_active") and power > 0:
-        state["pwr_accum"] = state.get("pwr_accum", 0.0) + power
-        state["pwr_count"] = state.get("pwr_count", 0) + 1
-    if not charging and state.get("session_active"):
-        start_ts = state.get("start_ts")
-        dur = round((now_ts() - start_ts) / 60.0) if start_ts else None
-        avg = round(state["pwr_accum"] / state["pwr_count"], 2) if state.get("pwr_count") else state.get("start_power")
-        rec_pct = (soc - state["start_soc"]) if (soc is not None and state.get("start_soc") is not None) else None
-        rec_kwh = round(energy - state["start_energy"], 2) if (energy is not None and state.get("start_energy") is not None) else None
-        state["last_charge"] = {
-            # Keys are the object_id minus the "r5_" prefix, to match the discovery
-            # value_template (value_json.<obj-without-prefix>).
-            "last_charge_start": iso(start_ts),
-            "last_charge_end": iso(now_ts()),
-            "last_charge_start_soc": state.get("start_soc"),
-            "last_charge_end_soc": soc,
-            "last_charge_start_energy": round(state["start_energy"], 2) if state.get("start_energy") is not None else None,
-            "last_charge_end_energy": round(energy, 2) if energy is not None else None,
-            "last_charge_recovered_pct": rec_pct,
-            "last_charge_recovered_kwh": rec_kwh,
-            "last_charge_duration_min": dur,
-            "last_charge_average_power": avg,
-            "last_charge_type": "Rapid/Public" if (avg or 0) > HOME_POWER_MAX_KW else "Home",
-        }
-        LOG.info("Charge session END (dur=%smin, +%s%%, +%skWh, avg=%skW)", dur, rec_pct, rec_kwh, avg)
-        state["session_active"] = False
-        state["charges_dirty"] = True   # a session just ended -> refetch authoritative charges next poll
-    return state.get("last_charge", {})
-
-
-# --- Authoritative Last Charge via the charges endpoint -------------------------------
-# update_charge_session() above *infers* the last session by watching live battery polls.
-# When the car exposes the charges endpoint we instead read Renault's own per-session record
-# (get_charges -> raw_data["charges"]) and prefer it. The inferred value stays as the fallback
-# for cars/sessions the endpoint doesn't (yet) cover; newest-end wins so a just-finished
-# session shows live immediately, then gets replaced by the authoritative record once posted.
-CHARGES_LOOKBACK_DAYS = 14
-CHARGES_REFRESH_SEC = 1800   # between charges reads; an ended session forces an immediate refetch
-# Renault's authoritative chargeEndDate is the *actual* stop time; the inferred fallback's end
-# is when this add-on first *observed* charging==false (up to a poll cycle + posting delay
-# later). Treat an endpoint session ending within this window of the inferred one as the SAME
-# session, so the authoritative record still wins; only a live session ending materially later
-# (a fresh charge the history hasn't posted yet) keeps the inferred values.
-CHARGE_MATCH_TOLERANCE_SEC = 3600
-
-
-def _epoch(s):
-    """ISO-8601 string -> epoch seconds, or None if unparseable. Tolerates a trailing 'Z'."""
-    if not isinstance(s, str) or not s.strip():
-        return None
-    try:
-        return datetime.fromisoformat(s.strip().replace("Z", "+00:00")).timestamp()
-    except ValueError:
-        return None
-
-
-def _parse_charge_session(charges, capacity_kwh):
-    """Most recent *completed* session from a get_charges() payload, in the same
-    last_charge_* shape update_charge_session() produces ({} when none usable). Duration is
-    derived from the start/end timestamps (sidesteps the per-model seconds-vs-minutes quirk in
-    chargeDuration); energy/power fall back to capacity-scaled SoC when the API omits kWh."""
-    done = [c for c in (charges or []) if isinstance(c, dict) and c.get("chargeEndDate")]
-    if not done:
-        return {}
-    c = max(done, key=lambda x: _epoch(x.get("chargeEndDate")) or 0.0)
-    start_soc = _num(c.get("chargeStartBatteryLevel"))
-    end_soc = _num(c.get("chargeEndBatteryLevel"))
-    rec_pct = _num(c.get("chargeBatteryLevelRecovered"))
-    if rec_pct is None and None not in (start_soc, end_soc):
-        rec_pct = round(end_soc - start_soc, 2)
-    rec_kwh = _num(c.get("chargeEnergyRecovered"))
-    if rec_kwh is None and rec_pct is not None:
-        rec_kwh = round(rec_pct / 100.0 * capacity_kwh, 2)
-    s_ep, e_ep = _epoch(c.get("chargeStartDate")), _epoch(c.get("chargeEndDate"))
-    dur = round((e_ep - s_ep) / 60.0) if (s_ep is not None and e_ep is not None and e_ep >= s_ep) else None
-    avg = round(rec_kwh / (dur / 60.0), 2) if (rec_kwh and dur) else _num(c.get("chargeStartInstantaneousPower"))
-    start_energy = round(start_soc / 100.0 * capacity_kwh, 2) if start_soc is not None else None
-    end_energy = round(end_soc / 100.0 * capacity_kwh, 2) if end_soc is not None else None
-    return {
-        "last_charge_start": c.get("chargeStartDate"),
-        "last_charge_end": c.get("chargeEndDate"),
-        "last_charge_start_soc": start_soc,
-        "last_charge_end_soc": end_soc,
-        "last_charge_start_energy": start_energy,
-        "last_charge_end_energy": end_energy,
-        "last_charge_recovered_pct": rec_pct,
-        "last_charge_recovered_kwh": round(rec_kwh, 2) if rec_kwh is not None else None,
-        "last_charge_duration_min": dur,
-        "last_charge_average_power": avg,
-        "last_charge_type": "Rapid/Public" if (avg or 0) > HOME_POWER_MAX_KW else "Home",
-    }
-
-
-def _prefer_real_charge(real, live):
-    """True when the authoritative endpoint session `real` should replace the inferred `live`.
-    The endpoint wins unless the inferred session ends *materially* later than the endpoint's
-    (more than CHARGE_MATCH_TOLERANCE_SEC) — i.e. a just-finished session the history hasn't
-    posted yet. An unparseable endpoint date never displaces a live session."""
-    if not real:
-        return False
-    if not live:
-        return True
-    re_, le = _epoch(real.get("last_charge_end")), _epoch(live.get("last_charge_end"))
-    if re_ is None:
-        return False
-    if le is None:
-        return True
-    return le - re_ <= CHARGE_MATCH_TOLERANCE_SEC
-
-
-def _due_for_charges(state):
-    """Throttle charges reads: once per CHARGES_REFRESH_SEC, or immediately after a session end."""
-    if state.get("charges_dirty"):
-        return True
-    last = state.get("charges_last_fetch")
-    return last is None or (now_ts() - last) >= CHARGES_REFRESH_SEC
-
-
-async def fetch_real_last_charge(vehicle, capacity_kwh):
-    """Read recent charge sessions and return the latest completed one in last_charge_* shape."""
-    now = datetime.now(timezone.utc)
-    start = now - timedelta(days=CHARGES_LOOKBACK_DAYS)
-    end = now + timedelta(days=1)   # get_charges params are day-granular (%Y%m%d); query through
-                                    # tomorrow so a session that ended *today* is in-window
-    res = await vehicle.get_charges(start, end)
-    raw = getattr(res, "raw_data", None) or {}
-    return _parse_charge_session(raw.get("charges"), capacity_kwh)
-
-
-async def resolve_last_charge(vehicle, state, supported_eps, capacity_kwh, live_lc):
-    """Pick the Last Charge to publish: the authoritative charges-endpoint session when it's
-    at least as recent as the inferred one, else the inferred session. Caches the endpoint
-    result in state so it's only re-read on the throttle/after a session ends."""
-    if CHARGES_ENDPOINT in supported_eps and _due_for_charges(state):
-        state["charges_dirty"] = False
-        state["charges_last_fetch"] = now_ts()
-        try:
-            real = await fetch_real_last_charge(vehicle, capacity_kwh)
-            if real:
-                state["real_last_charge"] = real
-        except Exception as err:  # noqa: BLE001
-            LOG.warning("charges endpoint unavailable: %s", err)
-    real_lc = state.get("real_last_charge", {})
-    return real_lc if _prefer_real_charge(real_lc, live_lc) else live_lc
-
-
 async def resolve_account(client):
     account_id = cfg("R5_ACCOUNT_ID")
     if account_id:
@@ -929,8 +453,7 @@ async def resolve_account(client):
     person = await client.get_person()
     for account in person.accounts:
         if account.accountType == "MYRENAULT":
-            global _DISCOVERED_ACCOUNT_ID
-            _DISCOVERED_ACCOUNT_ID = account.accountId   # so redact() can mask it (URL embeds it)
+            config._DISCOVERED_ACCOUNT_ID = account.accountId   # so redact() can mask it (URL embeds it)
             LOG.info("Auto-discovered MYRENAULT account")
             return account.accountId
     raise RuntimeError("No MYRENAULT account found and R5_ACCOUNT_ID not set")
@@ -1012,7 +535,7 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
             LOG.warning("charge_mode unavailable: %s", err)
 
     location_attrs = None
-    if PUBLISH_LOCATION:   # skipped entirely when the user opts out of location publishing
+    if mqtt.PUBLISH_LOCATION:   # skipped entirely when the user opts out of location publishing
         try:
             loc = await vehicle.get_location()
             data["gps_last_activity"] = getattr(loc, "lastUpdateTime", None)
@@ -1072,7 +595,6 @@ async def start_health_server():
 
 
 async def main():
-    global _LOOP
     setup_logging()
     LOG.info("Renault 5 add-on v%s starting", VERSION)
     for req in ("R5_USERNAME", "R5_PASSWORD", "R5_VIN", "MQTT_HOST"):
@@ -1086,10 +608,14 @@ async def main():
     capacity = float(cfg("R5_BATTERY_CAPACITY_KWH", "52") or "52")
     stale_secs = int(cfg("R5_STALE_HOURS", "6") or "6") * 3600
 
-    _LOOP = asyncio.get_running_loop()
+    loop = asyncio.get_running_loop()
+    # Inject the loop + command handler into the MQTT seam so its _on_message can schedule an
+    # inbound command onto our loop without importing main (keeps the dependency one-directional).
+    mqtt._LOOP = loop
+    mqtt._COMMAND_HANDLER = run_command
     stop = asyncio.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):   # honour shutdown during startup too
-        _LOOP.add_signal_handler(sig, stop.set)
+        loop.add_signal_handler(sig, stop.set)
 
     health = await start_health_server()
     state = load_state()
@@ -1097,8 +623,8 @@ async def main():
     supported = await detect_supported(vsession)
     _LATEST["supported"] = sorted(supported)
     _LATEST["dist_unit"] = dist_unit  # so the status panel can label range/mileage
-    client = mqtt_connect()
-    publish_discovery(client, supported, dist_unit)
+    client = mqtt.mqtt_connect()
+    mqtt.publish_discovery(client, supported, dist_unit)
     await deploy.run_deploy()  # optional dashboard auto-deploy; never fatal
 
     fails = 0
