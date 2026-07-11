@@ -201,7 +201,10 @@ Names follow the [Topolino65](https://github.com/Topolino65) project (minus the 
 - Trip / location: `…_vehicle_mileage`, `device_tracker.r5_location`,
   `…_gps_last_activity`.
 - Charge limits (writable sliders, set via `set_battery_soc`):
-  `number.r5_soc_min_target` (15–45 %), `number.r5_soc_max_target` (55–100 %).
+  `number.r5_soc_min_target` (15–45 %), `number.r5_soc_max_target` (55–100 %). These are
+  **`number.` sliders, not `sensor.`s** — if you upgraded from an early version that published
+  them as sensors, delete the leftover `sensor.r5_soc_*_target` entities HA shows as
+  *unavailable* (Settings → Devices & Services → Entities → filter *Unavailable*).
 - Scheduled charging (read from the car's settings — the programmed schedule, not a control):
   `…_charge_schedule_mode`, `…_scheduled_charge_start`, `…_scheduled_charge_duration`. Show
   *unavailable* if the car has no schedule programmed.
@@ -213,7 +216,8 @@ Names follow the [Topolino65](https://github.com/Topolino65) project (minus the 
   `…_average_power`, `…_type`. When the car exposes Renault's recent-charges history these
   use the **authoritative per-session record**; otherwise (or until the history posts a
   just-finished session) they fall back to figures worked out live from the battery polls,
-  then settle on the official numbers. Automatic — no configuration needed.
+  then settle on the official numbers. Automatic — no configuration needed. On a fresh install
+  these read *unknown* until the R5 completes its first charge.
 - Health: `binary_sensor.r5_api_auth_failure`, `…_data_stale`, `…_plug_state_suspect`.
 - Actions (6 native buttons — **no Home Assistant `renault` integration required**):
   **Start Charging**, **Flash Lights**, **Sound Horn**, **Start Air Conditioner**,
