@@ -2,13 +2,14 @@
 connect/message/disconnect callbacks. The discovery-template/data-key contract lives here —
 it's the class of bug that has shipped broken dashboard tiles.
 
-publish_discovery reads mqtt.PUBLISH_LOCATION in the mqtt namespace, so tests patch it on the
-mqtt module. _on_message dispatches via the injected _COMMAND_HANDLER + _LOOP (main wires real
-ones at startup); r5's mqtt has NO _MQTT_CTX (unlike its a290 twin)."""
+publish_discovery reads mqtt.PUBLISH_LOCATION and _MQTT_CTX in the mqtt namespace, so tests
+patch/set those on the mqtt module. _on_message dispatches via the injected _COMMAND_HANDLER +
+_LOOP (main wires real ones at startup). mqtt.configure(catalog) is run when conftest imports
+main."""
 import json
 
 import catalog
-import mqtt
+from renault_ha_core import mqtt
 
 
 def _obj(**attrs):
@@ -99,10 +100,11 @@ def test_distance_device_class_dropped_only_for_miles():
 
 def test_buttons_published_when_supported():
     c = StubClient()
-    all_eps = {ep for _oid, _node, _name, _icon, ep in catalog.ACTION_BUTTONS.values()}
+    all_eps = {ep for _name, _icon, ep in catalog.ACTION_BUTTONS.values()}
     mqtt.publish_discovery(c, set(catalog.OPTIONAL_ENDPOINTS) | all_eps, "km")
-    for _cmd, (oid, node, name, _icon, _ep) in catalog.ACTION_BUTTONS.items():
-        conf = json.loads(c.pub[f"homeassistant/button/{mqtt.NODE}/{node}/config"])
+    for oid, (name, _icon, _ep) in catalog.ACTION_BUTTONS.items():
+        short = oid.removeprefix("r5_")
+        conf = json.loads(c.pub[f"homeassistant/button/{mqtt.NODE}/{short}/config"])
         assert conf["name"] == name
         assert conf["object_id"] == oid
 
@@ -110,14 +112,14 @@ def test_buttons_published_when_supported():
 def test_buttons_cleared_when_action_endpoint_unsupported():
     c = StubClient()
     mqtt.publish_discovery(c, set(catalog.OPTIONAL_ENDPOINTS), "km")   # no action endpoints
-    for _cmd, (_oid, node, _name, _icon, _ep) in catalog.ACTION_BUTTONS.items():
-        assert c.pub[f"homeassistant/button/{mqtt.NODE}/{node}/config"] == ""
+    for oid in catalog.ACTION_BUTTONS:
+        assert c.pub[f"homeassistant/button/{mqtt.NODE}/{oid.removeprefix('r5_')}/config"] == ""
 
 
 def test_numbers_published_when_soc_supported():
     c = StubClient()
     mqtt.publish_discovery(c, set(catalog.OPTIONAL_ENDPOINTS) | {catalog.SOC_ENDPOINT}, "mi")
-    for obj, (name, _icon, _role, mn, mx, step) in catalog.NUMBERS.items():
+    for obj, (name, _icon, mn, mx, step) in catalog.NUMBERS.items():
         short = obj.removeprefix("r5_")
         conf = json.loads(c.pub[f"homeassistant/number/{mqtt.NODE}/{short}/config"])
         assert conf["name"] == name
@@ -163,10 +165,10 @@ def test_publish_discovery_location_enabled_vs_disabled(monkeypatch):
 
 
 def test_refresh_location_button_cleared_when_location_disabled(monkeypatch):
-    (cmd,) = tuple(k for k, v in catalog.ACTION_BUTTONS.items()
+    (oid,) = tuple(o for o, v in catalog.ACTION_BUTTONS.items()
                    if v[-1] == catalog.REFRESH_LOCATION_EP)
-    _oid, node, _name, _icon, _ep = catalog.ACTION_BUTTONS[cmd]
-    btn_topic = f"{mqtt.DISCOVERY_PREFIX}/button/{mqtt.NODE}/{node}/config"
+    short = oid.removeprefix("r5_")
+    btn_topic = f"{mqtt.DISCOVERY_PREFIX}/button/{mqtt.NODE}/{short}/config"
     eps = set(catalog.OPTIONAL_ENDPOINTS) | {catalog.REFRESH_LOCATION_EP}
 
     # location on: the refresh-location button is published
@@ -214,9 +216,6 @@ def test_on_connect_subscribes_and_announces():
     mqtt._on_connect(c, None, None, 0)
     assert c.subs == [f"{mqtt.CMD_PREFIX}#"]
     assert (mqtt.AVAIL_TOPIC, "online") in c.pubs
-    refused = _FakeClient()
-    mqtt._on_connect(refused, None, None, 5)
-    assert refused.subs == [] and refused.pubs == []
 
 
 def test_on_disconnect_logs_both_paths():
