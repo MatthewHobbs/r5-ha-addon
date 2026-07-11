@@ -9,7 +9,7 @@ main."""
 import json
 
 import catalog
-from renault_ha_core import mqtt
+from renault_mqtt import mqtt
 
 
 def _obj(**attrs):

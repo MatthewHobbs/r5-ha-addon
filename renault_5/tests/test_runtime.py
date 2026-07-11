@@ -17,7 +17,7 @@ import deploy
 import main
 import pytest
 from renault_api.kamereon.enums import ChargeState, PlugState
-from renault_ha_core import charge, config, mqtt
+from renault_mqtt import charge, config, mqtt
 
 
 def _obj(**attrs):
