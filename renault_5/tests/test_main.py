@@ -1,11 +1,10 @@
-"""Unit tests for the Renault 5 poller.
-
-Mirrors the A290 add-on's suite (the two share this data layer): the discovery-template/
-data-key contract, charge-session maths, plug stuck-detection, enum decoding, unit
-conversion, the action-button/command-map consistency, and the cached login session.
+"""Unit tests for the Renault 5 poller — the pure helpers that stay in main after the seam
+split (unit conversion, enum decoding, schedule summaries, plug-suspect detection), the
+control-layer command/number maps, the cached login session, and the poll_once integration
+contract. The config/util/debug/charge/mqtt seams are covered in their own test modules.
 """
-import json
-
+import catalog
+import charge
 import main
 import pytest
 from renault_api.kamereon.enums import ChargeState, PlugState
@@ -24,25 +23,9 @@ class Battery:
         return self._status
 
 
-class StubClient:
-    """Captures MQTT publishes so we can assert on discovery payloads."""
-
-    def __init__(self):
-        self.pub = {}
-
-    def publish(self, topic, payload, retain=False):
-        self.pub[topic] = payload
-
-
 # --------------------------------------------------------------------------- #
 # unit conversion / coercion helpers
 # --------------------------------------------------------------------------- #
-def test_num_rounds_and_tolerates_garbage():
-    assert main._num("12.345") == 12.35
-    assert main._num(None) is None
-    assert main._num("not-a-number") is None
-
-
 def test_dist_respects_locale_unit():
     assert main._dist(100, "km") == 100
     assert main._dist(100, "mi") == 62.1
@@ -107,107 +90,6 @@ def test_not_charging():
 
 
 # --------------------------------------------------------------------------- #
-# charge-session tracking
-# --------------------------------------------------------------------------- #
-def test_charge_session_lifecycle(monkeypatch):
-    clock = {"t": 1000.0}
-    monkeypatch.setattr(main, "now_ts", lambda: clock["t"])
-    state = {}
-    main.update_charge_session(state, Battery(40, 7.0, 20.0), 52.0, charging=True)
-    assert state["session_active"] is True
-    main.update_charge_session(state, Battery(60, 7.0, 30.0), 52.0, charging=True)
-    clock["t"] = 1000.0 + 1800
-    lc = main.update_charge_session(state, Battery(80, 0.0, 40.0), 52.0, charging=False)
-    assert state["session_active"] is False
-    assert lc["last_charge_duration_min"] == 30
-    assert lc["last_charge_recovered_pct"] == 40
-    assert lc["last_charge_recovered_kwh"] == 20.0
-    assert lc["last_charge_average_power"] == 7.0
-    assert lc["last_charge_type"] == "Home"
-
-
-def test_charge_session_energy_falls_back_to_soc_estimate(monkeypatch):
-    monkeypatch.setattr(main, "now_ts", lambda: 0.0)
-    state = {}
-    main.update_charge_session(state, Battery(50, 7.0, None), 52.0, charging=True)
-    assert state["start_energy"] == pytest.approx(26.0)
-
-
-def test_rapid_charge_is_classified_public(monkeypatch):
-    clock = {"t": 0.0}
-    monkeypatch.setattr(main, "now_ts", lambda: clock["t"])
-    state = {}
-    main.update_charge_session(state, Battery(20, 50.0, 10.0), 52.0, charging=True)
-    clock["t"] = 1800
-    lc = main.update_charge_session(state, Battery(60, 0.0, 31.0), 52.0, charging=False)
-    assert lc["last_charge_type"] == "Rapid/Public"
-
-
-# --------------------------------------------------------------------------- #
-# authoritative Last Charge via the charges endpoint
-# --------------------------------------------------------------------------- #
-_CHARGE_ITEM = {
-    "chargeStartDate": "2026-06-20T22:00:00+00:00",
-    "chargeEndDate": "2026-06-21T02:00:00+00:00",   # 4 h later
-    "chargeStartBatteryLevel": 30, "chargeEndBatteryLevel": 80,
-    "chargeBatteryLevelRecovered": 50, "chargeEnergyRecovered": 26.0,
-    "chargeStartInstantaneousPower": 7.0,
-}
-
-
-def test_parse_charge_session_picks_latest_and_computes():
-    older = {**_CHARGE_ITEM, "chargeEndDate": "2026-06-10T02:00:00+00:00"}
-    lc = main._parse_charge_session([older, _CHARGE_ITEM], 52.0)
-    assert lc["last_charge_end"] == "2026-06-21T02:00:00+00:00"
-    assert lc["last_charge_start_soc"] == 30 and lc["last_charge_end_soc"] == 80
-    assert lc["last_charge_recovered_pct"] == 50
-    assert lc["last_charge_recovered_kwh"] == 26.0
-    assert lc["last_charge_duration_min"] == 240          # from timestamps, not chargeDuration
-    assert lc["last_charge_average_power"] == 6.5         # 26 kWh / 4 h
-    assert lc["last_charge_type"] == "Home"
-    # produces exactly the Last Charge sensor keys (same contract as the inferred path)
-    expected = {obj[len("r5_"):] for obj in main.SENSORS if "last_charge" in obj}
-    assert set(lc) == expected
-
-
-def test_parse_charge_session_empty_and_incomplete():
-    assert main._parse_charge_session([], 52.0) == {}
-    assert main._parse_charge_session(None, 52.0) == {}
-    assert main._parse_charge_session([{"chargeStartDate": "2026-06-21T22:00:00+00:00"}], 52.0) == {}
-
-
-def test_parse_charge_session_derives_missing_energy_from_soc():
-    item = {"chargeStartDate": "2026-06-21T00:00:00+00:00",
-            "chargeEndDate": "2026-06-21T01:00:00+00:00",
-            "chargeStartBatteryLevel": 20, "chargeEndBatteryLevel": 40}
-    lc = main._parse_charge_session([item], 50.0)
-    assert lc["last_charge_recovered_pct"] == 20          # 40 - 20
-    assert lc["last_charge_recovered_kwh"] == 10.0        # 20% of 50 kWh
-
-
-def test_prefer_real_charge_matches_same_session_within_tolerance():
-    real = {"last_charge_end": "2026-06-21T02:00:00+00:00"}
-    assert main._prefer_real_charge(real, {}) is True        # nothing inferred yet -> use endpoint
-    assert main._prefer_real_charge({}, real) is False       # no endpoint data -> keep inferred
-    # endpoint's actual stop precedes the inferred (observed) stop by minutes -> same session,
-    # authoritative record still wins (the bug codex caught: strict >= rejected this)
-    live_observed_later = {"last_charge_end": "2026-06-21T02:05:00+00:00"}   # +5 min
-    assert main._prefer_real_charge(real, live_observed_later) is True
-    # a live session ending materially later (hours) is a fresh charge not yet posted -> keep it
-    live_fresh = {"last_charge_end": "2026-06-21T06:00:00+00:00"}            # +4 h
-    assert main._prefer_real_charge(real, live_fresh) is False
-    assert main._prefer_real_charge({"last_charge_end": "garbage"}, live_fresh) is False
-
-
-def test_due_for_charges_throttle(monkeypatch):
-    monkeypatch.setattr(main, "now_ts", lambda: 10_000.0)
-    assert main._due_for_charges({}) is True
-    assert main._due_for_charges({"charges_last_fetch": 10_000.0}) is False
-    assert main._due_for_charges({"charges_last_fetch": 0.0}) is True
-    assert main._due_for_charges({"charges_last_fetch": 10_000.0, "charges_dirty": True}) is True
-
-
-# --------------------------------------------------------------------------- #
 # KCM charge-schedule summary (from the ev/settings payload we already fetch)
 # --------------------------------------------------------------------------- #
 def test_charge_schedule_fields_extracts_kcm_settings():
@@ -217,7 +99,7 @@ def test_charge_schedule_fields_extracts_kcm_settings():
     assert out["charge_schedule_mode"] == "Scheduled Charge"   # underscores -> title case
     assert out["scheduled_charge_start"] == "04:20"            # bare HHMM -> HH:MM
     assert out["scheduled_charge_duration"] == 480
-    expected = {obj[len("r5_"):] for obj in main.SENSORS
+    expected = {obj[len("r5_"):] for obj in catalog.SENSORS
                 if obj.endswith(("charge_schedule_mode", "scheduled_charge_start",
                                  "scheduled_charge_duration"))}
     assert set(out) == expected
@@ -264,7 +146,7 @@ def test_hvac_schedule_fields_active_schedule():
     out = main._hvac_schedule_fields(settings)
     assert out["climate_schedule_mode"] == "Scheduled Value"
     assert out["climate_ready_time"] == "Mon 07:00, Fri 08:30"       # only the active schedule
-    expected = {obj[len("r5_"):] for obj in main.SENSORS if obj.startswith("r5_climate_")}
+    expected = {obj[len("r5_"):] for obj in catalog.SENSORS if obj.startswith("r5_climate_")}
     assert set(out) == expected
 
 
@@ -308,60 +190,21 @@ def test_plug_suspect_quiet_when_genuinely_plugged(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# discovery contract
+# discovery contract — the class of bug that shipped broken Last Charge tiles
 # --------------------------------------------------------------------------- #
 def test_last_charge_data_keys_match_sensor_object_ids(monkeypatch):
+    """Every Last Charge sensor's value_template key must be produced by the data dict.
+    update_charge_session lives in the charge seam now, so patch charge.now_ts."""
     clock = {"t": 0.0}
-    monkeypatch.setattr(main, "now_ts", lambda: clock["t"])
+    monkeypatch.setattr(charge, "now_ts", lambda: clock["t"])
     state = {}
-    main.update_charge_session(state, Battery(40, 7.0, 20.0), 52.0, charging=True)
+    charge.update_charge_session(state, Battery(40, 7.0, 20.0), 52.0, charging=True)
     clock["t"] = 1800
-    lc = main.update_charge_session(state, Battery(80, 0.0, 40.0), 52.0, charging=False)
+    lc = charge.update_charge_session(state, Battery(80, 0.0, 40.0), 52.0, charging=False)
     produced = set(lc)
-    expected = {obj.removeprefix("r5_") for obj in main.SENSORS if "last_charge" in obj}
+    expected = {obj.removeprefix("r5_") for obj in catalog.SENSORS if "last_charge" in obj}
     assert produced == expected
     assert not any(k.startswith("r5_") for k in produced)
-
-
-def test_sensor_value_templates_strip_the_prefix():
-    c = StubClient()
-    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS), "km")
-    for obj in main.SENSORS:
-        payload = c.pub.get(f"homeassistant/sensor/{main.NODE}/{obj}/config")
-        assert payload, f"{obj} not published"
-        conf = json.loads(payload)
-        assert conf["value_template"] == "{{ value_json.%s }}" % obj.removeprefix("r5_")
-
-
-def test_binary_sensor_value_templates_strip_the_prefix():
-    c = StubClient()
-    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS), "km")
-    for obj in main.BINARY_SENSORS:
-        payload = c.pub.get(f"homeassistant/binary_sensor/{main.NODE}/{obj}/config")
-        assert payload, f"{obj} not published"
-        conf = json.loads(payload)
-        assert conf["value_template"] == "{{ value_json.%s }}" % obj.removeprefix("r5_")
-
-
-def test_optional_sensors_cleared_when_unsupported():
-    c = StubClient()
-    main.publish_discovery(c, set(), "km")
-    for obj in main.OPTIONAL_ENDPOINTS["pressure"]:
-        assert c.pub[f"homeassistant/sensor/{main.NODE}/{obj}/config"] == ""
-
-
-def test_distance_device_class_dropped_only_for_miles():
-    c = StubClient()
-    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS), "km")
-    for obj in ("r5_battery_autonomy", "r5_vehicle_mileage"):
-        conf = json.loads(c.pub[f"homeassistant/sensor/{main.NODE}/{obj}/config"])
-        assert conf.get("device_class") == "distance" and conf["unit_of_measurement"] == "km"
-
-    c = StubClient()
-    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS), "mi")
-    for obj in ("r5_battery_autonomy", "r5_vehicle_mileage"):
-        conf = json.loads(c.pub[f"homeassistant/sensor/{main.NODE}/{obj}/config"])
-        assert "device_class" not in conf and conf["unit_of_measurement"] == "mi"
 
 
 # --------------------------------------------------------------------------- #
@@ -369,59 +212,6 @@ def test_distance_device_class_dropped_only_for_miles():
 # --------------------------------------------------------------------------- #
 def test_command_actions_cover_every_button():
     assert set(main.COMMAND_ACTIONS) == set(main.ACTION_BUTTONS)
-
-
-def test_buttons_published_when_supported():
-    c = StubClient()
-    all_eps = {ep for _oid, _node, _name, _icon, ep in main.ACTION_BUTTONS.values()}
-    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS) | all_eps, "km")
-    for _cmd, (oid, node, name, _icon, _ep) in main.ACTION_BUTTONS.items():
-        conf = json.loads(c.pub[f"homeassistant/button/{main.NODE}/{node}/config"])
-        assert conf["name"] == name
-        assert conf["object_id"] == oid
-
-
-def test_buttons_cleared_when_action_endpoint_unsupported():
-    c = StubClient()
-    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS), "km")   # no action endpoints
-    for _cmd, (_oid, node, _name, _icon, _ep) in main.ACTION_BUTTONS.items():
-        assert c.pub[f"homeassistant/button/{main.NODE}/{node}/config"] == ""
-
-
-# --------------------------------------------------------------------------- #
-# writable charge-limit numbers
-# --------------------------------------------------------------------------- #
-def test_numbers_published_when_soc_supported():
-    c = StubClient()
-    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS) | {main.SOC_ENDPOINT}, "mi")
-    for obj, (name, _icon, _role, mn, mx, step) in main.NUMBERS.items():
-        short = obj.removeprefix("r5_")
-        conf = json.loads(c.pub[f"homeassistant/number/{main.NODE}/{short}/config"])
-        assert conf["name"] == name
-        assert conf["command_topic"] == f"{main.CMD_PREFIX}{short}"
-        assert conf["value_template"] == "{{ value_json.%s }}" % short
-        assert (conf["min"], conf["max"], conf["step"]) == (mn, mx, step)
-        assert conf["device_class"] == "battery" and conf["unit_of_measurement"] == "%"
-
-
-def test_numbers_cleared_when_soc_unsupported():
-    c = StubClient()
-    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS), "mi")   # soc-levels not supported
-    for obj in main.NUMBERS:
-        assert c.pub[f"homeassistant/number/{main.NODE}/{obj.removeprefix('r5_')}/config"] == ""
-
-
-def test_retired_soc_sensors_are_cleared():
-    c = StubClient()
-    main.publish_discovery(c, set(main.OPTIONAL_ENDPOINTS) | {main.SOC_ENDPOINT}, "mi")
-    for obj in ("r5_soc_max_target", "r5_soc_min_target"):
-        assert c.pub[f"homeassistant/sensor/{main.NODE}/{obj}/config"] == ""
-
-
-def test_number_cmds_and_roles():
-    assert main.NUMBER_CMDS == {obj.removeprefix("r5_") for obj in main.NUMBERS}
-    assert main._NUMBER_ROLE["soc_min_target"] == "min"
-    assert main._NUMBER_ROLE["soc_max_target"] == "target"
 
 
 def test_command_actions_dispatch_to_real_methods():
@@ -468,6 +258,15 @@ def test_command_actions_dispatch_to_real_methods():
 
 
 # --------------------------------------------------------------------------- #
+# writable charge-limit numbers
+# --------------------------------------------------------------------------- #
+def test_number_cmds_and_roles():
+    assert main.NUMBER_CMDS == {obj.removeprefix("r5_") for obj in main.NUMBERS}
+    assert main._NUMBER_ROLE["soc_min_target"] == "min"
+    assert main._NUMBER_ROLE["soc_max_target"] == "target"
+
+
+# --------------------------------------------------------------------------- #
 # cached login session
 # --------------------------------------------------------------------------- #
 def test_vehicle_session_reuses_login_and_reauths_after_invalidate(monkeypatch):
@@ -502,77 +301,9 @@ def test_vehicle_session_reuses_login_and_reauths_after_invalidate(monkeypatch):
     asyncio.run(scenario())
 
 
-# debug API dump --------------------------------------------------------------
-
-def test_debug_redact_masks_ids_and_secrets_but_keeps_telemetry():
-    payload = {
-        "vin": "VF1SECRET",
-        "registrationNumber": "PLATE123",
-        "batteryLevel": 80,
-        "gpsLatitude": 51.5,
-        "owner": {"firstName": "Matt", "email": "x@y.z", "note": "car VF1SECRET here"},
-        "programs": [{"tcuCode": "T1"}],
-    }
-    out = main._debug_redact(payload, ["VF1SECRET"])
-    assert out["vin"] == "***"                       # id key masked
-    assert out["registrationNumber"] == "***"        # plate masked
-    assert out["batteryLevel"] == 80                 # telemetry kept
-    assert out["gpsLatitude"] == "***"               # location masked (it's PII, not telemetry)
-    assert out["owner"]["firstName"] == "***"        # contact field masked
-    assert out["owner"]["note"] == "car *** here"    # secret value scrubbed in-string
-    assert out["programs"][0]["tcuCode"] == "***"    # nested list+id masked
-
-
-def test_debug_redact_masks_lifecycle_privacy_buildspec_and_token_keys():
-    """Quasi-identifying lifecycle/privacy fields, the build-spec `assets` block, and
-    token-ish field names are masked by key regardless of value type/shape."""
-    out = main._debug_redact(
-        {
-            "deliveryDate": "2024-03-01",
-            "firstRegistrationDate": "2024-03-15",
-            "vehicleId": 1234567,
-            "privacyMode": "off",
-            "privacyModeUpdateDate": "2024-04-01",
-            "svtFlag": False,
-            "svtBlockFlag": False,
-            "batteryCode": "BC-XYZ",
-            "assets": [{"renditions": [{"url": "https://3dv.renault.com/VCD/abc"}]}],
-            "accessToken": "ey.real.token",
-            "refreshToken": "ey.refresh",
-            "gigyaCookieValue": "cookie",
-            "batteryLevel": 80,             # telemetry — must survive
-        },
-        [],
-    )
-    for key in ("deliveryDate", "firstRegistrationDate", "vehicleId", "privacyMode",
-                "privacyModeUpdateDate", "svtFlag", "svtBlockFlag", "batteryCode",
-                "assets", "accessToken", "refreshToken", "gigyaCookieValue"):
-        assert out[key] == "***", key
-    assert out["batteryLevel"] == 80
-
-
-def test_debug_redact_masks_non_string_id_and_numeric_secret():
-    # an identifier held as a number must still be masked (key-based, any type)
-    out = main._debug_redact({"vin": 12345, "iccid": 999, "batteryLevel": 80}, [])
-    assert out["vin"] == "***" and out["iccid"] == "***" and out["batteryLevel"] == 80
-    # a configured secret value that comes back as a number is masked by value
-    assert main._debug_redact({"acc": 7788}, ["7788"]) == {"acc": "***"}
-    # list of dicts (the get_* list-returning shape) is recursed
-    out2 = main._debug_redact([{"contractId": "C1"}, {"ok": 1}], [])
-    assert out2[0]["contractId"] == "***" and out2[1]["ok"] == 1
-
-
-def test_debug_enabled_reads_env(monkeypatch):
-    monkeypatch.delenv("R5_DEBUG_DUMP", raising=False)
-    assert main.debug_enabled() is False
-    monkeypatch.setenv("R5_DEBUG_DUMP", "true")
-    assert main.debug_enabled() is True
-    monkeypatch.setenv("R5_DEBUG_DUMP", "false")
-    assert main.debug_enabled() is False
-
-
-# dashboard car-render selection (deploy.py) ----------------------------------
-
+# --------------------------------------------------------------------------- #
+# dashboard car-render selection (deploy.py)
+# --------------------------------------------------------------------------- #
 def test_selected_render_resolves_trim_folder(monkeypatch):
     import deploy
     monkeypatch.setenv("R5_CAR_RENDER", "midnight-blue-iconic")
@@ -585,8 +316,9 @@ def test_selected_render_resolves_trim_folder(monkeypatch):
     assert deploy._selected_render() is None
 
 
-# poll_once integration — the published-data contract -------------------------
-
+# --------------------------------------------------------------------------- #
+# poll_once integration — the published-data contract
+# --------------------------------------------------------------------------- #
 class _FakeBattery:
     batteryLevel = 80
     batteryAutonomy = 200
@@ -678,7 +410,7 @@ def test_poll_once_produces_every_core_sensor_key(monkeypatch):
     data, _loc = _poll(_FakeVehicle(), {"charge-mode", "pressure"}, monkeypatch)
     produced = set(data)
     # every published sensor key (minus r5_) except last_charge_* (needs a completed session)
-    core = {obj.removeprefix("r5_") for obj in main.SENSORS if "last_charge" not in obj}
+    core = {obj.removeprefix("r5_") for obj in catalog.SENSORS if "last_charge" not in obj}
     assert core - produced == set(), f"poll_once did not produce: {core - produced}"
     # the key the success-log line reads must exist (regression guard for the log-key bug)
     assert "charger_plug_status" in data
@@ -689,63 +421,3 @@ def test_poll_once_degrades_when_one_endpoint_fails(monkeypatch):
     data, _loc = _poll(_FakeVehicle(fail={"hvac"}), {"charge-mode", "pressure"}, monkeypatch)
     assert "cabin_temperature" not in data and "hvac_status" not in data   # hvac skipped
     assert "battery_level" in data and "charger_plug_status" in data       # rest survive
-
-
-# --------------------------------------------------------------------------- #
-# Option parsing + secret redaction (mirrors the A290 twin)
-# --------------------------------------------------------------------------- #
-def test_opt_flag_parses_values_and_defaults(monkeypatch):
-    monkeypatch.setenv("R5_FLAG", "true")
-    assert main._opt_flag("R5_FLAG", False) is True
-    for v in ("false", "0", "off"):
-        monkeypatch.setenv("R5_FLAG", v)
-        assert main._opt_flag("R5_FLAG", True) is False
-    for v in ("", "null", "  "):          # bashio can export these on an upgraded install
-        monkeypatch.setenv("R5_FLAG", v)
-        assert main._opt_flag("R5_FLAG", True) is True     # -> default
-    monkeypatch.delenv("R5_FLAG", raising=False)
-    assert main._opt_flag("R5_FLAG", True) is True         # unset -> default
-
-
-def test_redact_masks_configured_secrets(monkeypatch):
-    monkeypatch.setenv("R5_VIN", "VF1AAAABBBB12345")
-    monkeypatch.setenv("R5_ACCOUNT_ID", "acct-9911")
-    monkeypatch.setenv("R5_USERNAME", "me@example.com")
-    monkeypatch.setenv("R5_PASSWORD", "hunter2")
-    # an aiohttp-style error embedding the request URL (which carries the VIN + account id)
-    err = RuntimeError("500, message='Server error', "
-                       "url='https://api.example/accounts/acct-9911/vehicles/VF1AAAABBBB12345/charges'")
-    out = main.redact(err)
-    assert "VF1AAAABBBB12345" not in out and "acct-9911" not in out
-    assert out.count("***") == 2 and "message='Server error'" in out   # non-secret text kept
-    # empty/absent secrets never mask (would otherwise blank random text)
-    for k in ("R5_VIN", "R5_ACCOUNT_ID", "R5_USERNAME", "R5_PASSWORD"):
-        monkeypatch.delenv(k, raising=False)
-    assert main.redact("nothing secret here") == "nothing secret here"
-
-
-def test_redact_masks_auto_discovered_account_id(monkeypatch):
-    # account_id left blank -> discovered at runtime; it still embeds in the Kamereon URL and
-    # must be redacted even though it was never a configured (env) value.
-    monkeypatch.delenv("R5_ACCOUNT_ID", raising=False)
-    monkeypatch.setattr(main, "_DISCOVERED_ACCOUNT_ID", "acct-discovered-42")
-    out = main.redact("404 url='https://api/accounts/acct-discovered-42/vehicles/V/charges'")
-    assert "acct-discovered-42" not in out and "***" in out
-
-
-def test_redact_masks_supervisor_token(monkeypatch):
-    monkeypatch.setenv("SUPERVISOR_TOKEN", "supervis-tok-abc")
-    assert "supervis-tok-abc" not in main.redact("ws error with token supervis-tok-abc")
-
-
-def test_redacting_filter_scrubs_log_records(monkeypatch):
-    import logging
-    monkeypatch.setenv("R5_VIN", "VF1FILTERVIN")
-    monkeypatch.setattr(main, "_DISCOVERED_ACCOUNT_ID", "acct-flt")
-    rec = logging.LogRecord("x", logging.ERROR, __file__, 1,
-                            "poll failed: %s",
-                            ("url=/accounts/acct-flt/vehicles/VF1FILTERVIN/charges",), None)
-    assert main._RedactingFilter().filter(rec) is True
-    msg = rec.getMessage()
-    assert "VF1FILTERVIN" not in msg and "acct-flt" not in msg
-    assert msg.count("***") == 2 and rec.args == ()
