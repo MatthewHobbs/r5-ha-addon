@@ -13,13 +13,11 @@ import json
 import os
 import tempfile
 
-import charge
-import config
 import deploy
 import main
-import mqtt
 import pytest
 from renault_api.kamereon.enums import ChargeState, PlugState
+from renault_ha_core import charge, config, mqtt
 
 
 def _obj(**attrs):
@@ -699,10 +697,10 @@ def test_main_runs_one_successful_cycle(monkeypatch, tmp_path):
     fc = _wire_main(monkeypatch, tmp_path, poll)
     asyncio.run(main.main())
     topics = [t for t, _ in fc.pubs]
-    assert main.STATE_TOPIC in topics
-    assert main.ATTR_TOPIC in topics              # location attrs published
-    assert main.TRACKER_STATE_TOPIC in topics
-    assert (main.AVAIL_TOPIC, "offline") in fc.pubs   # clean shutdown
+    assert mqtt.STATE_TOPIC in topics
+    assert mqtt.ATTR_TOPIC in topics              # location attrs published
+    assert mqtt.TRACKER_STATE_TOPIC in topics
+    assert (mqtt.AVAIL_TOPIC, "offline") in fc.pubs   # clean shutdown
     assert fc.stopped is True and fc.disconnected is True
 
 
@@ -713,7 +711,7 @@ def test_main_failure_branch_flags_auth_and_staleness(monkeypatch, tmp_path):
 
     fc = _wire_main(monkeypatch, tmp_path, poll)
     asyncio.run(main.main())
-    state_payloads = [json.loads(p) for t, p in fc.pubs if t == main.STATE_TOPIC]
+    state_payloads = [json.loads(p) for t, p in fc.pubs if t == mqtt.STATE_TOPIC]
     assert any(d.get("api_auth_failure") == "on" for d in state_payloads)
     assert any(d.get("data_stale") == "on" for d in state_payloads)
 

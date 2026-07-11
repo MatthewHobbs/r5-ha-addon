@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0
+
+- **Internal: adopt the shared `renault-ha-core` package.** The code this add-on runs in
+  common with its Alpine A290 sibling (config/redaction, MQTT discovery, charge-session
+  reconciliation, the API debug dump, and the pure parse/format helpers) now lives in one
+  installed package instead of being hand-mirrored between the two repos. No user-facing
+  behaviour change — every entity, `object_id`, MQTT topic, and command topic is identical
+  to 1.2.0; this is purely a maintainability move so fixes land once for both add-ons.
+
 ## 1.2.0
 
 - **Location is now fully opt-out — new `publish_location` option (default on).** Set
