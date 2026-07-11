@@ -8,6 +8,9 @@ no `secrets.yaml`. Credentials are entered on the add-on's Configuration page. I
 (full credit for the original dashboards, assets and design), replacing that project's
 fragile `venv` + `renault-api` CLI + shell-script data layer.
 
+**Tier 0.** Global rules (dual review, container-verify, trunk/merge policy, Conventional
+Commits, HA cadence) live in `~/.claude/CLAUDE.md`; this file is R5-specifics only.
+
 A sibling repo, **`MatthewHobbs/a290-ha-addon`**, is the Alpine A290 add-on this is **ported
 from** (the R5 E-Tech and A290 share the CMF-BEV / KCM platform). **Keep the two in
 lockstep** — most feature/fix work here should be mirrored there (adjusting for per-model
@@ -100,31 +103,15 @@ clean. Keep them identical to the a290 twin's `ui-tests/run.sh` (lockstep).
 Ruff config (`ruff.toml`): line-length 120, target py314, `select = E,F,W,B,I`,
 `ignore = E501,B008`.
 
-## Reviews — Claude + codex, compared
-
-Every review of a change here — PR review, diff review, pre-merge review, security review —
-is run **twice: once by Claude and once independently by `codex`** — and the two results
-reconciled. A single reviewer misses things and can be confidently wrong; two independent
-passes surface contradictions and errors that one alone won't, and the comparison is the
-point (not just running both).
-
-- `codex exec review --base <branch>` (PR vs base), `codex exec review --uncommitted`
-  (working tree), or `codex exec review --commit <sha>` — run from the repo root.
-- Compare the two explicitly: where they agree, where they contradict, and anything one
-  caught that the other missed. Reconcile — don't just stack both.
-- Surface contradictions and errors rather than silently picking one.
-
 ## Before recommending a merge: build the container locally
 
-This add-on ships as a container image that HA Supervisor pulls **by tag** (`config.yaml`
-`version`), so the production platform can't be live-verified until *after* a release is
-tagged and published. A version-bump / runtime PR is therefore **not** considered verified
-by CI alone — build and boot the image locally and observe the changed behaviour first:
+Per the global container rule — this add-on's image is pulled by tag (`config.yaml` `version`),
+so build and boot it locally and observe the changed behaviour before merge on any runtime PR:
 
 ```sh
-# The base image is pinned in renault_5/Dockerfile (FROM ghcr.io/home-assistant/base:<tag>,
-# the single source of truth) — no --build-arg needed (build.yaml/BUILD_FROM were removed when
-# Supervisor 2026.04 dropped the BUILD_FROM default).
+# base image pinned in renault_5/Dockerfile (FROM ghcr.io/home-assistant/base:<tag>, the single
+# source of truth) — no --build-arg needed (build.yaml/BUILD_FROM were removed when Supervisor
+# 2026.04 dropped the BUILD_FROM default).
 docker buildx build --platform linux/amd64 -t r5-local renault_5
 # then run with a stub /data/options.json and curl http://localhost:<port>/healthz, check logs, etc.
 ```
