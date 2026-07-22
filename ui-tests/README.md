@@ -7,8 +7,9 @@ Mushroom tile labels clipping on a phone.
 
 ## How it works
 
-1. `run.sh` boots a throwaway Home Assistant container, vendors the custom cards
-   (Mushroom, Button Card, card-mod into `www/`; Bubble Card from jsDelivr), and completes
+1. `run.sh` boots a throwaway Home Assistant container, vendors all four custom cards
+   (Mushroom, Button Card, card-mod, Bubble Card) as pinned single-file bundles into `www/`
+   — served same-origin so nothing loads over the network at render time — and completes
    onboarding to get an API token.
 2. `seed.py` gives every entity the dashboards reference a representative state via the REST
    `/api/states` API — no MQTT or add-on needed, since the cards read `hass.states`
