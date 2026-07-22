@@ -9,7 +9,8 @@ Mushroom tile labels clipping on a phone.
 
 1. `run.sh` boots a throwaway Home Assistant container, vendors all four custom cards
    (Mushroom, Button Card, card-mod, Bubble Card) as pinned single-file bundles into `www/`
-   — served same-origin so nothing loads over the network at render time — and completes
+   — served same-origin so no card loads over the network at render time (only the Zen Dots
+   webfont is still fetched remotely) — and completes
    onboarding to get an API token.
 2. `seed.py` gives every entity the dashboards reference a representative state via the REST
    `/api/states` API — no MQTT or add-on needed, since the cards read `hass.states`
