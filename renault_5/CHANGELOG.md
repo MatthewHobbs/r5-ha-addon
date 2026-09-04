@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.5
+
+- **Smart Charging: "Bump Charge" is now labelled "Charge Now."** The dashboard's bump/boost
+  control (from the `charger_bump_charge` option) now reads **Charge Now** — the plain-language
+  name for the remote "charge now while away" control. Same entity and behaviour; label only.
+  Re-import the dashboard (or `redeploy_dashboard: true`) to pick it up. (Mirrored from the A290.)
+
 ## 1.3.4
 
 - **Account auto-discovery hardened (parity with the A290).** Discovery now selects the account
