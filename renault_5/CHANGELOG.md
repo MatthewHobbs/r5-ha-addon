@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.3
+
+- **Security: bump `aiohttp` to 3.14.3.** Clears three advisories affecting the
+  transitively-pinned `aiohttp` 3.14.1 (`PYSEC-2026-3545`, `-3546`, `-3547`; fixed upstream in
+  3.14.2/3.14.3). Lockfile-only refresh (`requirements.txt`) — no behaviour, entity, or
+  `object_id` change. (Mirrored from the A290.)
+
 ## 1.3.2
 
 - **Available Energy now populated ([#30](https://github.com/MatthewHobbs/r5-ha-addon/issues/30)).**
