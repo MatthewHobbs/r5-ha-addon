@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.4
+
+- **Account auto-discovery hardened (parity with the A290).** Discovery now selects the account
+  whose garage actually contains your configured VIN rather than assuming the first `MYRENAULT`
+  account, falling back to the previous behaviour if none matches. No behaviour change for R5
+  owners (the R5 is under a MYRENAULT account); this keeps the code in lockstep with the A290,
+  whose car is registered under a MYALPINE account.
+
 ## 1.3.3
 
 - **Security: bump `aiohttp` to 3.14.3.** Clears three advisories affecting the
