@@ -755,7 +755,11 @@ def test_main_runs_one_successful_cycle(monkeypatch, tmp_path):
     topics = [t for t, _ in fc.pubs]
     assert mqtt.STATE_TOPIC in topics
     assert mqtt.ATTR_TOPIC in topics              # location attrs published
-    assert mqtt.TRACKER_STATE_TOPIC in topics
+    # ...and NOTHING on the tracker state topic. A state payload becomes the entity's
+    # location_name, which outranks the lat/lon attributes above and would pin the tracker to that
+    # value forever. This assertion was inverted -- it used to require the write that caused the
+    # bug -- so it now guards the fix rather than the regression.
+    assert mqtt.TRACKER_STATE_TOPIC not in topics
     assert (mqtt.AVAIL_TOPIC, "offline") in fc.pubs   # clean shutdown
     assert fc.stopped is True and fc.disconnected is True
 
