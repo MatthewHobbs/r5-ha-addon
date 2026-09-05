@@ -7,6 +7,7 @@ patch/set those on the mqtt module. _on_message dispatches via the injected _COM
 _LOOP (main wires real ones at startup). mqtt.configure(catalog) is run when conftest imports
 main."""
 import json
+import pathlib
 
 import catalog
 from renault_mqtt import mqtt
@@ -243,3 +244,21 @@ def test_mqtt_connect(monkeypatch):
     assert c.conn == ("broker", 1884, 30)
     assert c.delay == {"min_delay": 1, "max_delay": 120}
     assert c.started is True
+
+
+def test_runtime_never_writes_the_tracker_state_topic():
+    """The tracker deliberately declares no state topic (renault-mqtt >=0.13.0). Publishing to it
+    sets location_name, which wins over the lat/lon attributes and pins the entity to that payload
+    -- the R5 previously wrote "online" here every poll and the tracker could never report a zone.
+
+    Guarded at source level because the regression is a single line reappearing in the poll loop,
+    and the behavioural contract already lives in the core's own tests.
+    """
+    app = pathlib.Path(__file__).resolve().parent.parent / "app"
+    offenders = [
+        f"{f.name}:{n}: {line.strip()}"
+        for f in sorted(app.glob("*.py"))
+        for n, line in enumerate(f.read_text().splitlines(), 1)
+        if "TRACKER_STATE_TOPIC" in line and "publish" in line
+    ]
+    assert not offenders, "runtime must not publish to the tracker state topic:\n" + "\n".join(offenders)
