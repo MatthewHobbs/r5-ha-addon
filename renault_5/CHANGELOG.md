@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.2
+
+- **Clearer logs when an entity is missing.** The add-on withholds entities for several different
+  reasons — the car does not expose the endpoint, the object_id was retired in a previous version,
+  or there was simply nothing to publish — and previously reported all of them the same way. The
+  log now names what was withheld and why, so "why is this entity missing?" is answerable from the
+  log alone. In particular, if your vehicle does not expose Renault's SOC endpoint, the log now
+  says so explicitly rather than silently omitting the Min/Max SOC controls.
+- Picks up shared core `renault-mqtt` v0.13.1. No behaviour change beyond the logging.
+
+
 ## 1.4.1
 
 - **Fixed: Min SOC and Target SOC were blank on the charging card.** The two values are set from
