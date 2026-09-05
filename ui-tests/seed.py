@@ -59,8 +59,6 @@ KNOWN = {
     "sensor.r5_battery_autonomy": ("147.3", {"unit_of_measurement": "mi"}),
     "sensor.r5_vehicle_mileage": ("12345", {"unit_of_measurement": "mi"}),
     "sensor.r5_charging_rate": ("7.4", {"unit_of_measurement": "kW"}),
-    "sensor.r5_charging_remaining": ("215", {"unit_of_measurement": "min"}),
-    "sensor.r5_charging_time_remaining": ("215", {"unit_of_measurement": "min"}),
     "sensor.r5_available_energy": ("41.6", {"unit_of_measurement": "kWh"}),
     "sensor.r5_battery_temperature": ("18", {"unit_of_measurement": "°C"}),
     "sensor.r5_external_temperature": ("12", {"unit_of_measurement": "°C"}),
@@ -70,8 +68,15 @@ KNOWN = {
     "sensor.r5_drive_side": ("RHD", {"icon": "mdi:steering"}),
     "sensor.r5_hvac_status": ("Idle", {"icon": "mdi:fan"}),
     "sensor.r5_charge_mode": ("Scheduled", {"icon": "mdi:ev-station"}),
-    "sensor.r5_soc_max_target": ("80", {"unit_of_measurement": "%", "device_class": "battery"}),
-    "sensor.r5_soc_min_target": ("20", {"unit_of_measurement": "%", "device_class": "battery"}),
+    # SOC targets are number.* entities, not sensor.* — they moved to NUMBERS in catalog.py so
+    # users can set them, and their old sensor object_ids are in RETIRED_SENSORS. Seeding them
+    # as sensors made this gate render against an entity set production does not publish, so it
+    # passed while every real install showed an empty badge (issue #50).
+    # min/max/step mirror catalog.NUMBERS so the seeded control matches what the add-on ships.
+    "number.r5_soc_max_target": ("80", {"min": 55, "max": 100, "step": 5,
+        "mode": "slider", "unit_of_measurement": "%", "device_class": "battery"}),
+    "number.r5_soc_min_target": ("20", {"min": 15, "max": 45, "step": 5,
+        "mode": "slider", "unit_of_measurement": "%", "device_class": "battery"}),
     "sensor.r5_hvac_soc_threshold": ("40", {"unit_of_measurement": "%", "device_class": "battery"}),
     "sensor.r5_preconditioning_temperature": ("20", {"unit_of_measurement": "°C"}),
     "sensor.r5_last_charge_type": ("Rapid/Public", {"icon": "mdi:ev-station"}),
@@ -81,7 +86,6 @@ KNOWN = {
     "sensor.r5_last_charge_energy_recovered": ("28.6", {"unit_of_measurement": "kWh"}),
     "sensor.r5_last_charge_start": ("2026-06-26T18:04:00+00:00", {"device_class": "timestamp"}),
     "sensor.r5_last_charge_end": ("2026-06-26T18:46:00+00:00", {"device_class": "timestamp"}),
-    "sensor.r5_last_updated": ("2026-06-27T09:15:00+00:00", {"device_class": "timestamp"}),
     "sensor.r5_hvac_last_activity": ("2026-06-27T08:50:00+00:00", {"device_class": "timestamp"}),
     "sensor.r5_gps_last_activity": ("2026-06-27T09:10:00+00:00", {"device_class": "timestamp"}),
     # Demo Octopus Intelligent charger entities (Smart Charging block / bubble pop-up).
