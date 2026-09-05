@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.4.1
+
+- **Fixed: Min SOC and Target SOC were blank on the charging card.** The two values are set from
+  the dashboard, so they were changed from read-only sensors into `number` entities — but the
+  bundled dashboards were never updated and kept reading the old `sensor.r5_soc_min_target` /
+  `sensor.r5_soc_max_target`. Those entities no longer exist, so the card fell back to showing a
+  dash. Both dashboards now read `number.r5_soc_min_target` / `number.r5_soc_max_target`.
+  Reported in [#50](https://github.com/MatthewHobbs/r5-ha-addon/issues/50).
+- **Upgrading is automatic** — replace your dashboard from the updated `front-end.txt` or
+  `front-end-bubble.txt` to pick up the fix. If the values are still blank afterwards, your
+  vehicle may not expose Renault's SOC endpoint at all; the add-on log now says so explicitly.
+- **Internal:** added a conformance test that fails if a bundled dashboard or the UI test harness
+  references an entity this build does not publish, so this class of drift cannot ship again. It
+  immediately found three stale entities in the test harness, now removed.
+
+
 ## 1.4.0
 
 - **Fixed: the car's location entity never showed Home or a zone.** `device_tracker.*_location`

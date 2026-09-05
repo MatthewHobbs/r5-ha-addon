@@ -217,8 +217,8 @@
           hold_action: none
           triggers_update:
           - sensor.r5_battery_level
-          - sensor.r5_soc_max_target
-          - sensor.r5_soc_min_target
+          - number.r5_soc_max_target
+          - number.r5_soc_min_target
           - binary_sensor.r5_charging
           - sensor.r5_charger_status
           show_name: false
@@ -235,7 +235,7 @@
               <div></div>
             min_badge: |
               [[[
-                const s = states['sensor.r5_soc_min_target']?.state;
+                const s = states['number.r5_soc_min_target']?.state;
                 const v = (s === undefined || s === null || s === 'unknown' || s === 'unavailable')
                   ? '—'
                   : String(s).replace('%','');
@@ -250,7 +250,7 @@
               <div></div>
             max_badge: |
               [[[
-                const s = states['sensor.r5_soc_max_target']?.state;
+                const s = states['number.r5_soc_max_target']?.state;
                 const v = (s === undefined || s === null || s === 'unknown' || s === 'unavailable')
                   ? '—'
                   : String(s).replace('%','');
@@ -375,7 +375,7 @@
                     const TRACK_LEFT = 8;
                     const TRACK_RIGHT = 90;
 
-                    const s = states['sensor.r5_soc_min_target']?.state;
+                    const s = states['number.r5_soc_min_target']?.state;
                     const v = Math.max(0, Math.min(100, parseFloat(String(s).replace('%','')) || 0));
                     const pos = TRACK_LEFT + (v / 100) * (TRACK_RIGHT - TRACK_LEFT);
                     return `${pos}%`;
@@ -394,7 +394,7 @@
                     const TRACK_LEFT = 8;
                     const TRACK_RIGHT = 90;
 
-                    const s = states['sensor.r5_soc_max_target']?.state;
+                    const s = states['number.r5_soc_max_target']?.state;
                     const v = Math.max(0, Math.min(100, parseFloat(String(s).replace('%','')) || 0));
                     const pos = TRACK_LEFT + (v / 100) * (TRACK_RIGHT - TRACK_LEFT);
                     return `${pos}%`;
@@ -414,7 +414,7 @@
                     const TRACK_LEFT = 8;
                     const TRACK_RIGHT = 90;
 
-                    const s = states['sensor.r5_soc_min_target']?.state;
+                    const s = states['number.r5_soc_min_target']?.state;
                     const v = Math.max(0, Math.min(100, parseFloat(String(s).replace('%','')) || 0));
                     const pos = TRACK_LEFT + (v / 100) * (TRACK_RIGHT - TRACK_LEFT);
                     return `${pos}%`;
@@ -434,7 +434,7 @@
                     const TRACK_LEFT = 8;
                     const TRACK_RIGHT = 90;
 
-                    const s = states['sensor.r5_soc_max_target']?.state;
+                    const s = states['number.r5_soc_max_target']?.state;
                     const v = Math.max(0, Math.min(100, parseFloat(String(s).replace('%','')) || 0));
                     const pos = TRACK_LEFT + (v / 100) * (TRACK_RIGHT - TRACK_LEFT);
                     return `${pos}%`;
@@ -588,13 +588,13 @@
         - type: custom:bubble-card
           card_type: button
           button_type: state
-          entity: sensor.r5_soc_min_target
+          entity: number.r5_soc_min_target
           name: Min SOC
           styles: .bubble-icon-container{color:red !important;}
         - type: custom:bubble-card
           card_type: button
           button_type: state
-          entity: sensor.r5_soc_max_target
+          entity: number.r5_soc_max_target
           name: Max SOC
           styles: .bubble-icon-container{color:green !important;}
       - type: custom:bubble-card
