@@ -11,6 +11,9 @@ updates:
     directory: "/renault_5/app"
     schedule:
       interval: weekly
+      day: saturday
+      time: "06:00"
+      timezone: Europe/London
     ignore:
       - dependency-name: renault-api
     groups:
