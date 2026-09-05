@@ -103,18 +103,58 @@ clean. Keep them identical to the a290 twin's `ui-tests/run.sh` (lockstep).
 Ruff config (`ruff.toml`): line-length 120, target py314, `select = E,F,W,B,I`,
 `ignore = E501,B008`.
 
-## Before recommending a merge: build the container locally
+## Before recommending a merge: build and boot the container locally
 
 Per the global container rule — this add-on's image is pulled by tag (`config.yaml` `version`),
-so build and boot it locally and observe the changed behaviour before merge on any runtime PR:
+so build and boot it locally and observe the changed behaviour before merge on any runtime PR.
+
+Two things make a naive run fail, both worth knowing before you spend time debugging them:
+
+- **`bashio::config` reads the Supervisor API, not `/data/options.json`.** Mounting a stub
+  options file achieves nothing: `/run.sh` gets empty config and the add-on correctly exits
+  with `Missing required setting`. Bypass `run.sh` with `--entrypoint python3` and pass the
+  `R5_*` env vars directly.
+- **The poller needs an MQTT broker** or it dies on `ConnectionRefusedError` before it ever
+  serves `/healthz`.
+
+There are no test credentials to use. `renault-api` has no sandbox and authenticates only
+against production Gigya/Kamereon, so blackhole the three real hosts and the boot test never
+reaches Renault. The verification signal is identical; only the poll error text changes.
+The S3 host is easy to miss — `get_api_keys()` hits it before login even starts.
 
 ```sh
-# base image pinned in renault_5/Dockerfile (FROM ghcr.io/home-assistant/base:<tag>, the single
-# source of truth) — no --build-arg needed (build.yaml/BUILD_FROM were removed when Supervisor
-# 2026.04 dropped the BUILD_FROM default).
 docker buildx build --platform linux/amd64 -t r5-local renault_5
-# then run with a stub /data/options.json and curl http://localhost:<port>/healthz, check logs, etc.
+
+docker network create r5v
+printf 'listener 1883 0.0.0.0\nallow_anonymous true\n' > /tmp/mosq.conf
+docker run -d --name r5-mqtt --network r5v \
+  -v /tmp/mosq.conf:/mosquitto/config/mosquitto.conf eclipse-mosquitto:2
+
+docker run -d --name r5-verify --network r5v -p 8099:8099 \
+  --add-host accounts.eu1.gigya.com:127.0.0.1 \
+  --add-host api-wired-prod-1-euw1.wrd-aws.com:127.0.0.1 \
+  --add-host renault-wrd-prod-1-euw1-myrapp-one.s3-eu-west-1.amazonaws.com:127.0.0.1 \
+  -e R5_USERNAME=stub@example.invalid -e R5_PASSWORD=stub-not-a-real-credential \
+  -e R5_ACCOUNT_ID=0000000000 -e R5_VIN=VF1STUBVIN0000000 \
+  -e R5_LOCALE=en_GB -e R5_POLL_INTERVAL=300 -e R5_BATTERY_CAPACITY_KWH=52 \
+  -e R5_STALE_HOURS=6 -e R5_PUBLISH_LOCATION=true -e R5_GPS_PRECISION=4 \
+  -e R5_CAR_RENDER= \
+  -e R5_LOG_LEVEL=debug -e R5_DEBUG_DUMP=false \
+  -e R5_DEPLOY_DASHBOARD=none -e R5_REDEPLOY_DASHBOARD=false \
+  -e MQTT_HOST=r5-mqtt -e MQTT_PORT=1883 -e MQTT_USER= -e MQTT_PASS= \
+  --entrypoint python3 r5-local -u /app/main.py
+
+sleep 8
+curl -s http://127.0.0.1:8099/healthz; echo
+docker logs r5-verify 2>&1 | tail -20
+
+docker rm -f r5-verify r5-mqtt; docker network rm r5v
 ```
+
+Expect `/healthz` to return `ok`, plus `MQTT connected — subscribed to commands, discovery
+(re)published` and a `Published discovery: N sensors …` line. One `Poll failed … Cannot connect
+to host accounts.eu1.gigya.com` is expected and correct: it is the proof no traffic left the
+machine.
 
 Exceptions (CI is enough): docs-only, CI-YAML-only, or test-only changes.
 
