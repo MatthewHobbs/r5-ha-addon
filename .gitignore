@@ -27,3 +27,6 @@ htmlcov/
 # Editor / IDE
 .vscode/
 .idea/
+
+# Local `just ci` virtualenv (uv)
+.venv/
