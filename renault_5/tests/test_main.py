@@ -334,7 +334,10 @@ def test_poll_once_produces_every_core_sensor_key(monkeypatch):
     data, _loc = _poll(_FakeVehicle(), {"charge-mode", "pressure"}, monkeypatch)
     produced = set(data)
     # every published sensor key (minus r5_) except last_charge_* (needs a completed session)
-    core = {obj.removeprefix("r5_") for obj in catalog.SENSORS if "last_charge" not in obj}
+    # and last_successful_poll, which is OUR clock rather than the car's — the poll loop stamps
+    # it after poll_once returns, so poll_once legitimately never produces it.
+    core = {obj.removeprefix("r5_") for obj in catalog.SENSORS
+            if "last_charge" not in obj and obj != "r5_last_successful_poll"}
     assert core - produced == set(), f"poll_once did not produce: {core - produced}"
     # the key the success-log line reads must exist (regression guard for the log-key bug)
     assert "charger_plug_status" in data

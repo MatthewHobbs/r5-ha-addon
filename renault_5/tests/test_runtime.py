@@ -509,7 +509,7 @@ class _ChargingBattery:
     chargingRemainingTime = 90
     batteryAvailableEnergy = 28.0
     plugStatus = 1
-    timestamp = None                      # forces the iso(now_ts()) fallback
+    timestamp = None                      # a payload that carries no report time
 
     def get_plug_status(self):
         return PlugState.PLUGGED
@@ -552,7 +552,10 @@ def test_poll_once_charging_and_no_gps_fix():
     assert data["charger_status"] == "Charging"
     assert data["available_energy"] == 28.0               # reported by the car, used verbatim
     assert data["charging_flap_status"] == "Open: Plugged In"
-    assert data["battery_last_activity"] is not None      # iso(now_ts()) fallback
+    # NOT fabricated. The poller used to fall back to iso(now_ts()) here, stamping a payload
+    # that carried no timestamp as if it had arrived this instant — which would make staleness
+    # permanently unfireable. If the car did not say when it reported, we do not know.
+    assert data["battery_last_activity"] is None
     assert data["charge_schedule_mode"] == "Scheduled Charge"   # from the KCM ev/settings payload
     assert data["scheduled_charge_start"] == "02:30" and data["scheduled_charge_duration"] == 360
     assert data["climate_schedule_mode"] == "Scheduled" and data["climate_ready_time"] == "Mon 07:15"
@@ -773,7 +776,12 @@ def test_main_failure_branch_flags_auth_and_staleness(monkeypatch, tmp_path):
     asyncio.run(main.main())
     state_payloads = [json.loads(p) for t, p in fc.pubs if t == mqtt.STATE_TOPIC]
     assert any(d.get("api_auth_failure") == "on" for d in state_payloads)
-    assert any(d.get("data_stale") == "on" for d in state_payloads)
+    # poll_failing, not data_stale: the two were split so that "we cannot reach Kamereon" and
+    # "the car has not reported" stop being the same flag. This process never polled
+    # successfully, so poll_failing is on — and data_stale is OMITTED, because no car timestamp
+    # has ever been seen and publishing "off" would assert freshness we cannot know.
+    assert any(d.get("poll_failing") == "on" for d in state_payloads)
+    assert all("data_stale" not in d for d in state_payloads)
 
 
 def test_main_exits_without_required_config(monkeypatch):
@@ -1180,3 +1188,63 @@ def test_hvac_breaker_never_trips_on_a_car_whose_endpoint_works():
         main._BREAKERS.clear()
         main._BREAKER_FAILS.clear()
         main._BREAKER_SKIPS.clear()
+
+
+# --- data_stale measures the CAR, poll_failing measures the FEED (mirrors a290 v1.24.0) -------
+# Regression cover for the defect where data_stale was wired to poll success and forced "off" on
+# every successful poll. On the A290 twin a vehicle silent since 2026-09-04 was polled
+# successfully every five minutes for 68 hours and published as healthy, showing 55% while the
+# car was at 83%. This repo carried the identical code.
+
+def _fresh(state, payload_iso, last_ok, hours=36):
+    return main.freshness_fields(state, payload_iso, hours * 3600, last_ok)
+
+
+def test_data_stale_fires_when_the_car_goes_quiet_though_every_poll_succeeds():
+    now = main.now_ts()
+    out = _fresh({}, main.iso(now - 68 * 3600), last_ok=now)
+    assert out["data_stale"] == "on"
+    assert out["poll_failing"] == "off"
+
+
+def test_data_stale_is_off_while_the_car_is_reporting():
+    now = main.now_ts()
+    assert _fresh({}, main.iso(now - 600), last_ok=now) == {"data_stale": "off",
+                                                            "poll_failing": "off"}
+
+
+def test_a_parked_car_reads_stale_but_not_failing():
+    """The pairing that means 'working fine, car simply parked'. The car only reports when it is
+    powered off at the end of a journey, so a long park legitimately ages past the threshold."""
+    now = main.now_ts()
+    out = _fresh({}, main.iso(now - 40 * 3600), last_ok=now)
+    assert out == {"data_stale": "on", "poll_failing": "off"}
+
+
+def test_poll_failure_ages_the_last_known_car_timestamp():
+    now = main.now_ts()
+    out = _fresh({"last_payload_ts": now - 40 * 3600}, None, last_ok=now - 40 * 3600)
+    assert out == {"data_stale": "on", "poll_failing": "on"}
+
+
+def test_a_transient_failure_raises_neither_signal():
+    now = main.now_ts()
+    assert _fresh({"last_payload_ts": now - 600}, None, last_ok=now - 300) == {
+        "data_stale": "off", "poll_failing": "off"}
+
+
+def test_data_stale_is_omitted_until_a_car_timestamp_has_been_seen():
+    """A fresh install whose first polls fail has no basis for the claim, so HA reads `unknown`.
+    Publishing "off" would restate the bug this replaces."""
+    out = _fresh({}, None, last_ok=0)
+    assert "data_stale" not in out
+    assert out["poll_failing"] == "on"
+
+
+def test_the_climate_sensors_are_availability_gated_not_blanked():
+    """The hvac-settings breaker stops writing these keys; without the gating they render as
+    empty strings, which is what three releases of breaker work left behind."""
+    import catalog
+    assert catalog.DATA_GATED_SENSORS == {"r5_climate_schedule_mode", "r5_climate_ready_time"}
+    for obj in catalog.DATA_GATED_SENSORS:
+        assert obj in catalog.SENSORS, f"{obj} gated but not published"

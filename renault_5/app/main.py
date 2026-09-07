@@ -46,7 +46,7 @@ from catalog import (
 from renault_api.kamereon.enums import ChargeState, PlugState
 from renault_api.renault_client import RenaultClient
 from renault_mqtt import config, mqtt
-from renault_mqtt.charge import CHARGES_ENDPOINT, resolve_last_charge, update_charge_session
+from renault_mqtt.charge import CHARGES_ENDPOINT, _epoch, resolve_last_charge, update_charge_session
 from renault_mqtt.config import _RedactingFilter, cfg, redact
 from renault_mqtt.debug import maybe_dump_api
 from renault_mqtt.parse import (
@@ -152,6 +152,42 @@ def save_state(state):
         os.replace(tmp, STATE_FILE)   # atomic: a kill mid-write never corrupts the state file
     except OSError as err:
         LOG.warning("Could not persist state: %s", err)
+
+
+def freshness_fields(state, payload_iso, stale_secs, last_ok):
+    """The two freshness signals, kept deliberately separate.
+
+    `data_stale` answers "has the CAR reported within stale_hours", from the timestamp inside
+    the battery-status payload. `poll_failing` answers "can WE reach Kamereon", from our own
+    poll clock. Before this, one entity carried the second meaning and was forced "off" on every
+    successful poll, so the first was never asked: on the A290 twin a vehicle silent since
+    2026-09-04 was polled successfully every five minutes for 68 hours and reported as healthy,
+    showing 55% while the car was at 83%.
+
+    battery-status is the right source and `cockpit` is not: cockpit commits at power-off, so
+    keying on it would mark every parked car stale — the same mistake `gps_last_activity` makes.
+
+    Called on both the success and failure paths. On failure `payload_iso` is None and the last
+    known car timestamp is carried forward from `state`, so data merely goes on ageing: an
+    outage cannot make stale data look fresh, and it cannot invent staleness either.
+
+    `data_stale` is OMITTED entirely when no car timestamp has ever been seen (a fresh install
+    whose first polls all failed). A missing key renders empty and HA shows `unknown`, which is
+    the honest answer; publishing "off" would restate the bug this replaces.
+
+    Note a parked car legitimately reads `data_stale: on` — the car only reports when powered
+    off at the end of a journey, so the reading really is older than the threshold. Paired with
+    `poll_failing: off` that means "working fine, car simply parked".
+    """
+    ts = _epoch(payload_iso) if payload_iso else None
+    if ts:
+        state["last_payload_ts"] = ts
+    else:
+        ts = state.get("last_payload_ts")
+    fields = {"poll_failing": "on" if (now_ts() - last_ok) > stale_secs or not last_ok else "off"}
+    if ts:
+        fields["data_stale"] = "on" if (now_ts() - ts) > stale_secs else "off"
+    return fields
 
 
 def charging_status_label(battery):
@@ -452,7 +488,11 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
         "charging_flap_status": "Open: Plugged In" if plug == PlugState.PLUGGED else "Closed",
         # Match the Charging binary sensor: "Charging" when active, else the ChargeState.
         "charger_status": "Charging" if charging else charging_status_label(battery),
-        "battery_last_activity": getattr(battery, "timestamp", None) or iso(now_ts()),
+        # The CAR's own report time, never our clock. The previous `or iso(now_ts())` fallback
+        # stamped a payload that carried no timestamp as if it had arrived this instant, which
+        # is the same failure as the GPS sentinel: a fabricated-fresh timestamp silences the
+        # very guard that exists to catch it.
+        "battery_last_activity": getattr(battery, "timestamp", None),
         "drive_side": "RHD" if locale.lower() in RHD_LOCALES else "LHD",
     }
     mileage = None   # keep raw km for plug-suspect distance maths
@@ -658,7 +698,12 @@ async def main():
                 timeout=max(30, interval - 10))
             state["last_success"] = now_ts()
             data["api_auth_failure"] = "off"
-            data["data_stale"] = "off"
+            data["last_successful_poll"] = iso(state["last_success"])
+            # NOT `data_stale = "off"`. A successful poll proves we reached Kamereon; it says
+            # nothing about how old the payload it returned is, and asserting freshness here is
+            # precisely the defect being fixed.
+            data.update(freshness_fields(state, data.get("battery_last_activity"), stale_secs,
+                                         state["last_success"]))
             client.publish(mqtt.STATE_TOPIC, json.dumps(data), retain=True)
             _LATEST.update(ok=True, last_poll=iso(now_ts()), data=data)
             if location_attrs:
@@ -678,19 +723,23 @@ async def main():
             LOG.error("Poll failed (%d in a row): %s", fails, redact(err))
             await vsession.invalidate()   # next cycle re-authenticates (self-heal)
             last_ok = state.get("last_success", 0)
-            stale = (now_ts() - last_ok) > stale_secs if last_ok else True
+            # No new payload, so the last known car timestamp simply ages. poll_failing keeps
+            # the exact rule data_stale used to carry here, so the connectivity alarm users
+            # already have is preserved, not dropped.
+            fresh = freshness_fields(state, None, stale_secs, last_ok)
             # Prefer the exception type (an HTTP 401/403 is unambiguous); fall back to the
             # message text for gigya/library errors that aren't raised as ClientResponseError.
             auth = (isinstance(err, aiohttp.ClientResponseError) and err.status in (401, 403)) or \
                 any(s in str(err).lower() for s in ("login", "password", "credential", "401", "403"))
             client.publish(mqtt.STATE_TOPIC, json.dumps({
                 "api_auth_failure": "on" if auth else "off",
-                "data_stale": "on" if stale else "off",
+                "last_successful_poll": iso(last_ok),
+                **fresh,
             }), retain=True)
             client.publish(mqtt.AVAIL_TOPIC, "online", retain=True)
             _LATEST.update(ok=False, last_poll=iso(now_ts()), error=redact(err))
             _LATEST["data"].update(api_auth_failure="on" if auth else "off",
-                                   data_stale="on" if stale else "off")
+                                   last_successful_poll=iso(last_ok), **fresh)
         # exponential backoff on repeated failures (avoid a re-auth storm), capped at 30 min
         delay = interval if fails == 0 else min(interval * 2 ** (fails - 1), 1800)
         try:
