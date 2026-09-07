@@ -57,6 +57,7 @@ SENSORS = {
     "r5_tyre_pressure_rl":       ("Tyre Pressure Rear Left", None, None, "measurement"),
     "r5_tyre_pressure_rr":       ("Tyre Pressure Rear Right", None, None, "measurement"),
     "r5_battery_last_activity":  ("Battery Last Activity", "timestamp", None, None),
+    "r5_last_successful_poll":   ("Last Successful Poll", "timestamp", None, None),
     "r5_last_charge_start":          ("Last Charge Start", "timestamp", None, None),
     "r5_last_charge_end":            ("Last Charge End", "timestamp", None, None),
     "r5_last_charge_start_soc":      ("Last Charge Start SoC", "battery", "%", None),
@@ -77,7 +78,12 @@ BINARY_SENSORS = {
     "r5_heated_seat_passenger": ("Heated Seat Passenger", None),
     "r5_plug_suspect":          ("Plug State Suspect", "problem"),
     "r5_api_auth_failure":      ("API Auth Failure", "problem"),
+    # data_stale = the CAR has not reported within stale_hours (payload timestamp age).
+    # poll_failing = WE cannot reach Kamereon. One entity used to carry the second meaning
+    # and never the first, so stale car data was invisible. A parked car reads
+    # data_stale:on + poll_failing:off, which together mean "working fine, car parked".
     "r5_data_stale":            ("Data Stale", "problem"),
+    "r5_poll_failing":          ("Poll Failing", "problem"),
 }
 
 # Icons for text/status sensors that would otherwise fall back to HA's generic mdi:eye.
@@ -153,3 +159,10 @@ RETIRED_SENSORS = ["r5_soc_max_target", "r5_soc_min_target"]
 # user-meaningful state. drive_side is just RHD/LHD derived from locale (used internally for
 # heated-seat mapping); it adds noise to the entity list. Users who want it can re-enable it.
 DEFAULT_DISABLED_SENSORS = {"r5_drive_side"}
+
+# Sensors whose endpoint can keep failing while the car still advertises it. The
+# hvac-settings circuit breaker stops writing these two keys, and without this they
+# render as EMPTY STRINGS - indistinguishable from 'the car reported nothing'.
+# Declaring them here makes their MQTT availability follow whether the key was
+# actually published (renault-mqtt >= 0.16.0).
+DATA_GATED_SENSORS = {"r5_climate_schedule_mode", "r5_climate_ready_time"}

@@ -1,5 +1,5 @@
 name: Renault 5
-version: "1.5.1"
+version: "1.6.0"
 slug: renault_5
 description: Polls your Renault 5 (Renault/Kamereon API) and publishes its data to Home Assistant via MQTT auto-discovery. Credentials are entered once on the Configuration page.
 url: https://github.com/MatthewHobbs/r5-ha-addon/tree/main/renault_5
@@ -31,7 +31,7 @@ options:
   locale: en_GB
   poll_interval: 300
   battery_capacity_kwh: "52"
-  stale_hours: 6
+  stale_hours: 36
   publish_location: true
   gps_precision: 4
   log_level: info

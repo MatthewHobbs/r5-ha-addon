@@ -220,6 +220,10 @@ trip-end-old.** It will not move until the car is driven again. Specifically:
 while the add-on is still polling successfully, everything is working and the car is simply
 parked.
 
+`sensor.r5_last_successful_poll` tells you when the **add-on** last reached Renault, as distinct
+from `…_battery_last_activity`, which is when the **car** last reported. If the first is recent
+and the second is old, everything is working and the car is simply parked.
+
 **`binary_sensor.r5_data_stale` measures the car, not the connection.** It turns on after
 `stale_hours` without the car reporting — so a car parked overnight will show it on, and **that
 is expected, not a fault**: the readings really are older than the threshold you set. It is
