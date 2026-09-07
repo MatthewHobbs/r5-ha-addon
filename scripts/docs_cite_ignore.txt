@@ -1,0 +1,6 @@
+# Entities the docs legitimately name that this add-on does not publish over MQTT.
+# Keep this SHORT and justified — every line here is a check you have switched off.
+
+# Template sensor the README tells you to port from the upstream project (r5 ships no
+# Templates/ package of its own), so it can never appear in this catalog.
+r5_pretty_location
