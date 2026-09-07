@@ -49,7 +49,9 @@ ruff.toml / repository.yaml / README.md / LICENSE
 ## Dependencies
 
 `renault_5/app/requirements.txt` — all pinned, keep them pinned:
-`renault-api==0.5.12`, `paho-mqtt==2.1.0`, `PyYAML==6.0.3`.
+`renault-api==0.5.13`, `paho-mqtt==2.1.0`, `PyYAML==6.0.3`. Pinned in BOTH
+`requirements.in` (the source) and `requirements.txt` (hash-locked) — bump both, or the next
+regeneration silently reverts the one you missed.
 
 **Do not bump `renault-api` casually.** Per-model endpoint support is hard-coded in the
 library at `renault_api/kamereon/models.py` → `_VEHICLE_ENDPOINTS` (R5 is model `R5E1VE`,

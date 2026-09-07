@@ -70,3 +70,44 @@ def test_charges_model_contract():
     assert lc["last_charge_end_soc"] == 80
     assert lc["last_charge_recovered_pct"] == 45
     assert lc["last_charge_duration_min"] == 180   # 3 h from start/end timestamps
+
+
+def test_soc_levels_model_contract():
+    """The charge-limit chain, end to end: API field -> data key -> published entity_id.
+
+    Mirrors the a290 twin's test, which was added after DOCS.md there documented
+    `number.alpine_a290_soc_min_target` / `_soc_max_target` — THIS repo's ids, mirrored across
+    without porting them. The lockstep rule cuts both ways, and nothing caught it.
+
+    The payload below is the REAL captured response from renault-api's own fixture
+    (`tests/fixtures/kamereon/vehicle_kcm_data/ev-soc-levels.json`), loaded through the
+    library's own schema. `soc-levels` is declared for R5E1VE in `_VEHICLE_ENDPOINTS`.
+    """
+    import re
+
+    import catalog
+
+    soc = schemas.KamereonVehicleBatterySocDataSchema.load(
+        {"lastEnergyUpdateTimestamp": "2025-04-18T06:51:09Z", "socMin": 20, "socTarget": 80})
+    assert soc.socMin == 20
+    assert soc.socTarget == 80
+
+    # Data keys must equal object_id minus the prefix, or the MQTT value_template resolves to
+    # nothing and the slider renders unavailable.
+    keys = {o[len(catalog.OBJ_PREFIX):] for o in catalog.NUMBERS}
+    assert keys == {"soc_min_target", "soc_max_target"}, keys
+
+    # HA ignores the discovery object_id and derives slug(device name + friendly name). These
+    # ids differ from the a290's on purpose — this repo keeps the original forked view's entity
+    # names for backward compatibility, which is exactly why a mirrored doc passage is wrong.
+    def slug(text):
+        return re.sub(r"_+", "_", re.sub(r"[^a-z0-9]+", "_", text.lower())).strip("_")
+
+    device = catalog.DEVICE["name"]
+    ids = {slug(f"{device} {meta[0]}") for meta in catalog.NUMBERS.values()}
+    assert ids == {"r5_soc_min_target", "r5_soc_max_target"}, ids
+
+    # The real captured values must sit inside the ranges the sliders advertise.
+    ranges = {o[len(catalog.OBJ_PREFIX):]: (m[2], m[3]) for o, m in catalog.NUMBERS.items()}
+    assert ranges["soc_min_target"][0] <= soc.socMin <= ranges["soc_min_target"][1]
+    assert ranges["soc_max_target"][0] <= soc.socTarget <= ranges["soc_max_target"][1]
