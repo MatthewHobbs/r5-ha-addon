@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.5.0
+
+Mirrors the Alpine A290 add-on's v1.22.0–v1.23.1 fixes (the two projects are kept in lockstep).
+
+- **Fixed: the car could report `not_home` while parked at home.** When the Renault API has no
+  position it does not return an error or a null — it returns an out-of-band *sentinel*:
+  latitude `91`, longitude `181`, each exactly one unit past the maximum, carried on a
+  genuinely fresh timestamp. The add-on published that as a real coordinate, so the car flipped
+  to `not_home`, and because the timestamp looked current the GPS-stale guard switched *off* at
+  the same moment — a fresh non-answer is worse than a stale answer, because nothing is left to
+  catch it. Coordinates are now validated (range, `0,0` null island, NaN) and a payload with no
+  usable fix is rejected, so the last known-good position stays put; the GPS-activity timestamp
+  is deliberately *not* advanced either, so the stale guard stays armed. This was diagnosed on
+  the A290, but the sentinel is Renault-side behaviour rather than a per-model quirk, so the R5
+  was exposed to the same payload.
+- **Fixed: a warning every five minutes if `hvac-settings` stops answering.** The endpoint is
+  now protected by a circuit breaker: after three consecutive failures the add-on stops calling
+  it and says so once, retries roughly hourly, and re-enables itself automatically on recovery.
+  A car whose endpoint works is completely unaffected — the breaker reads what the endpoint
+  actually does rather than what the platform advertises, which on the A290 proved to be the
+  only reliable signal. The two climate-schedule sensors are unchanged on a healthy car.
+- Picks up shared core `renault-mqtt` v0.15.0, which also extends `debug_dump` to cover the
+  location endpoint.
+
 ## 1.4.2
 
 - **Clearer logs when an entity is missing.** The add-on withholds entities for several different

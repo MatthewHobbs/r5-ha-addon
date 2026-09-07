@@ -58,6 +58,7 @@ from renault_mqtt.parse import (
     _hvac_schedule_fields,
     available_energy,
 )
+from renault_mqtt.parse import location_attrs as build_location_attrs
 from renault_mqtt.util import _num, iso, now_ts
 
 # Inject this model's env-var prefix into the shared core's redaction net before anything is
@@ -77,6 +78,15 @@ STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
 _GPS_P = os.environ.get("R5_GPS_PRECISION", "4").strip()
 GPS_PRECISION = max(1, min(6, int(_GPS_P))) if _GPS_P.isdigit() else 4
 
+# Consecutive failures before an optional endpoint is switched off for the session. Small enough
+# that log spam is bounded, large enough that a transient blip does not disable a working feature.
+BREAKER_TRIP = 3
+# Polls to skip before a tripped breaker probes once more. At the default 300s poll that is
+# roughly hourly - often enough to notice a server-side fix, rare enough to stay silent.
+BREAKER_RETRY_EVERY = 12
+_BREAKER_FAILS = {}
+_BREAKERS = {}
+_BREAKER_SKIPS = {}
 
 VERSION = os.environ.get("R5_VERSION", "dev")  # injected via the Dockerfile (BUILD_VERSION)
 
@@ -403,6 +413,28 @@ async def resolve_account(client):
     raise RuntimeError("No account contains the configured VIN and R5_ACCOUNT_ID is not set")
 
 
+def _hvac_due():
+    """Should this poll call hvac-settings? Yes while the breaker is clear; yes once every
+    BREAKER_RETRY_EVERY polls while tripped, so a server-side recovery is noticed without a
+    restart (the reset lives inside the call, so a breaker that never retried could never clear
+    itself); no otherwise.
+
+    Deliberately NOT gated on advertised support, unlike the A290 twin. hvac-settings is not in
+    this model's OPTIONAL_ENDPOINTS, so it is never probed and would never appear in
+    supported_eps — gating on it here would withhold climate_schedule_mode / climate_ready_time
+    from every R5, which the suite caught. That gate is worth nothing anyway: a290 v1.23.0
+    shipped exactly that check and it changed nothing, because supports_endpoint() reads a static
+    table that returns True for this endpoint on both models. The breaker is the part that works,
+    so the breaker is the part that is mirrored."""
+    if not _BREAKERS.get("hvac-settings"):
+        return True
+    n = _BREAKER_SKIPS["hvac-settings"] = _BREAKER_SKIPS.get("hvac-settings", 0) + 1
+    if n >= BREAKER_RETRY_EVERY:
+        _BREAKER_SKIPS["hvac-settings"] = 0
+        return True
+    return False
+
+
 async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
     vehicle = await vsession.vehicle()
     locale = vsession.locale
@@ -452,10 +484,33 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
         data.update(_charge_schedule_fields(p))
     except Exception as err:  # noqa: BLE001
         LOG.warning("ev/settings unavailable: %s", err)
-    try:
-        data.update(_hvac_schedule_fields(await vehicle.get_hvac_settings()))
-    except Exception as err:  # noqa: BLE001
-        LOG.warning("hvac-settings unavailable: %s", err)
+    # Advertised support is not a usable gate for this endpoint: the A290 twin advertises
+    # hvac-settings as supported while the server answers errorCode 502000 to every call, and a
+    # gate on supports_endpoint() shipped there changed nothing. What the endpoint DOES is the
+    # only reliable signal, so trip a breaker after a few consecutive failures: log once, stop
+    # calling, and retry periodically. Reset on any success, so a car whose endpoint works (or
+    # recovers server-side) is unaffected and never trips it. Mirrored from a290 v1.23.1 — the
+    # R5's own behaviour here is untested, which is exactly why the breaker reads behaviour
+    # rather than assuming this model matches the A290.
+    if _hvac_due():
+        tripped = bool(_BREAKERS.get("hvac-settings"))
+        try:
+            data.update(_hvac_schedule_fields(await vehicle.get_hvac_settings()))
+            _BREAKER_FAILS["hvac-settings"] = 0
+            if _BREAKERS.pop("hvac-settings", None):
+                LOG.info("hvac-settings is answering again - re-enabled.")
+        except Exception as err:  # noqa: BLE001
+            # A failed periodic probe stays tripped and stays quiet. Only pre-trip failures count
+            # and log, so spam is bounded at BREAKER_TRIP lines however long the outage lasts.
+            if not tripped:
+                n = _BREAKER_FAILS["hvac-settings"] = _BREAKER_FAILS.get("hvac-settings", 0) + 1
+                if n < BREAKER_TRIP:
+                    LOG.warning("hvac-settings unavailable: %s", err)
+                elif n == BREAKER_TRIP:
+                    _BREAKERS["hvac-settings"] = True
+                    LOG.warning("hvac-settings has failed %d polls in a row (%s) - pausing it. It "
+                                "is retried every %d polls and re-enabled automatically if it "
+                                "recovers.", n, err, BREAKER_RETRY_EVERY)
     try:
         soc_lvl = await vehicle.get_battery_soc()
         data["soc_max_target"] = getattr(soc_lvl, "socTarget", None)
@@ -482,13 +537,35 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
     if mqtt.PUBLISH_LOCATION:   # skipped entirely when the user opts out of location publishing
         try:
             loc = await vehicle.get_location()
-            data["gps_last_activity"] = getattr(loc, "lastUpdateTime", None)
-            lat, lon = getattr(loc, "gpsLatitude", None), getattr(loc, "gpsLongitude", None)
-            if lat is not None and lon is not None:
-                location_attrs = {"latitude": round(lat, GPS_PRECISION),
-                                  "longitude": round(lon, GPS_PRECISION),
-                                  "gps_accuracy": max(10, round(111_000 / 10 ** GPS_PRECISION)),
-                                  "last_update": getattr(loc, "lastUpdateTime", None)}
+            # build_location_attrs returns None when the payload carries no usable fix, which
+            # Kamereon signals with an out-of-band sentinel rather than a null: the A290 twin
+            # returned 91/181 on a fresh timestamp, and the `is not None` check this replaces
+            # published it as a real position, flipping the car to not_home while parked at home.
+            # The sentinel is a Kamereon behaviour, not a per-model one, so the R5 is exposed to
+            # the same payload even though the fault was observed on the A290.
+            location_attrs = build_location_attrs(loc, GPS_PRECISION)
+            if location_attrs is None:
+                # gps_last_activity must be neither ADVANCED nor DROPPED here, and both failure
+                # modes disarm binary_sensor.r5_gps_stale, which templates on this sensor:
+                #   advanced -> the sentinel's fresh timestamp says the fix is current;
+                #   dropped  -> `data` is published as a COMPLETE retained state document with
+                #               value_template "{{ value_json.gps_last_activity }}", so a missing
+                #               key renders empty, `as_datetime` yields none, and the guard's
+                #               `t is not none` short-circuits to False, i.e. "not stale".
+                # Carrying the last USABLE fix time forward is the only option that leaves the
+                # guard armed, and it does not depend on how HA treats an absent key.
+                prev = (state.get("gps_last_activity")
+                        or (_LATEST.get("data") or {}).get("gps_last_activity"))
+                if prev:
+                    data["gps_last_activity"] = prev
+                    state.setdefault("gps_last_activity", prev)
+                if getattr(loc, "gpsLatitude", None) is not None:
+                    LOG.warning("location fix rejected: the API reported no usable position "
+                                "(sentinel or out-of-range coordinates); keeping the last known "
+                                "fix and leaving the staleness guard armed")
+            else:
+                data["gps_last_activity"] = getattr(loc, "lastUpdateTime", None)
+                state["gps_last_activity"] = data["gps_last_activity"]
         except Exception as err:  # noqa: BLE001
             LOG.warning("location unavailable: %s", err)
 

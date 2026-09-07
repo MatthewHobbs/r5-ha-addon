@@ -1085,3 +1085,98 @@ def test_run_command_rejects_refresh_location_when_location_disabled(monkeypatch
     (cmd,) = tuple(main.LOCATION_CMDS)
     asyncio.run(main.run_command(cmd))
     assert called["n"] == 0            # rejected before any login/dispatch
+
+
+# --------------------------------------------------------------------------- #
+# Sentinel coordinates + hvac-settings breaker (mirrored from a290 v1.23.0/v1.23.1).
+#
+# Kamereon signals "no position" with an out-of-band sentinel rather than a null: 91/181,
+# each exactly one unit past the maximum, carried on a genuinely FRESH timestamp. The R5
+# built its tracker attributes inline with an `is not None` check, so it published that as a
+# real coordinate — flipping the car to not_home while parked at home — and advanced
+# gps_last_activity at the same time, disarming binary_sensor.r5_gps_stale with the very
+# payload that broke the position. Observed on the A290 twin; the sentinel is a Kamereon
+# behaviour, not a per-model one.
+
+class _SentinelVehicle(_ChargingVehicle):
+    async def get_location(self):
+        return _obj(gpsLatitude=91, gpsLongitude=181, lastUpdateTime="2026-09-07T10:00:00Z")
+
+
+class _GoodFixVehicle(_ChargingVehicle):
+    async def get_location(self):
+        return _obj(gpsLatitude=51.9473, gpsLongitude=-0.6274,
+                    lastUpdateTime="2026-09-07T11:11:11Z")
+
+
+def test_sentinel_fix_is_not_published_as_a_position():
+    data, loc = asyncio.run(main.poll_once(_Sess(_SentinelVehicle()), {}, 52.0, set(), "km"))
+    assert loc is None                          # nothing goes on the tracker attributes topic
+    assert "gps_last_activity" not in data      # and the staleness guard is NOT disarmed
+
+
+def test_sentinel_fix_carries_the_last_good_timestamp_forward():
+    """Neither advanced nor dropped: advancing says the sentinel is current, dropping renders
+    the sensor empty and short-circuits the guard's `t is not none` to "not stale"."""
+    state = {"gps_last_activity": "2026-09-01T08:00:00Z"}
+    data, loc = asyncio.run(main.poll_once(_Sess(_SentinelVehicle()), state, 52.0, set(), "km"))
+    assert loc is None
+    assert data["gps_last_activity"] == "2026-09-01T08:00:00Z"
+
+
+def test_sentinel_fix_falls_back_to_the_last_published_timestamp():
+    """First poll after upgrading has no persisted value; _LATEST covers that window."""
+    main._LATEST["data"] = {"gps_last_activity": "2026-09-02T09:00:00Z"}
+    try:
+        data, _ = asyncio.run(main.poll_once(_Sess(_SentinelVehicle()), {}, 52.0, set(), "km"))
+        assert data["gps_last_activity"] == "2026-09-02T09:00:00Z"
+    finally:
+        main._LATEST["data"] = {}
+
+
+def test_valid_fix_is_published_and_advances_the_timestamp():
+    state = {}
+    data, loc = asyncio.run(main.poll_once(_Sess(_GoodFixVehicle()), state, 52.0, set(), "km"))
+    assert loc is not None and loc["latitude"] == 51.9473
+    assert data["gps_last_activity"] == "2026-09-07T11:11:11Z"
+    assert state["gps_last_activity"] == "2026-09-07T11:11:11Z"
+
+
+def test_hvac_breaker_trips_after_repeated_failures_then_goes_quiet():
+    """Advertised support is not a usable gate — the A290 advertises hvac-settings while the
+    server answers 502000 to every call. Only the call's behaviour is a signal."""
+    class _HvacFails(_ChargingVehicle):
+        calls = 0
+
+        async def get_hvac_settings(self):
+            type(self).calls += 1
+            raise RuntimeError("errorCode 502000 something went wrong")
+
+    v = _HvacFails()
+    try:
+        for _ in range(main.BREAKER_TRIP):
+            asyncio.run(main.poll_once(_Sess(v), {}, 52.0, {"hvac-settings"}, "km"))
+        assert main._BREAKERS.get("hvac-settings") is True
+        before = _HvacFails.calls
+        asyncio.run(main.poll_once(_Sess(v), {}, 52.0, {"hvac-settings"}, "km"))
+        assert _HvacFails.calls == before        # tripped: no further calls
+    finally:
+        _HvacFails.calls = 0
+        main._BREAKERS.clear()
+        main._BREAKER_FAILS.clear()
+        main._BREAKER_SKIPS.clear()
+
+
+def test_hvac_breaker_never_trips_on_a_car_whose_endpoint_works():
+    """The R5's own hvac-settings behaviour is untested, so the breaker must be inert on a car
+    that answers — it reads behaviour rather than assuming this model matches the A290."""
+    try:
+        for _ in range(main.BREAKER_TRIP + 2):
+            data, _ = asyncio.run(
+                main.poll_once(_Sess(_ChargingVehicle()), {}, 52.0, {"hvac-settings"}, "km"))
+        assert main._BREAKERS.get("hvac-settings") is None
+        assert main._BREAKER_FAILS.get("hvac-settings", 0) == 0
+    finally:
+        main._BREAKERS.clear()
+        main._BREAKER_FAILS.clear()
+        main._BREAKER_SKIPS.clear()
