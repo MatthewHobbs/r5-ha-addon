@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.6.0
+
+- **Fixed: a car that stops reporting no longer reads as healthy.** `Data Stale` was wired to
+  whether the *poll* succeeded and forced off on every successful poll — so it answered "can we
+  reach Renault?" and never "is this reading current?". On the A290 twin the car last reported on
+  4 September, the add-on polled successfully every five minutes for the next 68 hours, and
+  published the same three-day-old payload as fresh: 55% battery against an actual 83%. This
+  repo carried the identical code. `Data Stale` now measures the age of the timestamp *inside*
+  the car's own reading.
+- **New: `binary_sensor.r5_poll_failing`** takes over the old meaning — the add-on cannot reach
+  Renault — using exactly the rule `Data Stale` used to apply, so no alerting is lost. **If you
+  have an automation on `Data Stale` built to catch connectivity problems, point it at `Poll
+  Failing`.** A parked car reads `Data Stale: on` + `Poll Failing: off`, which together mean
+  "everything is working, the car simply has not reported since its last journey".
+- **New: `sensor.r5_last_successful_poll`** — when the add-on last got through, next to
+  `Battery Last Activity`, which is when the *car* last reported.
+- **Fixed: the climate schedule sensors now go `unavailable` instead of blank.** `hvac-settings`
+  fails permanently on some vehicles, so the circuit breaker stops calling it — and the two
+  sensors it feeds were rendering as empty strings, indistinguishable from "the car reported
+  nothing". Their availability now follows whether the add-on actually published a value.
+- **`stale_hours` now defaults to 36 hours, up from 6.** Six was the right threshold when this
+  measured poll health; for "how old is the car's reading" it is shorter than a normal overnight
+  park. **Existing installations keep their configured value.**
+- **Fixed: `Battery Last Activity` no longer invents a timestamp.** A payload carrying no
+  timestamp was stamped with the current time, which made staleness permanently unfireable.
+- Picks up shared core `renault-mqtt` v0.16.0.
+
 ## 1.5.1
 
 - **Documents when the values actually update — and why a parked car looks "stuck".** The car
