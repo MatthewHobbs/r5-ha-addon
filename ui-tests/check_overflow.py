@@ -60,6 +60,50 @@ JS_DETECT = r"""
 }
 """
 
+# Opt-in capture diagnostics (UI_TESTS_DIAG=1): a JSON sidecar beside each screenshot recording
+# what the DOM contained at the moment of capture. Ported from the a290 twin (#122), where it
+# refuted the leading guess (the main dashboard was fully rendered at capture) and found the real
+# bug: the pop-up capture writing an EMPTY page. Measure with this before adding another wait —
+# a "stable layout" wait already made things worse there, because a blank page is stable.
+JS_DIAG = r"""
+() => {
+  const tags = {};
+  const walk = (root) => {
+    let nodes; try { nodes = root.querySelectorAll('*'); } catch (e) { return; }
+    for (const el of nodes) {
+      const t = (el.tagName || '').toLowerCase();
+      if (t.indexOf('mushroom') >= 0 || t === 'bubble-card' || t === 'button-card'
+          || t === 'hui-error-card' || t === 'ha-card') tags[t] = (tags[t] || 0) + 1;
+      if (el.shadowRoot) walk(el.shadowRoot);
+    }
+  };
+  walk(document);
+  return {
+    cards: Object.values(tags).reduce((a, b) => a + b, 0), byTag: tags,
+    scrollW: document.documentElement.scrollWidth,
+    scrollH: document.documentElement.scrollHeight,
+    imagesPending: Array.from(document.images).filter(i => !i.complete).length,
+    readyState: document.readyState,
+  };
+}
+"""
+
+
+def _write_diag(page, shot_path):
+    """Record the DOM state at capture time, when UI_TESTS_DIAG=1."""
+    if os.environ.get("UI_TESTS_DIAG") != "1":
+        return
+    try:
+        data = page.evaluate(JS_DIAG)
+    except Exception as err:      # never let diagnostics break the gate they are diagnosing
+        data = {"error": f"{type(err).__name__}: {err}"}
+    try:
+        with open(os.path.splitext(shot_path)[0] + ".diag.json", "w") as fh:
+            json.dump(data, fh, sort_keys=True)
+    except OSError:
+        pass
+
+
 # True once a custom card (or an error card) is present in the (pierced) tree.
 JS_RENDERED = r"""
 () => {
@@ -199,6 +243,7 @@ def run():
                         # Drop HA's startup toasts only AFTER the truncation scan, so removing the
                         # toast node can never perturb the gate's measurement — it only cleans the shot.
                         page.evaluate(JS_DISMISS_TOASTS)
+                        _write_diag(page, shot)
                         page.screenshot(path=shot, full_page=True, animations="disabled")
                         break
                     except Exception as err:
@@ -214,6 +259,7 @@ def run():
                         issues = [{"type": "render-error", "tag": "-", "text": f"{type(err).__name__}: {err}"}]
                         try:
                             page.evaluate(JS_DISMISS_TOASTS)
+                            _write_diag(page, shot)
                             page.screenshot(path=shot, full_page=True, animations="disabled")
                         except Exception:
                             pass
@@ -224,14 +270,35 @@ def run():
                 # same two-pass stability filter, so the pop-up keeps its coverage without the flake.
                 if dash == "renault-5-bubble":
                     try:
-                        page.evaluate("() => { location.hash = '#r5-charging'; }")
-                        try:  # wait for the pop-up's inner cards to paint (Bubble Card lazy-renders)
-                            page.wait_for_selector("text=Charge Target", timeout=8000)
-                        except Exception:
-                            pass
-                        page.wait_for_timeout(800)
+                        # COMPLETENESS, not just settling. The selector wait used to be swallowed
+                        # by a bare `except: pass` and the capture ran anyway, so a pop-up that
+                        # failed to open wrote an EMPTY page as the documentation screenshot (on
+                        # the a290 twin: 24 cards one run, 0 the next, 99.89% of pixels different).
+                        # Reopen once; if still nothing rendered, skip and keep the committed file.
+                        # Judge by the pop-up's own content becoming VISIBLE, never by a document
+                        # card count: the main view behind a failed pop-up has cards too. "Charge
+                        # Target" exists only in the deploy-injected #r5-charging pop-up.
+                        for popup_attempt in range(2):
+                            page.evaluate("() => { location.hash = '#r5-charging'; }")
+                            try:  # the pop-up's inner cards lazy-render (Bubble Card)
+                                page.wait_for_selector("text=Charge Target", state="visible", timeout=8000)
+                                opened = True
+                            except Exception:
+                                opened = False
+                            page.wait_for_timeout(800)
+                            if opened:
+                                break
+                            print(f"    [popup empty {popup_attempt + 1}/2] {dash} @ "
+                                  f"{dev['name']}: pop-up content never became visible — reopening")
+                            page.evaluate("() => { location.hash = ''; }")
+                            page.wait_for_timeout(400)
+                        else:
+                            print(f"    [popup skipped] {dash} @ {dev['name']}: pop-up never "
+                                  f"rendered; not overwriting the committed screenshot")
+                            raise RuntimeError("smart-charging pop-up never became visible")
                         page.evaluate(JS_DISMISS_TOASTS)
                         pshot = os.path.join(args.out, f"{dash}__smart_charging__{slug}.png")
+                        _write_diag(page, pshot)
                         page.screenshot(path=pshot, full_page=True, animations="disabled")
                         issues += _stable_issues(page)
                     except Exception as err:

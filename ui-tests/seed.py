@@ -67,7 +67,7 @@ KNOWN = {
     "sensor.r5_charging_rate": ("7.4", {"unit_of_measurement": "kW"}),
     "sensor.r5_available_energy": ("41.6", {"unit_of_measurement": "kWh"}),
     "sensor.r5_battery_temperature": ("18", {"unit_of_measurement": "°C"}),
-    "sensor.r5_external_temperature": ("12", {"unit_of_measurement": "°C"}),
+    "sensor.r5_outside_temperature": ("12", {"unit_of_measurement": "°C"}),
     "sensor.r5_charger_plug_status": ("Connected", {"icon": "mdi:power-plug"}),
     "sensor.r5_charger_status": ("Rapid/Public", {"icon": "mdi:battery-charging"}),
     "sensor.r5_charging_flap_status": ("Open: Plugged In", {"icon": "mdi:ev-plug-type2"}),

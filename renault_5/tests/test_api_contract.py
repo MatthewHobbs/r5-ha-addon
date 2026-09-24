@@ -111,3 +111,7 @@ def test_soc_levels_model_contract():
     ranges = {o[len(catalog.OBJ_PREFIX):]: (m[2], m[3]) for o, m in catalog.NUMBERS.items()}
     assert ranges["soc_min_target"][0] <= soc.socMin <= ranges["soc_min_target"][1]
     assert ranges["soc_max_target"][0] <= soc.socTarget <= ranges["soc_max_target"][1]
+
+    # The endpoint name the poller probes at startup; any other string gates the sliders off.
+    import main
+    assert main.SOC_ENDPOINT == "soc-levels"
