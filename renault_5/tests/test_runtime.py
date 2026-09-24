@@ -627,10 +627,10 @@ def test_poll_once_charging_and_no_gps_fix():
 def test_poll_once_rounds_gps_for_privacy():
     class _GpsVehicle(_ChargingVehicle):
         async def get_location(self):
-            return _obj(gpsLatitude=51.512345, gpsLongitude=-0.123456, lastUpdateTime="t")
+            return _obj(gpsLatitude=51.512345, gpsLongitude=-0.123456, lastUpdateTime="t")  # synthetic-coords: 6 dp load-bearing, rounding asserted below
 
     _data, loc = asyncio.run(main.poll_once(_Sess(_GpsVehicle()), {}, 52.0, set(), "km"))
-    assert loc["latitude"] == 51.5123 and loc["longitude"] == -0.1235   # rounded to 4 dp
+    assert loc["latitude"] == 51.5123 and loc["longitude"] == -0.1235   # synthetic-coords: the fixture above, rounded to 4 dp
     assert loc["gps_accuracy"] == 11                                    # ~11 m at 4 dp
 
 
@@ -1176,7 +1176,7 @@ class _SentinelVehicle(_ChargingVehicle):
 
 class _GoodFixVehicle(_ChargingVehicle):
     async def get_location(self):
-        return _obj(gpsLatitude=51.9473, gpsLongitude=-0.6274,
+        return _obj(gpsLatitude=51.5, gpsLongitude=-0.1,   # synthetic: valid, in-range, deliberately low-precision
                     lastUpdateTime="2026-09-07T11:11:11Z")
 
 
@@ -1208,7 +1208,7 @@ def test_sentinel_fix_falls_back_to_the_last_published_timestamp():
 def test_valid_fix_is_published_and_advances_the_timestamp():
     state = {}
     data, loc = asyncio.run(main.poll_once(_Sess(_GoodFixVehicle()), state, 52.0, set(), "km"))
-    assert loc is not None and loc["latitude"] == 51.9473
+    assert loc is not None and loc["latitude"] == 51.5
     assert data["gps_last_activity"] == "2026-09-07T11:11:11Z"
     assert state["gps_last_activity"] == "2026-09-07T11:11:11Z"
 
