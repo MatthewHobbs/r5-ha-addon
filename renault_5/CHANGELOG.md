@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.1
+
+- **Fixed: `log_level: debug` no longer writes raw Renault API responses to the Log.** At debug
+  the `renault-api` library logs every Kamereon request URL and body and the full response,
+  unredacted: unrounded GPS coordinates and account data included. The add-on now never lets the
+  library's own loggers go below `info`, so `debug` shows the add-on's own diagnostics only. To inspect API responses, use `debug_dump: true`, which goes through
+  the redactor. Matches the A290 twin.
+
 ## 1.6.0
 
 - **Fixed: a car that stops reporting no longer reads as healthy.** `Data Stale` was wired to

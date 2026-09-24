@@ -125,14 +125,17 @@ PLUG_MAX_AGE = 12 * 3600  # ...or older than 12 h
 
 
 def setup_logging():
-    level = cfg("R5_LOG_LEVEL", "info").upper()
-    logging.basicConfig(level=getattr(logging, level, logging.INFO),
-                        format="%(asctime)s %(levelname)s %(message)s")
+    level = getattr(logging, cfg("R5_LOG_LEVEL", "info").upper(), logging.INFO)
+    logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(message)s")
     # Attach the secret-redaction net to the root handler(s): every record (ours + the
     # library's, which propagates to root) is scrubbed before it's emitted.
     redactor = _RedactingFilter()
     for handler in logging.getLogger().handlers:
         handler.addFilter(redactor)
+    # The library's DEBUG logs full Kamereon response bodies (unrounded GPS, account data);
+    # debug_dump is the redacted way to see them.
+    for noisy in ("renault_api", "renault_api.kamereon", "renault_api.gigya"):
+        logging.getLogger(noisy).setLevel(max(level, logging.INFO))
 
 
 def load_state():

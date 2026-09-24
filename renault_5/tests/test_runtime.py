@@ -10,6 +10,7 @@ pytest-asyncio).
 """
 import asyncio
 import json
+import logging
 import os
 import tempfile
 
@@ -32,6 +33,31 @@ def test_setup_logging_runs(monkeypatch):
     main.setup_logging()        # exercises the level lookup; basicConfig is a no-op under pytest
     monkeypatch.setenv("R5_LOG_LEVEL", "nonsense")
     main.setup_logging()        # invalid level falls back to INFO
+
+
+_LIBRARY_LOGGERS = ("renault_api", "renault_api.gigya", "renault_api.kamereon", "renault_api.kamereon.models",
+                    "renault_api.renault_session", "renault_api.renault_account", "renault_api.renault_client")
+
+
+def test_setup_logging_keeps_library_debug_off_at_debug(monkeypatch):
+    # pytest's root handlers make basicConfig a no-op and leave root at WARNING, which would
+    # pass this with no clamp at all. Strip them so basicConfig really sets root to DEBUG.
+    root = logging.getLogger()
+    saved_handlers, saved_level = root.handlers[:], root.level
+    saved_levels = {name: logging.getLogger(name).level for name in _LIBRARY_LOGGERS}
+    root.handlers.clear()
+    try:
+        monkeypatch.setenv("R5_LOG_LEVEL", "debug")
+        main.setup_logging()
+        assert root.level == logging.DEBUG                       # the precondition is real
+        assert main.LOG.isEnabledFor(logging.DEBUG)              # our own debug still flows
+        for name in _LIBRARY_LOGGERS:                            # the library's does not
+            assert not logging.getLogger(name).isEnabledFor(logging.DEBUG), name
+    finally:
+        root.handlers[:] = saved_handlers
+        root.setLevel(saved_level)
+        for name, level in saved_levels.items():
+            logging.getLogger(name).setLevel(level)
 
 
 # --------------------------------------------------------------------------- #
