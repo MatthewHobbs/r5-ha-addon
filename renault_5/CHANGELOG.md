@@ -1,6 +1,24 @@
 # Changelog
 
-## 1.7.0
+## 1.8.0
+
+- **The standard dashboard now says "Car Parked" instead of raising an alarm.** The Last Updated
+  tile leads with *when the car last reported*: a parking-lights icon and **Car Parked** when it
+  has been asleep longer than `stale_hours`, or **Last Updated** with a green connected icon when
+  it is reporting. The time is the second line either way, because that is the useful fact.
+- **The red pulsing "Stale Data" card now means "Not Polling".** It was triggered by
+  `binary_sensor.r5_data_stale`, which since 1.6.0 measures how old the *car's* reading is — so it
+  pulsed red every night for a car that was simply parked. It now triggers on
+  `binary_sensor.r5_poll_failing`: the add-on cannot reach Renault, which is the case actually
+  worth alarming about. Its pop-up spells out the difference.
+- Corrects two pop-ups that still described the old meaning: the Last Updated one said the
+  timestamp was "the last successful poll" (it is the car's report time; **Last Successful Poll**
+  is the add-on's), and the alarm one said `stale_hours` defaults to 6 (it has been 36 since
+  1.6.0). The `stale_hours` row in the Documentation tab said the same, and is corrected too.
+- **To pick this up, redeploy the dashboard.** Deployment is create-once, so an existing dashboard
+  is not rewritten on upgrade. Set `redeploy_dashboard: true` for one restart (that overwrites any
+  edits you made to the deployed dashboard), or, if you pasted it in by hand, re-copy
+  `front-end.txt`. The Bubble dashboard is unchanged. Matches the A290 twin.
 
 - **The Refresh Location button is now off by default. If you use it, upgrading removes it.**
   `button.r5_refresh_location` disappears from Home Assistant, and pressing it any other way — an

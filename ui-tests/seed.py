@@ -101,6 +101,13 @@ KNOWN = {
     # same under either rule with ~12 minutes of slack.
     "sensor.r5_last_charge_start": (_ago(hours=14, minutes=12), {"device_class": "timestamp"}),
     "sensor.r5_last_charge_end": (_ago(hours=13, minutes=12), {"device_class": "timestamp"}),
+    # Seeded ON so the render gate exercises the "Car Parked" tile — the state a normally-parked
+    # car sits in, and the branch carrying the longer text. poll_failing off alongside it is the
+    # pairing that means "working fine, car simply parked". The car's report time is older than
+    # stale_hours (36h default) so the fixture is one a real install could produce.
+    "binary_sensor.r5_data_stale": ("on", {"device_class": "problem"}),
+    "binary_sensor.r5_poll_failing": ("off", {"device_class": "problem"}),
+    "sensor.r5_battery_last_activity": (_ago(days=2, hours=3, minutes=12), {"device_class": "timestamp"}),
     "sensor.r5_hvac_last_activity": (_ago(hours=5, minutes=12), {"device_class": "timestamp"}),
     "sensor.r5_gps_last_activity": (_ago(hours=4, minutes=12), {"device_class": "timestamp"}),
     # Demo Octopus Intelligent charger entities (Smart Charging block / bubble pop-up).
