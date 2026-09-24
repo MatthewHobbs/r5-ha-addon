@@ -92,7 +92,9 @@ key needed.
 ### Optional (not required to run)
 
 - **Test-mode preview** — the charge-simulation panels (`input_boolean.r5_test_mode`,
-  `sensor.r5_test_*`, `binary_sensor.r5_test_show_panel`, `button.r5_test_charge_run`).
+  `input_button.r5_test_charge_run`, `binary_sensor.r5_test_show_panel`,
+  `sensor.r5_test_ends_countdown`, `sensor.r5_test_panel_hide_countdown`, and the simulated
+  last-charge values `sensor.test_last_charge_*` / `sensor.test_charge_*`).
   A small HA helper/template package; without it those tiles read *unavailable*. (Port
   from the upstream `Packages/`/`Templates/`/`Helpers/`.)
 - **Pretty location** — `sensor.r5_pretty_location` ("Driveway / Home / town"), a template
@@ -136,8 +138,9 @@ key needed.
   `…_refresh_location` (opt-in: `enable_refresh_location`) — each gated on what the platform
   supports.
 - **Debug:** set `debug_dump: true` to log every readable API endpoint (secrets redacted)
-  to the app Log — the safe way to inspect the API (unlike `log_level: debug`, which the
-  library uses to print access tokens).
+  to the app Log — the redacted way to inspect the API. `log_level: debug` does not show
+  API responses: the app keeps the `renault-api` library's own raw, unredacted debug output
+  out of the Log.
 
 ## Renault 5 API support
 
@@ -153,7 +156,7 @@ control the platform forbids is never shown.
 | Charge target / min SoC (read **and** set) | `soc-levels` | ✅ |
 | Preconditioning + heated seats | `ev/settings` (`charge-schedule`) | ✅ |
 | GPS location | `location` | ✅ |
-| Start charging | `actions/charge-start` | ✅ (KCM via-settings) |
+| Start charging | `actions/charge-start` | ✅ (KCM via-settings) — see note |
 | Sound horn | `actions/horn-start` | ✅ |
 | Flash lights | `actions/lights-start` | ✅ |
 | Start / stop climate | `actions/hvac-start` · `actions/hvac-stop` | ✅ |
@@ -164,11 +167,14 @@ control the platform forbids is never shown.
 
 ✅ supported · ❌ Renault forbids it (or doesn't expose it) on the R5
 
-> Unlike the [Alpine A290 app](https://github.com/MatthewHobbs/a290-ha-addon) this is ported
-> from — where Renault forbids remote charge-start — the **R5 ships a genuine Start
-> Charging button and a genuine Refresh Location**. Set `debug_dump: true` to log the
-> decoded response of every readable endpoint (secrets redacted) if Renault changes what
-> the platform exposes.
+> Set `debug_dump: true` to log the decoded response of every readable endpoint (secrets
+> redacted) if Renault changes what the platform exposes.
+>
+> **Start Charging** is the same call as on the
+> [Alpine A290 app](https://github.com/MatthewHobbs/a290-ha-addon) this is ported from: it
+> starts a charge by switching off the car's own charge programs. On an A290 whose charging is
+> scheduled externally (Octopus Intelligent) that did nothing. The R5 goes through identical library code, so expect the
+> same there; this has not been tested on an R5.
 
 ## Credits
 
