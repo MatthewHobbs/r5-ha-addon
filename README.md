@@ -133,7 +133,8 @@ key needed.
 - **Location:** `device_tracker.r5_location`.
 - **Native controls (no Home Assistant `renault` integration):** `button.r5_start_charging`,
   `…_flash_lights`, `…_sound_horn`, `…_start_air_conditioner`, `…_stop_air_conditioner`,
-  `…_refresh_location` — each gated on what the platform supports.
+  `…_refresh_location` (opt-in: `enable_refresh_location`) — each gated on what the platform
+  supports.
 - **Debug:** set `debug_dump: true` to log every readable API endpoint (secrets redacted)
   to the app Log — the safe way to inspect the API (unlike `log_level: debug`, which the
   library uses to print access tokens).
@@ -156,7 +157,7 @@ control the platform forbids is never shown.
 | Sound horn | `actions/horn-start` | ✅ |
 | Flash lights | `actions/lights-start` | ✅ |
 | Start / stop climate | `actions/hvac-start` · `actions/hvac-stop` | ✅ |
-| Refresh location | `actions/refresh-location` | ✅ |
+| Refresh location | `actions/refresh-location` | ✅ opt-in (off by default — can replace the car's stored position) |
 | Stop charging | `actions/charge-stop` | ❌ not exposed — stop at the charger |
 | Tyre pressure (TPMS) | `pressure` | ❌ forbidden |
 | Charge mode | `charge-mode` | ❌ forbidden |
