@@ -9,7 +9,9 @@ Read endpoints: battery-status, cockpit, HVAC, location, ev/settings (preconditi
 ev/soc-levels, plus optional charge-mode and tyre-pressure (gated on supports_endpoint).
 Command buttons (ACTION_BUTTONS): Start Charging (KCM instant-charge), Flash Lights, Sound
 Horn, and HVAC Start/Stop — all sent natively via renault-api, so **Home Assistant's `renault` integration is not required at all**. Each button is gated on supports_endpoint(), so a
-control the platform forbids is never shown (all five are supported on the R5). HVAC-start
+control the platform forbids is never shown (all five are supported on the R5). Refresh
+Location is supported too but withheld unless enable_refresh_location is set — on a parked car
+it can overwrite the car's recorded position; see the option in DOCS.md. HVAC-start
 targets the car's configured preconditioning temperature (falling back to 21°C). One cached
 login is reused across polls (VehicleSession) rather than re-authenticating every cycle.
 Plug stuck-detection + charge-session tracking + health sensors persist to /data/state.json.
@@ -318,8 +320,10 @@ COMMAND_ACTIONS = {
 COMMAND_DEBOUNCE_S = 5
 _last_command = {}
 
-# Command-topic suffixes that trigger a location refresh — rejected when location publishing is
-# off (the button is also cleared in publish_discovery), so an opted-out install can't refresh.
+# Command-topic suffixes that trigger a location refresh — rejected unless the user has opted in
+# AND location publishing is on (publish_discovery clears the button in the same cases). Gating the
+# command as well as the button is the point: the entity is pressable from voice, automations and
+# any dashboard, so hiding it alone would leave every other path working.
 LOCATION_CMDS = {oid.removeprefix(OBJ_PREFIX) for oid, vals in ACTION_BUTTONS.items()
                  if vals[-1] == REFRESH_LOCATION_EP}
 
@@ -379,6 +383,11 @@ async def run_command(cmd, payload=""):
         return
     if cmd in LOCATION_CMDS and not mqtt.PUBLISH_LOCATION:
         LOG.info("Ignoring '%s' — location is disabled (publish_location: false)", cmd)
+        return
+    if cmd in LOCATION_CMDS and not mqtt.ENABLE_REFRESH_LOCATION:
+        LOG.info("Ignoring '%s' — refresh-location is off (enable_refresh_location: false). "
+                 "On a parked car it can replace the car's recorded position with 'no fix' until "
+                 "the next completed journey; see DOCS.md before enabling it.", cmd)
         return
     action = COMMAND_ACTIONS.get(cmd)
     if action is None:

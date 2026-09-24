@@ -17,6 +17,7 @@ import re
 
 import aiohttp
 import yaml
+from renault_mqtt import mqtt
 
 LOG = logging.getLogger("renault_5.deploy")
 
@@ -288,10 +289,42 @@ def _charger_popup():
             "shadow_opacity": "0", "cards": cards}
 
 
+# The bundled dashboards' Refresh Location tile presses this button, which core withholds unless
+# the user opted in (enable_refresh_location) with location publishing on.
+_REFRESH_LOCATION_BUTTON = "button.r5_refresh_location"
+
+
+def _references(node, entity):
+    if isinstance(node, dict):
+        return any(_references(v, entity) for v in node.values())
+    if isinstance(node, list):
+        return any(_references(v, entity) for v in node)
+    return node == entity
+
+
+def _drop_cards_referencing(node, entity):
+    """Remove every card that references `entity`, innermost first: a stack is only dropped if it
+    still references the entity once its own children have been pruned, so the tile goes and its
+    neighbours stay."""
+    if isinstance(node, dict):
+        for v in node.values():
+            _drop_cards_referencing(v, entity)
+    elif isinstance(node, list):
+        for v in node:
+            _drop_cards_referencing(v, entity)
+        node[:] = [v for v in node
+                   if not (isinstance(v, dict) and "type" in v and _references(v, entity))]
+
+
 async def _fetch_dashboard(style):
     views = yaml.safe_load(_cdnify(_read_dashboard(style)))
     if not isinstance(views, list):
         raise ValueError("dashboard YAML did not parse to a list of views")
+    # Core's own publish condition, from the same flags, so the tile ships exactly when the entity
+    # it presses exists. Pruned inside each view, never the views list: a view carries a `type` too.
+    if not (mqtt.PUBLISH_LOCATION and mqtt.ENABLE_REFRESH_LOCATION):
+        for v in views:
+            _drop_cards_referencing(v, _REFRESH_LOCATION_BUTTON)
     view = views[0] if views and isinstance(views[0], dict) else None
     if view is not None:
         if style == "bubble":
