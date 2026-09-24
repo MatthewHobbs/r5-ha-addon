@@ -65,7 +65,7 @@ jobs:
           # read the final release as older and never report it. A Debian-style ~ before the
           # PEP 440 pre-release suffix sorts it below the bare release, in both sorts.
           # .devN sorts below a/b/rc, which sort below the final (PEP 440): ~~ < ~ < end of string.
-          vkey() { printf '%s\n' "$1" | sed -E -e 's/\.(dev[0-9]+)$/~~\1/' -e 's/([0-9])(a|b|rc)([0-9]+)$/\1~\2\3/'; }
+          vkey() { printf '%s\n' "$1" | sed -E -e 's/\.(dev[0-9]+)$/~~\1/' -e 's/([0-9])(a|b|rc)([0-9]+)(~~dev[0-9]+)?$/\1~\2\3\4/'; }
           pk="$(vkey "$pinned")"
           lk="$(vkey "$latest")"
           if [ "$pk" = "$lk" ] || \
