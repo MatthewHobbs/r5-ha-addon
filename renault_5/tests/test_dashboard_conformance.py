@@ -99,6 +99,7 @@ def published(monkeypatch) -> set[str]:
     reference outside it cannot resolve on any car.
     """
     monkeypatch.setattr(mqtt, "PUBLISH_LOCATION", True)
+    monkeypatch.setattr(mqtt, "ENABLE_REFRESH_LOCATION", True)   # opt-in since 1.7.0; the tile is deploy-gated
     every_ep = (set(catalog.OPTIONAL_ENDPOINTS) | {catalog.SOC_ENDPOINT}
                 | {ep for *_, ep in catalog.ACTION_BUTTONS.values()})
     rec = _Recorder()
