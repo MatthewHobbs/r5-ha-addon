@@ -6,11 +6,13 @@ Mushroom block, the bubble pop-up "tab", and the main-menu restructure.
 import asyncio
 import json
 import os
+import subprocess
+import sys
+from pathlib import Path
 
 import deploy
 import pytest
 import yaml
-from renault_mqtt import mqtt
 
 
 # --------------------------------------------------------------------------- #
@@ -244,15 +246,22 @@ def test_fetch_dashboard_keeps_refresh_location_tile_only_when_its_button_exists
     for env, _ in deploy._CHARGER_ENTITIES:
         monkeypatch.delenv(env, raising=False)
     monkeypatch.setattr(deploy, "DASHBOARD_DIR", _BUNDLED)
-    monkeypatch.setattr(mqtt, "PUBLISH_LOCATION", publish_location)
-    monkeypatch.setattr(mqtt, "ENABLE_REFRESH_LOCATION", enable_refresh)
     bundled = yaml.safe_load(deploy._read_dashboard(style))
     # The input really does carry the tile - once - or a pass below would prove nothing.
     tiles = [c for c in _cards(bundled) if _REFRESH_BTN in json.dumps(c)
              and not any(_REFRESH_BTN in json.dumps(k) for k in _cards(list(c.values())))]
     assert len(tiles) == 1 and tiles[0]["name"] == "Refresh Location"
 
-    cfg = asyncio.run(deploy._fetch_dashboard(style))
+    cfg = asyncio.run(deploy._fetch_dashboard(style, refresh_location=publish_location and enable_refresh))
 
     assert (_REFRESH_BTN in json.dumps(cfg)) is kept
     assert len(_cards(cfg["views"])) == len(_cards(bundled)) - (0 if kept else 1)
+
+
+def test_deploy_imports_without_the_core():
+    """ui-tests/seed.py imports deploy for its injection helpers in the UI gate's environment,
+    which has no renault-mqtt. deploy must not depend on the core: main hands it what it needs."""
+    app = str(Path(deploy.__file__).parent)
+    code = f"import sys; sys.modules['renault_mqtt'] = None; sys.path.insert(0, {app!r}); import deploy"
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr

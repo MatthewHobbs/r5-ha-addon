@@ -781,8 +781,10 @@ def _wire_main(monkeypatch, tmp_path, poll):
 
     monkeypatch.setattr(main, "detect_supported", fake_detect)
 
-    async def fake_deploy():
-        return None
+    fc.deploy_calls = []
+
+    async def fake_deploy(**kw):
+        fc.deploy_calls.append(kw)
 
     monkeypatch.setattr(main.deploy, "run_deploy", fake_deploy)
 
@@ -827,6 +829,24 @@ def test_main_runs_one_successful_cycle(monkeypatch, tmp_path):
     assert mqtt.TRACKER_STATE_TOPIC not in topics
     assert (mqtt.AVAIL_TOPIC, "offline") in fc.pubs   # clean shutdown
     assert fc.stopped is True and fc.disconnected is True
+
+
+@pytest.mark.parametrize("publish_location,enable_refresh,expected", [
+    (True, False, False), (True, True, True), (False, True, False), (None, None, False)])
+def test_main_tells_deploy_whether_the_refresh_button_exists(
+        monkeypatch, tmp_path, publish_location, enable_refresh, expected):
+    """deploy keeps the Refresh Location tile only on this verdict, so it must be the core's own
+    publish condition. None is an unconfigured core: withhold, the safe direction."""
+    async def poll(stop, *a, **k):
+        stop.set()
+        return ({"battery_level": 80}, None)
+
+    fc = _wire_main(monkeypatch, tmp_path, poll)
+    monkeypatch.setattr(mqtt, "configure", lambda *a, **k: None, raising=False)
+    monkeypatch.setattr(mqtt, "PUBLISH_LOCATION", publish_location)
+    monkeypatch.setattr(mqtt, "ENABLE_REFRESH_LOCATION", enable_refresh)
+    asyncio.run(main.main())
+    assert fc.deploy_calls == [{"refresh_location": expected}]
 
 
 def test_main_failure_branch_flags_auth_and_staleness(monkeypatch, tmp_path):

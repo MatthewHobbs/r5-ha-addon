@@ -699,7 +699,9 @@ async def main():
     _LATEST["dist_unit"] = dist_unit  # so the status panel can label range/mileage
     client = mqtt.mqtt_connect()
     mqtt.publish_discovery(client, supported, dist_unit)
-    await deploy.run_deploy()  # optional dashboard auto-deploy; never fatal
+    # optional dashboard auto-deploy; never fatal. The core's own publish condition for the
+    # refresh button, so the tile ships exactly when the entity it presses exists.
+    await deploy.run_deploy(refresh_location=bool(mqtt.PUBLISH_LOCATION and mqtt.ENABLE_REFRESH_LOCATION))
 
     fails = 0
     while not stop.is_set():
