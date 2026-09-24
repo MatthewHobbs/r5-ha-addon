@@ -145,6 +145,14 @@ jobs:
           python3 -m pip install --quiet pip-audit
           pip-audit -r renault_5/app/requirements.txt
 
+      # gitleaks/trivy have no rule for a VIN or a home location, and both have leaked into this
+      # pair of public add-on repos. The rules and their history live in the script (shared
+      # verbatim with the A290 twin). Self-test first: a guard that cannot fail is not a guard.
+      - name: No committed PII (VINs, coordinates)
+        run: |
+          python3 scripts/pii_check.py --self-test
+          python3 scripts/pii_check.py
+
       - name: Trivy filesystem scan (vulns, misconfig, secrets)
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
