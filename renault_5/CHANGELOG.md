@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.7.0
+
+- **The Refresh Location button is now off by default. If you use it, upgrading removes it.**
+  `button.r5_refresh_location` disappears from Home Assistant, and pressing it any other way — an
+  automation, a voice assistant, a script — is ignored and logged instead of reaching the car.
+- **To get it back**, set `enable_refresh_location: true` on the Configuration page and restart. It
+  also needs `publish_location: true`. Read the option's description in the Documentation tab
+  first: it spells out the trade-off.
+- **Why.** On a parked car the button can be destructive. The car is asleep and usually cannot get
+  a GPS fix, and its "no position" answer then **replaces the last known position that Renault
+  holds**, on a current timestamp, so it looks like fresh data. Only completing a journey restores
+  it — which, for a car driven occasionally rather than daily, can mean weeks. Your car is not
+  affected; only its recorded position is.
+- **What this rests on.** It was established by a controlled test on an **Alpine A290**, which
+  shares the R5's CMF-BEV platform: a valid fix survived days of parking, the press replaced it,
+  the next journey restored it. It is reported upstream as
+  [hacf-fr/renault-api#2250](https://github.com/hacf-fr/renault-api/issues/2250) (section 3). **It
+  has not been separately confirmed on a Renault 5.** The default is off here too because the two
+  cars run the same platform and share the same core, and the harm is silent.
+- **Why you may not have noticed.** Since 1.5.0 the add-on rejects the bad coordinates, so Home
+  Assistant keeps showing your last good position and looks healthy — while Renault's own app can
+  show no position at all. That protects the dashboard, not the car's record, which is why the
+  button is withheld rather than its output filtered.
+- **Bundled dashboards.** Both carry a Refresh Location tile. A dashboard deployed with
+  `deploy_dashboard` now leaves that tile out unless the option is on. **A dashboard you already
+  deployed keeps it** — deployment is create-once, so it is not rewritten on upgrade — and tapping
+  it then presses a button that no longer exists. Either delete the tile, or set
+  `redeploy_dashboard: true` for one restart (that overwrites any edits you made to the deployed
+  dashboard). If you pasted a bundled dashboard in by hand, delete the tile yourself.
+- Picks up shared core `renault-mqtt` v0.17.0.
+
 ## 1.6.1
 
 - **Fixed: `log_level: debug` no longer writes raw Renault API responses to the Log.** At debug
