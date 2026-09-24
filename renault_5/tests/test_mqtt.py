@@ -99,7 +99,10 @@ def test_distance_device_class_dropped_only_for_miles():
         assert "device_class" not in conf and conf["unit_of_measurement"] == "mi"
 
 
-def test_buttons_published_when_supported():
+def test_buttons_published_when_supported(monkeypatch):
+    # Refresh Location is opt-in (core v0.17.0), so opt in to see every button published.
+    monkeypatch.setattr(mqtt, "PUBLISH_LOCATION", True)
+    monkeypatch.setattr(mqtt, "ENABLE_REFRESH_LOCATION", True)
     c = StubClient()
     all_eps = {ep for _name, _icon, ep in catalog.ACTION_BUTTONS.values()}
     mqtt.publish_discovery(c, set(catalog.OPTIONAL_ENDPOINTS) | all_eps, "km")
@@ -172,8 +175,9 @@ def test_refresh_location_button_cleared_when_location_disabled(monkeypatch):
     btn_topic = f"{mqtt.DISCOVERY_PREFIX}/button/{mqtt.NODE}/{short}/config"
     eps = set(catalog.OPTIONAL_ENDPOINTS) | {catalog.REFRESH_LOCATION_EP}
 
-    # location on: the refresh-location button is published
+    # location on AND opted in: the refresh-location button is published
     monkeypatch.setattr(mqtt, "PUBLISH_LOCATION", True)
+    monkeypatch.setattr(mqtt, "ENABLE_REFRESH_LOCATION", True)
     c = StubClient()
     mqtt.publish_discovery(c, eps, "km")
     assert "command_topic" in c.pub[btn_topic]
@@ -183,6 +187,22 @@ def test_refresh_location_button_cleared_when_location_disabled(monkeypatch):
     c = StubClient()
     mqtt.publish_discovery(c, eps, "km")
     assert c.pub[btn_topic] == ""
+
+    # opted out (the shipped default): cleared even with location on and the endpoint supported.
+    # This is the case an existing install upgrades into, so the button must be actively cleared
+    # rather than merely not re-published - HA only drops the entity on a retained empty payload.
+    monkeypatch.setattr(mqtt, "PUBLISH_LOCATION", True)
+    monkeypatch.setattr(mqtt, "ENABLE_REFRESH_LOCATION", False)
+    c = StubClient()
+    mqtt.publish_discovery(c, eps, "km")
+    assert c.pub[btn_topic] == ""
+
+
+def test_refresh_location_is_off_when_the_option_is_unset():
+    """conftest imports main, which runs mqtt.configure() with R5_ENABLE_REFRESH_LOCATION unset -
+    the state of an upgraded install whose options have not been re-rendered. That must resolve to
+    OFF, so the destructive action is never inherited silently by an upgrade."""
+    assert mqtt.ENABLE_REFRESH_LOCATION is False
 
 
 # --------------------------------------------------------------------------- #

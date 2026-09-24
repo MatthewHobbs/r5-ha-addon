@@ -328,6 +328,42 @@ def test_run_command_failure_is_logged_not_raised(monkeypatch):
     asyncio.run(main.run_command("horn"))             # logs error, never raises
 
 
+@pytest.mark.parametrize("publish_location,enable_refresh,dispatched", [
+    (True,  True,  True),    # opted in -> the only combination that reaches the car
+    (True,  False, False),   # the shipped default
+    (False, True,  False),
+    (False, False, False),
+])
+def test_run_command_gates_refresh_location_on_the_opt_in(
+        monkeypatch, publish_location, enable_refresh, dispatched):
+    """Withholding the discovery button is not enough on its own: the entity is pressable from
+    voice, automations and any dashboard, all of which publish to the same command topic. So the
+    command itself must be rejected, and rejected BEFORE the login - a refused press must not even
+    authenticate, let alone reach actions/refresh-location."""
+    main._last_command.clear()
+    monkeypatch.setattr(main, "now_ts", lambda: 4000.0)
+    monkeypatch.setattr(main.aiohttp, "ClientSession", lambda *a, **k: _CmdSession())
+    monkeypatch.setattr(mqtt, "PUBLISH_LOCATION", publish_location)
+    monkeypatch.setattr(mqtt, "ENABLE_REFRESH_LOCATION", enable_refresh)
+    logins = {"n": 0}
+    refreshed = {"n": 0}
+
+    class Veh:
+        async def refresh_location(self):
+            refreshed["n"] += 1
+
+    async def fake_login(ws, locale):
+        logins["n"] += 1
+        return Veh()
+
+    monkeypatch.setattr(main, "_login_vehicle", fake_login)
+    (cmd,) = tuple(main.LOCATION_CMDS)
+    asyncio.run(main.run_command(cmd))
+
+    assert refreshed["n"] == (1 if dispatched else 0)
+    assert logins["n"] == (1 if dispatched else 0)
+
+
 # --------------------------------------------------------------------------- #
 # charge-limit numbers (set_battery_soc)
 # --------------------------------------------------------------------------- #
@@ -745,8 +781,10 @@ def _wire_main(monkeypatch, tmp_path, poll):
 
     monkeypatch.setattr(main, "detect_supported", fake_detect)
 
-    async def fake_deploy():
-        return None
+    fc.deploy_calls = []
+
+    async def fake_deploy(**kw):
+        fc.deploy_calls.append(kw)
 
     monkeypatch.setattr(main.deploy, "run_deploy", fake_deploy)
 
@@ -791,6 +829,24 @@ def test_main_runs_one_successful_cycle(monkeypatch, tmp_path):
     assert mqtt.TRACKER_STATE_TOPIC not in topics
     assert (mqtt.AVAIL_TOPIC, "offline") in fc.pubs   # clean shutdown
     assert fc.stopped is True and fc.disconnected is True
+
+
+@pytest.mark.parametrize("publish_location,enable_refresh,expected", [
+    (True, False, False), (True, True, True), (False, True, False), (None, None, False)])
+def test_main_tells_deploy_whether_the_refresh_button_exists(
+        monkeypatch, tmp_path, publish_location, enable_refresh, expected):
+    """deploy keeps the Refresh Location tile only on this verdict, so it must be the core's own
+    publish condition. None is an unconfigured core: withhold, the safe direction."""
+    async def poll(stop, *a, **k):
+        stop.set()
+        return ({"battery_level": 80}, None)
+
+    fc = _wire_main(monkeypatch, tmp_path, poll)
+    monkeypatch.setattr(mqtt, "configure", lambda *a, **k: None, raising=False)
+    monkeypatch.setattr(mqtt, "PUBLISH_LOCATION", publish_location)
+    monkeypatch.setattr(mqtt, "ENABLE_REFRESH_LOCATION", enable_refresh)
+    asyncio.run(main.main())
+    assert fc.deploy_calls == [{"refresh_location": expected}]
 
 
 def test_main_failure_branch_flags_auth_and_staleness(monkeypatch, tmp_path):
@@ -1109,6 +1165,7 @@ def test_main_redacts_secret_in_error_snapshot(monkeypatch, tmp_path):
 
 def test_run_command_rejects_refresh_location_when_location_disabled(monkeypatch):
     monkeypatch.setattr(mqtt, "PUBLISH_LOCATION", False)
+    monkeypatch.setattr(mqtt, "ENABLE_REFRESH_LOCATION", True)
     called = {"n": 0}
 
     async def fake_login(ws, locale):

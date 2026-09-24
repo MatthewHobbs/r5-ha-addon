@@ -9,7 +9,7 @@ fragile `venv` + `renault-api` CLI + shell-script layer with a proper app that p
 to these entities** — keep using their dashboards and let this app feed them. Credentials
 are entered once on the **Configuration** tab.
 
-- **Native controls** — charge, lights, horn, HVAC, refresh location — plus **writable
+- **Native controls** — charge, lights, horn, HVAC, and opt-in refresh location — plus **writable
   charge-limit sliders**. You do **not** need Home Assistant's `renault` integration.
 - **Location is opt-out** — `device_tracker.r5_location` publishes by default (coarsened per
   `gps_precision`); set `publish_location: false` to fetch none and clear any previously-retained
