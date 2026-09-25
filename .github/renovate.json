@@ -54,7 +54,7 @@
       ]
     },
     {
-      "description": "The UI gate's render inputs move together, as ui-tests/run.sh requires: one PR carrying the Home Assistant image and all four cards, so the gate on that PR confirms the exact combination it will then pin. groupSingleUpdates keeps a lone bump (e.g. only a new Home Assistant) on that same group branch rather than a per-dependency PR; Renovate's default does not apply group settings to a single update. separateMajorMinor is off for the same reason: a major (a new year for Home Assistant, a card's major version) would otherwise split into a second PR and the gate would never see the combination.",
+      "description": "The UI gate's render inputs move together, as ui-tests/run.sh requires: one PR carrying the Home Assistant image and all four cards, so the gate on that PR confirms the exact combination it will then pin. groupSingleUpdates keeps a lone bump (e.g. only a new Home Assistant) on that same group branch rather than a per-dependency PR; Renovate's default does not apply group settings to a single update. separateMajorMinor is off for the same reason: a major (a new year for Home Assistant, a card's major version) would otherwise split into a second PR and the gate would never see the combination. It runs at any time rather than the repo's Saturday schedule: the gate's stable leg must track current stable (global rule), so a new Home Assistant release should reach a PR within hours, not up to a week.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -68,7 +68,10 @@
       "groupName": "UI gate render inputs",
       "commitMessageTopic": "the UI gate's Home Assistant and card pins",
       "groupSingleUpdates": true,
-      "separateMajorMinor": false
+      "separateMajorMinor": false,
+      "schedule": [
+        "at any time"
+      ]
     }
   ],
   "customManagers": [
@@ -107,7 +110,8 @@
     {
       "customType": "regex",
       "description": [
-        "Cards the UI gate downloads as GitHub release assets (mushroom, button-card)."
+        "Cards the UI gate downloads as GitHub release assets (mushroom, button-card).",
+        "Strict vX.Y.Z only: card-mod still carries bare legacy tags (3 ... 14, 3.3.1, v0.2, beta), and semver-coerced read '14' as 14.0.0 - newer than v4.2.1 - so Renovate queued card-mod v4.2.1 -> 14. The strict pattern also drops -beta/-rc/-dev tags."
       ],
       "managerFilePatterns": [
         "/(^|/)ui-tests/run\\.sh$/"
@@ -116,12 +120,13 @@
         "https://github\\.com/(?<depName>[^/\\s]+/[^/\\s]+)/releases/download/(?<currentValue>v\\d+\\.\\d+\\.\\d+)/"
       ],
       "datasourceTemplate": "github-releases",
-      "versioningTemplate": "semver-coerced"
+      "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$"
     },
     {
       "customType": "regex",
       "description": [
-        "Cards the UI gate fetches from jsDelivr at a git tag (card-mod, Bubble Card). jsDelivr serves the tag, so track tags."
+        "Cards the UI gate fetches from jsDelivr at a git tag (card-mod, Bubble Card). jsDelivr serves the tag, so track tags.",
+        "Strict vX.Y.Z only: card-mod still carries bare legacy tags (3 ... 14, 3.3.1, v0.2, beta), and semver-coerced read '14' as 14.0.0 - newer than v4.2.1 - so Renovate queued card-mod v4.2.1 -> 14. The strict pattern also drops -beta/-rc/-dev tags."
       ],
       "managerFilePatterns": [
         "/(^|/)ui-tests/run\\.sh$/"
@@ -130,7 +135,7 @@
         "https://cdn\\.jsdelivr\\.net/gh/(?<depName>[^/@\\s]+/[^/@\\s]+)@(?<currentValue>v\\d+\\.\\d+\\.\\d+)/"
       ],
       "datasourceTemplate": "github-tags",
-      "versioningTemplate": "semver-coerced"
+      "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$"
     }
   ]
 }

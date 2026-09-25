@@ -39,7 +39,8 @@ or ignore it and keep Topolino65's — either way the data comes from this app.
 
 ## Before you start — install these first
 
-The app only needs the **Mosquitto broker** app (its MQTT connection is auto-discovered
+It needs **Home Assistant 2026.7.1 or newer** (tested at that version and at the current stable
+release). The app only needs the **Mosquitto broker** app (its MQTT connection is auto-discovered
 from it). It publishes the entities; **you choose the dashboard**:
 
 - **[Topolino65's renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view)** —
