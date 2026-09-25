@@ -15,10 +15,16 @@
   timestamp was "the last successful poll" (it is the car's report time; **Last Successful Poll**
   is the add-on's), and the alarm one said `stale_hours` defaults to 6 (it has been 36 since
   1.6.0). The `stale_hours` row in the Documentation tab said the same, and is corrected too.
+- **The Last Charge Type icon is coloured again, on both dashboards.** It matched labels the
+  add-on never publishes (`Rapid DC`, `Fast AC` and so on), so it stayed uncoloured whatever the
+  charge. It now matches the two values the sensor reports: **Home** green, **Rapid/Public**
+  orange. Matches the A290 twin's 1.27.1.
 - **To pick this up, redeploy the dashboard.** Deployment is create-once, so an existing dashboard
   is not rewritten on upgrade. Set `redeploy_dashboard: true` for one restart (that overwrites any
   edits you made to the deployed dashboard), or, if you pasted it in by hand, re-copy
-  `front-end.txt`. The Bubble dashboard is unchanged. Matches the A290 twin.
+  `front-end.txt` (and `front-end-bubble.txt` for the colour fix).
+
+## 1.7.0
 
 - **The Refresh Location button is now off by default. If you use it, upgrading removes it.**
   `button.r5_refresh_location` disappears from Home Assistant, and pressing it any other way — an
