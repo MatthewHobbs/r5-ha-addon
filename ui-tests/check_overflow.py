@@ -80,8 +80,14 @@ JS_DIAG = r"""
     }
   };
   walk(document);
+  // Playwright awaits document.fonts.ready before every screenshot; a face stuck 'loading' stalls it.
+  let fonts = [];
+  try { fonts = [...document.fonts].map(f => [f.family, f.weight, f.status]).slice(0, 60); } catch (e) {}
   return {
     cards: Object.values(tags).reduce((a, b) => a + b, 0), byTag: tags,
+    fontsStatus: document.fonts ? document.fonts.status : null, fonts, frames: window.frames.length,
+    navType: ((performance.getEntriesByType('navigation') || [])[0] || {}).type || null,
+    swController: !!(navigator.serviceWorker && navigator.serviceWorker.controller),
     scrollW: document.documentElement.scrollWidth,
     scrollH: document.documentElement.scrollHeight,
     imagesPending: Array.from(document.images).filter(i => !i.complete).length,
@@ -104,6 +110,19 @@ class _Stages:
 
     def elapsed(self):
         return round(time.monotonic() - self.t0, 2)
+
+
+class _NavLog:
+    """Frame navigations since a page opened. A pop-up capture failed with "Execution context was
+    destroyed ... navigation" on one HA leg only, so a skip prints what navigated, and when."""
+
+    def __init__(self, page):
+        self.page, self.t0, self.items = page, time.monotonic(), []
+        page.on("framenavigated", self.record)
+
+    def record(self, frame):
+        self.items.append((round(time.monotonic() - self.t0, 2),
+                           "main" if frame == self.page.main_frame else "sub", frame.url[-90:]))
 
 
 def _write_diag(page, shot_path):
@@ -234,6 +253,7 @@ def run():
                 reduced_motion="reduce")
             ctx.add_init_script(init)
             page = ctx.new_page()
+            nav = _NavLog(page)
             for dash in args.dashboards:
                 slug = dev["name"].lower().replace(" ", "_").replace("(", "").replace(")", "")
                 shot = os.path.join(args.out, f"{dash}__{slug}.png")
@@ -329,6 +349,7 @@ def run():
                         where = (f"stage {stages.name} after {stages.elapsed()}s; completed {stages.done}"
                                  if stages else "before the capture started (pop-up never opened)")
                         print(f"    [popup diag] {dash} @ {dev['name']}: {where}")
+                        print(f"    [popup diag] url now: {page.url[-90:]}; navigations: {nav.items[-6:]}")
                         print("    [popup diag] " + traceback.format_exc().replace("\n", "\n    [popup diag] "))
                 # De-dupe: the pop-up scan re-walks the whole document, so a main-dashboard finding
                 # can otherwise appear twice when both the main view and the pop-up are flagged.
