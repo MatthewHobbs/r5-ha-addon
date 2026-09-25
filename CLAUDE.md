@@ -110,7 +110,11 @@ sub-pixel truncations on one high-DPR device that vanished on the next run). Han
 went stale instead (2026.7.1 while users ran 2026.9.x), so **Renovate tracks all five** and
 proposes them as **one grouped PR** ("UI gate render inputs", stable HA releases only); the gate
 on that PR confirms the combination before it is pinned. Keep them identical to the a290 twin's
-`ui-tests/run.sh` and Renovate rules (lockstep).
+`ui-tests/run.sh` and Renovate rules (lockstep). The gate runs **two legs**: that stable pin, and the declared
+minimum (`homeassistant:` in `renault_5/config.yaml`, currently 2026.7.1), read from the manifest so
+the test cannot drift from the claim. `scripts/ha_minimum_check.py` (CI Lint job, `just ha-min`)
+fails if the minimum is missing or newer than the `.1` of the month before current stable, read
+live from `version.home-assistant.io/stable.json`.
 
 Ruff config (`ruff.toml`): line-length 120, target py314, `select = E,F,W,B,I`,
 `ignore = E501,B008`.

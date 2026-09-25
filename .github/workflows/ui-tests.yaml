@@ -22,6 +22,7 @@ on:
       - '!renault_5/dashboards/*.md'
       - '!renault_5/dashboards/**/*.md'
       - 'renault_5/app/deploy.py'
+      - 'renault_5/config.yaml'
       - 'ui-tests/**'
       - '.github/workflows/ui-tests.yaml'
   pull_request:
@@ -41,6 +42,7 @@ on:
       - '!renault_5/dashboards/*.md'
       - '!renault_5/dashboards/**/*.md'
       - 'renault_5/app/deploy.py'
+      - 'renault_5/config.yaml'
       - 'ui-tests/**'
       - '.github/workflows/ui-tests.yaml'
   workflow_dispatch:
@@ -50,8 +52,14 @@ permissions:
 
 jobs:
   responsive:
-    name: Dashboard responsive render (mobile matrix)
+    name: Dashboard responsive render (mobile matrix, ${{ matrix.leg }})
     runs-on: ubuntu-latest
+    # Both ends of the supported range (global rule): the Renovate-tracked stable pin in run.sh,
+    # and the declared minimum, read from config.yaml so the test cannot drift from the claim.
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [stable, minimum]
     steps:
       # Default checkout: for a PR this renders the merge ref (the PR's dashboard/deploy.py
       # changes). This job holds NO secrets — committing the refreshed screenshots back to the
@@ -69,9 +77,18 @@ jobs:
           python3 -m pip install --quiet aiohttp PyYAML playwright pillow
           python3 -m playwright install --with-deps chromium
 
+      - name: Pick the Home Assistant image for this leg
+        id: ha
+        run: |
+          if [ "${{ matrix.leg }}" = minimum ]; then
+            v="$(sed -n 's/^homeassistant: *"\{0,1\}\([0-9][0-9.]*\)"\{0,1\}.*/\1/p' renault_5/config.yaml)"
+            [ -n "$v" ] || { echo "::error::no homeassistant: minimum in renault_5/config.yaml"; exit 1; }
+            echo "image=ghcr.io/home-assistant/home-assistant:$v" >> "$GITHUB_OUTPUT"
+          fi
       - name: Render dashboards across the mobile device matrix
         env:
           UI_TESTS_DARK: "1"   # render dark (the truncation gate is colour-agnostic)
+          HA_IMAGE: ${{ steps.ha.outputs.image }}   # empty on the stable leg: run.sh keeps its pin
         run: bash ui-tests/run.sh
 
       # The refreshed docs screenshots are committed by the separate "Refresh screenshots"
@@ -81,6 +98,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: dashboard-screenshots
+          # Screenshot drift reads the stable leg's artifact by this exact name.
+          name: ${{ matrix.leg == 'stable' && 'dashboard-screenshots' || 'dashboard-screenshots-minimum' }}
           path: ui-tests/screenshots/
           if-no-files-found: warn
