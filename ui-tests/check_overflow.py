@@ -240,6 +240,7 @@ def run():
         for dev in devices:
             ua = UA_IOS if "iphone" in dev["name"].lower() or "ipad" in dev["name"].lower() else UA_ANDROID
             ctx = browser.new_context(
+                service_workers="block",  # CONTROL RUN: does blocking the SW reload remove the skips?
                 viewport={"width": dev["width"], "height": dev["height"]},
                 device_scale_factor=dev.get("deviceScaleFactor", 2),
                 is_mobile=dev.get("isMobile", True), has_touch=dev.get("hasTouch", True),
