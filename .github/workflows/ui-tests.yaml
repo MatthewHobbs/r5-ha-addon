@@ -98,6 +98,7 @@ jobs:
       - name: Render dashboards across the mobile device matrix
         env:
           UI_TESTS_DARK: "1"   # render dark (the truncation gate is colour-agnostic)
+          UI_TESTS_DIAG: "1"   # DOM sidecars beside each shot, uploaded with the artifact
           HA_IMAGE: ${{ steps.ha.outputs.image }}   # empty on the stable leg: run.sh keeps its pin
         run: bash ui-tests/run.sh
 

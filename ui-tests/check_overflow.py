@@ -11,6 +11,8 @@ import argparse
 import json
 import os
 import sys
+import time
+import traceback
 
 from playwright.sync_api import sync_playwright
 
@@ -87,6 +89,21 @@ JS_DIAG = r"""
   };
 }
 """
+
+
+class _Stages:
+    """Which step of a capture is running, and how long each took: the skip below used to print
+    only the error's type, so an intermittent TimeoutError could not be tied to a step."""
+
+    def __init__(self, first):
+        self.name, self.t0, self.done = first, time.monotonic(), []
+
+    def next(self, name):
+        self.done.append((self.name, round(time.monotonic() - self.t0, 2)))
+        self.name, self.t0 = name, time.monotonic()
+
+    def elapsed(self):
+        return round(time.monotonic() - self.t0, 2)
 
 
 def _write_diag(page, shot_path):
@@ -269,6 +286,7 @@ def run():
                 # When the scan DOES complete, its issues (truncation + broken cards) go through the
                 # same two-pass stability filter, so the pop-up keeps its coverage without the flake.
                 if dash == "renault-5-bubble":
+                    stages = None
                     try:
                         # COMPLETENESS, not just settling. The selector wait used to be swallowed
                         # by a bare `except: pass` and the capture ran anyway, so a pop-up that
@@ -296,13 +314,22 @@ def run():
                             print(f"    [popup skipped] {dash} @ {dev['name']}: pop-up never "
                                   f"rendered; not overwriting the committed screenshot")
                             raise RuntimeError("smart-charging pop-up never became visible")
+                        stages = _Stages("dismiss-toasts")
                         page.evaluate(JS_DISMISS_TOASTS)
+                        stages.next("write-diag")
                         pshot = os.path.join(args.out, f"{dash}__smart_charging__{slug}.png")
                         _write_diag(page, pshot)
+                        stages.next("screenshot")
                         page.screenshot(path=pshot, full_page=True, animations="disabled")
+                        stages.next("stable-issues")
                         issues += _stable_issues(page)
+                        stages.next("done")
                     except Exception as err:
                         print(f"    pop-up capture skipped ({type(err).__name__}) — not failing the gate")
+                        where = (f"stage {stages.name} after {stages.elapsed()}s; completed {stages.done}"
+                                 if stages else "before the capture started (pop-up never opened)")
+                        print(f"    [popup diag] {dash} @ {dev['name']}: {where}")
+                        print("    [popup diag] " + traceback.format_exc().replace("\n", "\n    [popup diag] "))
                 # De-dupe: the pop-up scan re-walks the whole document, so a main-dashboard finding
                 # can otherwise appear twice when both the main view and the pop-up are flagged.
                 _seen, _uniq = set(), []
