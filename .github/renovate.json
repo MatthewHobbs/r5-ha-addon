@@ -110,7 +110,8 @@
     {
       "customType": "regex",
       "description": [
-        "Cards the UI gate downloads as GitHub release assets (mushroom, button-card)."
+        "Cards the UI gate downloads as GitHub release assets (mushroom, button-card).",
+        "Strict vX.Y.Z only: card-mod still carries bare legacy tags (3 ... 14, 3.3.1, v0.2, beta), and semver-coerced read '14' as 14.0.0 - newer than v4.2.1 - so Renovate queued card-mod v4.2.1 -> 14. The strict pattern also drops -beta/-rc/-dev tags."
       ],
       "managerFilePatterns": [
         "/(^|/)ui-tests/run\\.sh$/"
@@ -119,12 +120,13 @@
         "https://github\\.com/(?<depName>[^/\\s]+/[^/\\s]+)/releases/download/(?<currentValue>v\\d+\\.\\d+\\.\\d+)/"
       ],
       "datasourceTemplate": "github-releases",
-      "versioningTemplate": "semver-coerced"
+      "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$"
     },
     {
       "customType": "regex",
       "description": [
-        "Cards the UI gate fetches from jsDelivr at a git tag (card-mod, Bubble Card). jsDelivr serves the tag, so track tags."
+        "Cards the UI gate fetches from jsDelivr at a git tag (card-mod, Bubble Card). jsDelivr serves the tag, so track tags.",
+        "Strict vX.Y.Z only: card-mod still carries bare legacy tags (3 ... 14, 3.3.1, v0.2, beta), and semver-coerced read '14' as 14.0.0 - newer than v4.2.1 - so Renovate queued card-mod v4.2.1 -> 14. The strict pattern also drops -beta/-rc/-dev tags."
       ],
       "managerFilePatterns": [
         "/(^|/)ui-tests/run\\.sh$/"
@@ -133,7 +135,7 @@
         "https://cdn\\.jsdelivr\\.net/gh/(?<depName>[^/@\\s]+/[^/@\\s]+)@(?<currentValue>v\\d+\\.\\d+\\.\\d+)/"
       ],
       "datasourceTemplate": "github-tags",
-      "versioningTemplate": "semver-coerced"
+      "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$"
     }
   ]
 }
