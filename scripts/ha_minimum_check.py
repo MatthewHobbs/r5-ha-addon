@@ -23,7 +23,7 @@ VERSION = re.compile(r"^(\d{4})\.(\d{1,2})\.(\d+)$")
 
 def parse(v):
     m = VERSION.match(v.strip())
-    if not m:
+    if not m or not 1 <= int(m.group(2)) <= 12:
         raise ValueError(f"not a YYYY.M.P Home Assistant version: {v!r}")
     return tuple(int(x) for x in m.groups())
 
@@ -82,7 +82,7 @@ def self_test():
         if got != want:
             failed += 1
             print(f"ha-minimum-check self-test FAILED: declared={d} stable={s}: expected {want}", file=sys.stderr)
-    for bad in ("2026.9", "latest", "2026.10.0b1"):
+    for bad in ("2026.9", "latest", "2026.10.0b1", "2026.0.1", "2025.13.1", "2025.99.1"):
         try:
             parse(bad)
             failed += 1
@@ -91,7 +91,7 @@ def self_test():
             pass
     if failed:
         return 2
-    print(f"ha-minimum-check self-test: {len(cases) + 3} cases ok")
+    print(f"ha-minimum-check self-test: {len(cases) + 6} cases ok")
     return 0
 
 

@@ -80,6 +80,16 @@ jobs:
       - name: Pick the Home Assistant image for this leg
         id: ha
         run: |
+          # A stable pin behind current stable means this leg is not testing what users run.
+          # Renovate proposes the bump; until it merges, say so visibly rather than failing every PR.
+          if [ "${{ matrix.leg }}" = stable ]; then
+            pin="$(sed -n 's/^HA_IMAGE=.*home-assistant:\([0-9][0-9.]*\)}.*/\1/p' ui-tests/run.sh)"
+            cur="$(curl -fsS -A 'ha-minimum-check (MatthewHobbs HA add-ons)' https://version.home-assistant.io/stable.json \
+                   | python3 -c 'import sys,json;print(json.load(sys.stdin)["homeassistant"]["default"])')"
+            [ -n "$pin" ] && [ -n "$cur" ] || { echo "::error::could not read the pin or current stable"; exit 1; }
+            [ "$pin" = "$cur" ] || echo "::warning::UI gate stable pin $pin is behind current stable $cur - merge the Renovate 'UI gate render inputs' PR"
+            echo "stable leg: pin $pin, current stable $cur"
+          fi
           if [ "${{ matrix.leg }}" = minimum ]; then
             v="$(sed -n 's/^homeassistant: *"\{0,1\}\([0-9][0-9.]*\)"\{0,1\}.*/\1/p' renault_5/config.yaml)"
             [ -n "$v" ] || { echo "::error::no homeassistant: minimum in renault_5/config.yaml"; exit 1; }
