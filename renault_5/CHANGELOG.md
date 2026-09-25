@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.8.1
+
+- **Fixed: a failing add-on no longer polls Renault faster than a healthy one.** After a failed
+  poll the add-on waits longer each time, up to 30 minutes. With a `poll_interval` above 1800 that
+  cap was *shorter* than the interval, so at 3600 a failing add-on retried every 30 minutes while
+  a working one waited an hour. The cap is now 30 minutes or your interval, whichever is longer.
+- **Fixed: a slow Renault server can hold up a request for at most 60 seconds, down from 5
+  minutes.** Each call to Renault is now limited to 60 seconds, and 10 to connect. Before this, a
+  button press, a charge-limit change or the startup check could each wait up to 5 minutes on
+  every call that hung, and a login makes several calls. Matches the A290 twin.
+
 ## 1.8.0
 
 - **The standard dashboard now says "Car Parked" instead of raising an alarm.** The Last Updated
