@@ -54,7 +54,7 @@
       ]
     },
     {
-      "description": "The UI gate's render inputs move together, as ui-tests/run.sh requires: one PR carrying the Home Assistant image and all four cards, so the gate on that PR confirms the exact combination it will then pin.",
+      "description": "The UI gate's render inputs move together, as ui-tests/run.sh requires: one PR carrying the Home Assistant image and all four cards, so the gate on that PR confirms the exact combination it will then pin. groupSingleUpdates keeps a lone bump (e.g. only a new Home Assistant) on that same group branch rather than a per-dependency PR; Renovate's default does not apply group settings to a single update.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -66,7 +66,8 @@
         "Clooos/Bubble-Card"
       ],
       "groupName": "UI gate render inputs",
-      "commitMessageTopic": "the UI gate's Home Assistant and card pins"
+      "commitMessageTopic": "the UI gate's Home Assistant and card pins",
+      "groupSingleUpdates": true
     }
   ],
   "customManagers": [
