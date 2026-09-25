@@ -41,7 +41,9 @@ echo "==> Vendor dashboard background images into the HA www/"
 mkdir -p "$CONFIG/www/backgrounds"
 find "$HERE/../renault_5/dashboards/Images" -type f \( -name '*.webp' -o -name '*.png' \) \
   -exec cp {} "$CONFIG/www/backgrounds/" \;
-printf 'default_config:\n' > "$CONFIG/configuration.yaml"
+# EXPERIMENT: card-mod as a frontend module (its README's recommendation) instead of a Lovelace
+# resource, so it is loaded before any card renders rather than racing the first render.
+printf 'default_config:\nfrontend:\n  extra_module_url:\n    - /local/cards/card-mod.js\n' > "$CONFIG/configuration.yaml"
 
 echo "==> Start Home Assistant ($HA_IMAGE)"
 docker run -d --name ha-ui -p 8123:8123 -v "$CONFIG":/config "$HA_IMAGE" >/dev/null

@@ -44,7 +44,6 @@ CHARGER_DEMO = {
 # single-file bundles served same-origin from /local/cards (see run.sh) so no card is fetched
 # over the network at render time; Zen Dots (the display font) is the one remaining remote load.
 RESOURCES = [
-    ("/local/cards/card-mod.js", "module"),
     ("/local/cards/mushroom.js", "module"),
     ("/local/cards/button-card.js", "module"),
     ("/local/cards/bubble-card.js", "module"),
