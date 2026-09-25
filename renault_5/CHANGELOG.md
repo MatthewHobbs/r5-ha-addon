@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.2
+
+- **Requires Home Assistant 2026.7.1 or newer**, now declared in the app's manifest. The
+  Supervisor will not install or update the app on an older Home Assistant; if yours is older,
+  update Home Assistant first. Nothing else changes. The app is now tested at both ends of that
+  range, the declared minimum and the current stable release.
+
 ## 1.8.1
 
 - **Fixed: a failing add-on no longer polls Renault faster than a healthy one.** After a failed
