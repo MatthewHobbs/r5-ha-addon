@@ -81,11 +81,11 @@ start**, so everything renders correctly the first time.
 | `locale` | Pick from the dropdown (e.g. `en_GB`, `fr_FR`, `de_DE`). Sets the API region **and** the drive side — `en_GB`/`en_IE` ⇒ RHD, otherwise LHD (used for heated-seat mapping). Units follow the locale (**miles for `en_GB`**, km elsewhere). |
 | `poll_interval` | Seconds between polls (60–3600, default 300). |
 | `battery_capacity_kwh` | `52` or `40`. Must be set — the API reports capacity as 0; used to derive charge-session energy. |
-| `stale_hours` | How many hours the car may go without reporting before **Data Stale** turns on (default 36). This measures the age of the reading the car last sent, not how recently the add-on polled. **36 hours is deliberately longer than a normal parking gap**: the car only reports when it is powered off at the end of a journey, so a shorter threshold turns this on every night for a car that is simply parked. The same threshold also drives **Poll Failing**, which turns on when the add-on itself has not reached Renault for this long. |
+| `stale_hours` | How many hours the car may go without reporting before **Data Stale** turns on (1–48, default **36**). This measures the age of the reading the car last sent (`…_battery_last_activity`), not how recently the add-on polled — see [When the values actually update](#when-the-values-actually-update). **36 hours is deliberately longer than a normal parking gap**: the car only reports when it is powered off at the end of a journey, so a shorter threshold turns this on every night for a car that is simply parked. The same threshold also drives **Poll Failing**, which turns on when the add-on itself has not reached Renault for this long. |
 | `publish_location` | `true` by default — publishes the car's GPS as `device_tracker.r5_location`. Set `false` and the app fetches no location, publishes no `device_tracker`, clears any previously-retained GPS off the MQTT broker (the tracker's discovery config and its `location/attributes`/`location/state` topics are all cleared), and removes the **Refresh Location** button (its command is ignored too) — for a zero location footprint. `gps_precision` (below) only applies when this is `true`. |
 | `enable_refresh_location` | `false` by default, and you should usually leave it off. It shows the **Refresh Location** button, which asks the car for a fresh GPS fix. **On a parked car this can be destructive:** the car is asleep and normally cannot get a fix, and its "no position" answer can then *replace* the last known position that Renault holds — with a current timestamp, so it looks like fresh data. Only completing a journey restores it, which for a car you drive occasionally can mean weeks. Your car is not harmed, and Home Assistant hides the bad value — but Renault's own app shows no position until you next drive. This was established on an Alpine A290, which shares the R5's platform, and reported upstream as [hacf-fr/renault-api#2250](https://github.com/hacf-fr/renault-api/issues/2250); it has not been separately confirmed on an R5. There is also little to gain: the car only commits its position when you switch it off, so a parked car has nothing newer to give. While this is off, the button's command is ignored too (voice, automations and dashboards all use it), and an auto-deployed dashboard leaves out its **Refresh Location** tile. Turning this on requires `publish_location: true` as well. |
 | `gps_precision` | Decimal places the car's GPS is rounded to before publishing (1–6, default **4** ≈ 11 m). Coarsens the location on the retained MQTT topic for privacy; raise to 5–6 for a more precise map pin, lower to 2–3 for more privacy. Only relevant when `publish_location: true`. |
-| `log_level` | `info` normally; `debug` for troubleshooting. |
+| `log_level` | `info` normally; `debug` adds the app's own diagnostic lines. To inspect API responses use `debug_dump` (below), which is redacted. |
 | `debug_dump` | `true` logs every readable API endpoint to the app Log **once per restart**. Redaction is **best-effort** — it masks IDs, credentials, contact fields, location, vehicle delivery/registration dates, privacy-mode settings and the build-spec render URLs — but can't guarantee every field, so treat the whole dump as personal data and **do not paste it publicly** (share privately if you need help). Off by default. |
 | `deploy_dashboard` | `none` (default), `standard`, `bubble`, or `both`. Off by default so the app stays a neutral data layer (use Topolino65's dashboards, or set this to install a bundled one). Auto-installs the chosen dashboard(s) for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. With `both`, the standard dashboard lands at `dashboard_url_path` and the bubble one at the same path with `-bubble` appended. |
 | `dashboard_url_path` | URL slug for the deployed dashboard (default `renault-5`). With `deploy_dashboard: both` the bubble dashboard is installed at `<this>-bubble` (e.g. `renault-5-bubble`). |
@@ -117,9 +117,9 @@ data. Here's what it handles, and where it lives:
 - **Logs** — normal logs never contain credentials. API/HTTP error strings are **redacted**
   (VIN and account id masked) before they're logged or shown on the status panel.
   `debug_dump: true` logs full API responses through a best-effort redactor (see above) —
-  still don't paste those publicly. Never use `log_level: debug` for troubleshooting: the
-  underlying `renault-api` library prints access tokens at that level, which is exactly why
-  `debug_dump` exists.
+  still don't paste those publicly. `log_level: debug` does not show API responses: the
+  underlying `renault-api` library's own debug output is the raw, unredacted responses
+  (including the car's exact GPS), so the app keeps it out of the Log at every level.
 
 ## Smart Charging card
 
@@ -179,7 +179,7 @@ credentials and no raw GPS**, and any error strings on it are redacted (no VIN/a
 
 The buttons and number entities work by the app subscribing to `renault_5/cmd/#` on the
 MQTT broker — anything able to publish to that topic can trigger a control (horn, lights,
-climate, charge start/stop, charge-limit sliders). That's inherent to MQTT discovery, not a
+climate, charge start, charge-limit sliders). That's inherent to MQTT discovery, not a
 bug in the app; if your broker is shared with other apps or devices, restrict who can publish
 to `renault_5/cmd/#` with a broker ACL.
 
@@ -285,6 +285,13 @@ Lights, Sound Horn, HVAC Start, HVAC Stop and — if you opt in with `enable_ref
 Refresh Location. You do **not** need Home Assistant's `renault` integration installed. The only thing the platform doesn't expose is
 **charge-stop**, so there's no charge-stop button. (HVAC-stop works but, per the platform,
 can be flaky.)
+
+**Start Charging may do nothing if your charging is scheduled outside the car.** It starts a
+charge by switching off the car's **own** charge programs. On the Alpine A290, which uses the
+same call, that was a no-op under Octopus Intelligent: the car stayed *Waiting to Charge*. The
+R5 goes through identical code, so expect the same, though it hasn't been tested on an R5. With
+external scheduling, start the charge from your charger or tariff instead (e.g. Octopus **Bump
+Charge**).
 
 The optional **test-mode** preview and **pretty-location** sensor are separate HA helper
 packages (not Home Assistant's `renault` integration) — install them only if you want those extras.

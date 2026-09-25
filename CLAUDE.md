@@ -8,8 +8,10 @@ no `secrets.yaml`. Credentials are entered on the add-on's Configuration page. I
 (full credit for the original dashboards, assets and design), replacing that project's
 fragile `venv` + `renault-api` CLI + shell-script data layer.
 
-**Tier 0.** Global rules (dual review, container-verify, trunk/merge policy, Conventional
-Commits, HA cadence) live in `~/.claude/CLAUDE.md`; this file is R5-specifics only.
+**Data class: Public. Audience: others** (`.data-class`, owner-approved 2026-09-24). Public
+means either provider may review it; others install it, so runtime changes get the container
+boot below. Global rules (review, trunk/merge policy, Conventional Commits, HA cadence) live in
+`~/.claude/CLAUDE.md`; this file is R5-specifics only.
 
 A sibling repo, **`MatthewHobbs/a290-ha-addon`**, is the Alpine A290 add-on this is **ported
 from** (the R5 E-Tech and A290 share the CMF-BEV / KCM platform). **Keep the two in
@@ -56,11 +58,17 @@ regeneration silently reverts the one you missed.
 **Do not bump `renault-api` casually.** Per-model endpoint support is hard-coded in the
 library at `renault_api/kamereon/models.py` → `_VEHICLE_ENDPOINTS` (R5 is model `R5E1VE`,
 A290 is `A5E1AE`). That map — not the readthedocs pages — is the authoritative source for
-what each car exposes. The R5 supports **all six native controls** — charge-start (KCM
-instant-charge), flash lights, sound horn, HVAC start/stop, and refresh location —
-**unlike the A290, which forbids charge-start**; charge-mode and tyre-pressure are
-**forbidden** on the R5 (`R5E1VE`) and are not published.
+what each car exposes. The R5 supports **all six native controls** — charge-start, flash
+lights, sound horn, HVAC start/stop, and refresh location. Charge-mode, charge-stop and
+tyre-pressure are `None` in its map and are not published.
 The add-on probes `supports_endpoint()` at startup and only publishes what's available.
+
+**Charge-start is not an instant-charge command.** Both `R5E1VE` and `A5E1AE` map it to KCM
+`charge-start-via-settings` (the A290 has published it since its v1.19.0), and
+`set_charge_start()` works by switching off the car's **own** charge programs in `ev/settings`.
+On an A290 on Octopus Intelligent that was a no-op: the car stayed "Waiting to Charge"
+(a290-ha-addon #95). For the R5 that outcome is **inferred** from the identical library path,
+not observed on an R5.
 
 **Platform caveats (R5 E-Tech / CMF-BEV, KCM):** `batteryCapacity` is always 0 (the add-on
 uses the configured capacity); `chargingStatus` is a float `ChargeState` (decoded via the
@@ -175,9 +183,13 @@ mirroring to `a290-ha-addon`, bump **`alpine_a290/config.yaml`** there. Feature 
   the *names*, not from `object_id`.
 - **Secrets never get logged.** The credentials (My Renault username/password, VIN,
   account_id, GPS) are sensitive. `debug_dump: true` logs decoded API responses but routes
-  everything through `_debug_redact` first; never add a logging path that bypasses it, and
-  never use `log_level: debug` for diagnosis (the library prints access tokens at that
-  level — `debug_dump` exists precisely to avoid that).
+  everything through `_debug_redact` first; never add a logging path that bypasses it. The
+  add-on holds the `renault_api` loggers at INFO or above in `setup_logging()` whatever
+  `log_level` says, and that clamp must stay: at DEBUG, renault-api 0.5.13 logs every
+  Kamereon request URL and body, every full response body (unrounded GPS, the person/account
+  record) and, for a locale it doesn't bundle, the fetched API-key config — none of it
+  through `_debug_redact`. The root filter masks only the configured VIN/account
+  id/credentials. The Gigya JWT is sent as a header and is not logged.
 - **Dashboards live under `renault_5/dashboards/`** — bundled into the image (`COPY
   dashboards/*.txt` in the Dockerfile) and read locally by `deploy.py` (no runtime
   raw.githubusercontent.com fetch), aligned with the A290 add-on. Images are still served via
