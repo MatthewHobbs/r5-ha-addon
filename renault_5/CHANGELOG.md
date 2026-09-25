@@ -11,6 +11,8 @@
   button press, a charge-limit change or the startup check could each wait up to 5 minutes on
   every call that hung, and a login makes several calls. Matches the A290 twin.
 
+## 1.7.0
+
 - **The Refresh Location button is now off by default. If you use it, upgrading removes it.**
   `button.r5_refresh_location` disappears from Home Assistant, and pressing it any other way — an
   automation, a voice assistant, a script — is ignored and logged instead of reaching the car.
