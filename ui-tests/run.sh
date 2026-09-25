@@ -27,7 +27,7 @@ mkdir -p "$CONFIG/www/cards"
 # Pinned to fixed releases (not @latest / @master) so the rendered layout is reproducible; a
 # floating card version shifting the shadow DOM is what tripped the marginal truncation gate.
 # Renovate bumps these together with HA_IMAGE (one grouped PR).
-curl -fsSL "https://github.com/piitaya/lovelace-mushroom/releases/download/v5.1.1/mushroom.js" -o "$CONFIG/www/cards/mushroom.js"
+curl -fsSL "https://github.com/piitaya/lovelace-mushroom/releases/download/v5.2.3/mushroom.js" -o "$CONFIG/www/cards/mushroom.js"
 curl -fsSL "https://github.com/custom-cards/button-card/releases/download/v7.0.1/button-card.js" -o "$CONFIG/www/cards/button-card.js"
 curl -fsSL "https://cdn.jsdelivr.net/gh/thomasloven/lovelace-card-mod@v4.2.1/card-mod.js" -o "$CONFIG/www/cards/card-mod.js"
 # Bubble Card is a single self-contained bundle at pinned releases — vendor it too (was loaded
