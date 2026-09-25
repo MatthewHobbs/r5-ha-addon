@@ -65,7 +65,7 @@ location) — **you do not need Home Assistant's `renault` integration**.
 
 ## Requirements
 
-**Home Assistant 2026.7.1 or newer.** The app is tested against that version and against the
+**Home Assistant 2026.8.1 or newer.** The app is tested against that version and against the
 current stable release; the Supervisor will not install or update it on anything older.
 
 Install these **before** the dashboards will render correctly.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.3
+
+- **Now requires Home Assistant 2026.8.1 or newer** (was 2026.7.1). If your Home Assistant is
+  still on 2026.7, update it first: the Supervisor will not offer this version until you do.
+  The app is tested at 2026.8.1 and at the current stable release.
+
 ## 1.8.2
 
 - **Requires Home Assistant 2026.7.1 or newer**, now declared in the app's manifest. The
