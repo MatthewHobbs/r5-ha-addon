@@ -8,11 +8,13 @@ their own test modules (only the retargeted monkeypatch targets appear here). Te
 synchronous and drive coroutines with asyncio.run (so the suite needs only pytest, not
 pytest-asyncio).
 """
+import ast
 import asyncio
 import json
 import logging
 import os
 import tempfile
+from pathlib import Path
 
 import deploy
 import main
@@ -871,6 +873,98 @@ def test_main_exits_without_required_config(monkeypatch):
         monkeypatch.delenv(k, raising=False)
     with pytest.raises(SystemExit):
         asyncio.run(main.main())
+
+
+@pytest.mark.parametrize("interval,expected", [
+    (3600, [3600, 3600, 3600, 3600]),        # a slow interval must not retry faster when failing
+    (300, [300, 600, 1200, 1800, 1800]),     # a fast one still backs off to the 30-minute cap
+])
+def test_failure_backoff_never_drops_below_the_interval(monkeypatch, tmp_path, interval, expected):
+    polls = {"n": 0}
+
+    async def poll(stop, *a, **k):
+        polls["n"] += 1
+        if polls["n"] == len(expected):
+            stop.set()
+        raise RuntimeError("Kamereon unreachable")
+
+    _wire_main(monkeypatch, tmp_path, poll)
+    monkeypatch.setenv("R5_POLL_INTERVAL", str(interval))
+    delays, real_wait_for = [], asyncio.wait_for
+
+    async def fake_wait_for(aw, timeout):
+        if getattr(aw, "__qualname__", "") == "Event.wait":   # the inter-poll sleep, not the poll
+            delays.append(timeout)
+            aw.close()
+            raise asyncio.TimeoutError
+        return await real_wait_for(aw, timeout)
+
+    monkeypatch.setattr(main.asyncio, "wait_for", fake_wait_for)
+    asyncio.run(main.main())
+    assert delays == expected
+
+
+# --------------------------------------------------------------------------- #
+# every Renault API session is bounded, so a hung connection can't wedge a poll or command
+# --------------------------------------------------------------------------- #
+class _TimedVehicle:
+    async def start_horn(self):
+        pass
+
+    async def get_battery_soc(self):
+        return _obj(socMin=20, socTarget=80)
+
+    async def set_battery_soc(self, min, target):
+        pass
+
+
+def _poll_session():
+    asyncio.run(main.VehicleSession("en_GB").vehicle())
+
+
+def _command_session():
+    main._last_command.clear()
+    asyncio.run(main.run_command("horn"))
+
+
+def _soc_session():
+    asyncio.run(main.set_soc_level(sorted(main.NUMBER_CMDS)[0], "70"))
+
+
+SESSION_PATHS = {"poll": _poll_session, "command": _command_session, "charge_limit": _soc_session}
+
+
+@pytest.mark.parametrize("path", sorted(SESSION_PATHS))
+def test_renault_session_is_created_with_the_api_timeout(monkeypatch, path):
+    made = []
+
+    class _S(_CmdSession):
+        async def close(self):
+            pass
+
+    def factory(*a, **k):
+        made.append(k)
+        return _S()
+
+    async def login(ws, locale):
+        return _TimedVehicle()
+
+    monkeypatch.setattr(main.aiohttp, "ClientSession", factory)
+    monkeypatch.setattr(main, "_login_vehicle", login)
+    SESSION_PATHS[path]()
+    assert len(made) == 1
+    timeout = made[0].get("timeout")
+    assert isinstance(timeout, main.aiohttp.ClientTimeout), made[0]
+    assert (timeout.total, timeout.connect) == (60, 10)
+
+
+def test_no_client_session_in_main_escapes_the_timeout_tests():
+    """A new session in main.py fails here until it passes a timeout and gets a SESSION_PATHS entry."""
+    tree = ast.parse(Path(main.__file__).read_text())
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+             and isinstance(n.func, ast.Attribute) and n.func.attr == "ClientSession"]
+    assert len(calls) == len(SESSION_PATHS)
+    assert all(any(kw.arg == "timeout" for kw in c.keywords) for c in calls)
 
 
 # --------------------------------------------------------------------------- #

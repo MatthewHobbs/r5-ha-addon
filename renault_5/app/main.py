@@ -212,6 +212,11 @@ async def _login_vehicle(websession, locale):
     return await account.get_api_vehicle(cfg("R5_VIN"))
 
 
+# Per request. aiohttp's default lets one hung Gigya/Kamereon call run 5 minutes, and a login is
+# several calls; renault-api sets none of its own. Startup and commands have no outer wait_for.
+API_TIMEOUT = aiohttp.ClientTimeout(total=60, connect=10)
+
+
 class VehicleSession:
     """One logged-in renault-api vehicle + its aiohttp session, reused across polls.
 
@@ -233,7 +238,7 @@ class VehicleSession:
 
     async def vehicle(self):
         if self._vehicle is None:
-            self._websession = aiohttp.ClientSession()
+            self._websession = aiohttp.ClientSession(timeout=API_TIMEOUT)
             try:
                 self._vehicle = await _login_vehicle(self._websession, self.locale)
             except Exception:
@@ -358,7 +363,7 @@ async def set_soc_level(which, payload):
     locale = cfg("R5_LOCALE", "en_GB")
     async with _soc_lock_get():
         try:
-            async with aiohttp.ClientSession() as websession:
+            async with aiohttp.ClientSession(timeout=API_TIMEOUT) as websession:
                 vehicle = await _login_vehicle(websession, locale)
                 soc = await vehicle.get_battery_soc()
                 cur_min = getattr(soc, "socMin", None)
@@ -399,7 +404,7 @@ async def run_command(cmd, payload=""):
     _last_command[cmd] = now_ts()
     locale = cfg("R5_LOCALE", "en_GB")
     try:
-        async with aiohttp.ClientSession() as websession:
+        async with aiohttp.ClientSession(timeout=API_TIMEOUT) as websession:
             vehicle = await _login_vehicle(websession, locale)
             await action(vehicle)
         LOG.info("Command '%s' sent", cmd)
@@ -704,6 +709,7 @@ async def main():
     await deploy.run_deploy(refresh_location=bool(mqtt.PUBLISH_LOCATION and mqtt.ENABLE_REFRESH_LOCATION))
 
     fails = 0
+    max_backoff = max(interval, 1800)   # a failing car must never be polled faster than a healthy one
     while not stop.is_set():
         try:
             t0 = time.monotonic()
@@ -754,8 +760,8 @@ async def main():
             _LATEST.update(ok=False, last_poll=iso(now_ts()), error=redact(err))
             _LATEST["data"].update(api_auth_failure="on" if auth else "off",
                                    last_successful_poll=iso(last_ok), **fresh)
-        # exponential backoff on repeated failures (avoid a re-auth storm), capped at 30 min
-        delay = interval if fails == 0 else min(interval * 2 ** (fails - 1), 1800)
+        # exponential backoff on repeated failures (avoid a re-auth storm), capped at 30 min or the interval
+        delay = interval if fails == 0 else min(interval * 2 ** (fails - 1), max_backoff)
         try:
             await asyncio.wait_for(stop.wait(), timeout=delay)
         except asyncio.TimeoutError:
