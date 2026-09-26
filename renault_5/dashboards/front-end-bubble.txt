@@ -946,4 +946,7 @@
       3_name: Test
       3_icon: mdi:flask
       3_link: '#r5-diag'
-      styles: ${(() => { if (!window.__r5AutoOpen) { window.__r5AutoOpen = true; if (!location.hash) { setTimeout(() => { location.hash = "#r5"; }, 60); } } return ""; })()}
+      # Lay the buttons out with CSS rather than Bubble's measured offsets. Bubble measures each
+      # button while the card is still hidden on first load, gets 0, and stacks all three on top
+      # of each other until an entity changes state (Bubble 3.2.5 and 3.4.1 alike).
+      styles: ${(() => { if (!window.__r5AutoOpen) { window.__r5AutoOpen = true; if (!location.hash) { setTimeout(() => { location.hash = "#r5"; }, 60); } } return ""; })()} .bubble-horizontal-buttons-stack-card-container{display:flex !important;gap:12px;width:max-content !important;} .bubble-button{position:relative !important;flex:none;width:auto !important;transform:none !important;}

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.8.4
+
+Matches the a290 twin's 1.28.1.
+
+- **The standard dashboard says "Last Seen" instead of "Car Parked".** When the car has not
+  reported for longer than `stale_hours`, the Last Updated tile now reads **Last Seen** with the
+  time underneath, under a clock icon instead of the parking lights. "Car Parked" was a guess: an
+  old report looks the same whether the car is asleep on the drive or its own connection to
+  Renault has failed, and the add-on cannot tell which. Nothing else changes: `data_stale`,
+  `poll_failing` and the Not Polling card behave as before.
+- **Bubble dashboard: the Home, Car and Test buttons in the bottom bar no longer sit on top of
+  each other.** Bubble Card sizes those buttons by measuring them. On a first load it measured them
+  while the bar was still hidden, got zero, and stacked all three in one spot until any entity
+  changed state. The bar is now laid out with plain CSS, so it no longer depends on that
+  measurement.
+- **To pick both up, redeploy or re-copy the dashboards:** set `redeploy_dashboard: true`, or paste
+  `front-end.txt` / `front-end-bubble.txt` again. An existing dashboard is not changed by the update
+  alone.
+
 ## 1.8.3
 
 - **Now requires Home Assistant 2026.8.1 or newer** (was 2026.7.1). If your Home Assistant is

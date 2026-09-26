@@ -219,12 +219,14 @@ trip-end-old.** It will not move until the car is driven again. Specifically:
   preconditioning start.
 
 `sensor.r5_battery_last_activity` always tells you when the **car** last reported. If it is old
-while the add-on is still polling successfully, everything is working and the car is simply
-parked.
+while the add-on is still polling successfully, the add-on is working and the car has not reported
+since — usually because it has not been driven.
 
 `sensor.r5_last_successful_poll` tells you when the **add-on** last reached Renault, as distinct
 from `…_battery_last_activity`, which is when the **car** last reported. If the first is recent
-and the second is old, everything is working and the car is simply parked.
+and the second is old, the add-on is working and the car has not reported since. The add-on cannot
+tell that apart from the car's own link to Renault failing, which is why the dashboard tile says
+**Last Seen** rather than guessing.
 
 **`binary_sensor.r5_data_stale` measures the car, not the connection.** It turns on after
 `stale_hours` without the car reporting — so a car parked overnight will show it on, and **that
