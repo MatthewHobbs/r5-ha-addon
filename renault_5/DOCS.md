@@ -181,6 +181,12 @@ climate, charge start, charge-limit sliders). That's inherent to MQTT discovery,
 bug in the app; if your broker is shared with other apps or devices, restrict who can publish
 to `renault_5/cmd/#` with a broker ACL.
 
+A second press of the **same** button is ignored while the first is still being sent (which can
+take up to a minute) and within 5 seconds of the first press; the app log says so. That way a
+double-tap cannot send the car the action twice. A press that failed before reaching the car (for
+example, the login to Renault failed) does not count, so you can retry straight away. Different
+buttons are independent, and the charge-limit sliders are never ignored.
+
 ## Requirements
 
 - The **Mosquitto broker** app (the MQTT connection is auto-discovered).

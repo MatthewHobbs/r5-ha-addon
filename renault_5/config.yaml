@@ -1,5 +1,5 @@
 name: Renault 5
-version: "1.8.4"
+version: "1.8.5"
 slug: renault_5
 # Oldest Home Assistant this add-on supports and is tested against (UI gate minimum leg).
 homeassistant: "2026.8.1"
