@@ -176,6 +176,22 @@ machine.
 
 Exceptions (CI is enough): docs-only, CI-YAML-only, or test-only changes.
 
+## Supervisor pilot (mirrors a290's ADR 0002)
+
+`.github/workflows/supervisor.yml` runs `scripts/supervisor-pilot.sh`, a port of the a290
+twin's pilot (keep them in lockstep). It installs this add-on under a real stable Supervisor in
+the official devcontainer on amd64 and aarch64, with current stable Core and the
+`homeassistant:` minimum from `config.yaml`, and checks versions, provenance, `/healthz`, the
+HEALTHCHECK, retained MQTT discovery and availability, refused Renault egress, that the standard
+dashboard the pilot's options deploy (`deploy_dashboard: standard`, set by the pilot because r5's
+default is `none`, at `dashboard_url_path`) exists in Core with views, read back through Core's
+Lovelace WebSocket API from inside the add-on container (the Supervisor's Core proxy admits only
+an add-on token) with no `Dashboard auto-deploy skipped` in the log, and that AppArmor enforces
+`local_renault_5`. Not a required check. The traps and their fixes are in a290's CLAUDE.md and
+ADR 0002. Local run: `PILOT_APPARMOR_CHECK=skip scripts/supervisor-pilot.sh all`
+(`CORE_VERSION=minimum` for the floor; `PILOT_BREAK=start|apparmor|dashboard` breaks it on
+purpose).
+
 ## Release / versioning
 
 Any user-facing change bumps **`renault_5/config.yaml` `version`** AND the **`VERSION`
