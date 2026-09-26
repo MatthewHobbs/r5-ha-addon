@@ -26,7 +26,8 @@ data layer** for the Renault 5 — a drop-in replacement for the fragile `venv` 
 (template sensors ending `_api` and `script.` controls), so they **do not bind to this app**
 without editing.
 
-**Use the bundled dashboards to see the data.** The app can auto-deploy one for you
+**For a ready-made view, use the bundled dashboards.** The entities appear under the **R5**
+device (and in the app's status panel) either way; the app can also auto-deploy a dashboard for you
 (`deploy_dashboard`): a **modified version of Topolino65's UI**, built for these entities and
 adapted from the maintainer's [Alpine A290 app](https://github.com/MatthewHobbs/a290-ha-addon)
 (the R5 and A290 share the same Renault EV platform).
@@ -40,8 +41,9 @@ adapted from the maintainer's [Alpine A290 app](https://github.com/MatthewHobbs/
 
 It needs **Home Assistant 2026.8.1 or newer** (tested at that version and at the current stable
 release). The app only needs the **Mosquitto broker** app (its MQTT connection is auto-discovered
-from it). It publishes the entities; to see them, use one of this app's **bundled
-dashboards**: set `deploy_dashboard` to `standard`, `bubble`, or `both` (off by default).
+from it). It publishes the entities under an **R5** device; for a ready-made view, use one of
+this app's **bundled dashboards**: set `deploy_dashboard` to `standard`, `bubble`, or `both`
+(off by default).
 
 If you use a card-based dashboard you must **first install its frontend cards via
 HACS → Frontend** — otherwise it renders as *"Custom element doesn't exist"* with broken tiles.

@@ -25,7 +25,8 @@ a proper **Home Assistant app** that polls the
 Topolino65's dashboards use differently named entities (template sensors ending `_api` and
 `script.` controls), so they **do not bind to this app** without editing.
 
-To see the data, use the app's **bundled dashboards** (`deploy_dashboard`, off by default): a
+The entities appear under the **R5** device like any other; for a ready-made view, use the
+app's **bundled dashboards** (`deploy_dashboard`, off by default): a
 **modified version of Topolino65's UI**, built for these entities and ported from the maintainer's
 [Alpine A290 app](https://github.com/MatthewHobbs/a290-ha-addon) (the R5 E-Tech and Alpine
 A290 share the same Renault EV platform).
