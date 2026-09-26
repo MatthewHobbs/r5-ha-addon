@@ -32,7 +32,7 @@ curl -fsSL "https://github.com/custom-cards/button-card/releases/download/v7.0.1
 curl -fsSL "https://cdn.jsdelivr.net/gh/thomasloven/lovelace-card-mod@v4.2.1/card-mod.js" -o "$CONFIG/www/cards/card-mod.js"
 # Bubble Card is a single self-contained bundle at pinned releases — vendor it too (was loaded
 # live from jsDelivr @main, whose runtime fetch intermittently error-carded on the widest viewport).
-curl -fsSL "https://cdn.jsdelivr.net/gh/Clooos/Bubble-Card@v3.4.0/dist/bubble-card.js" -o "$CONFIG/www/cards/bubble-card.js"
+curl -fsSL "https://cdn.jsdelivr.net/gh/Clooos/Bubble-Card@v3.4.1/dist/bubble-card.js" -o "$CONFIG/www/cards/bubble-card.js"
 
 # Vendor the dashboards' background/render images so /local/backgrounds/<file> resolves
 # (the live add-on rewrites these to the CDN via deploy._cdnify; the harness serves them
