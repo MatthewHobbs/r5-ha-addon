@@ -22,6 +22,7 @@ on:
       - '!renault_5/dashboards/*.md'
       - '!renault_5/dashboards/**/*.md'
       - 'renault_5/app/deploy.py'
+      - 'renault_5/app/catalog.py'   # the alarm pass derives its sensors from it
       - 'renault_5/config.yaml'
       - 'ui-tests/**'
       - '.github/workflows/ui-tests.yaml'
@@ -42,6 +43,7 @@ on:
       - '!renault_5/dashboards/*.md'
       - '!renault_5/dashboards/**/*.md'
       - 'renault_5/app/deploy.py'
+      - 'renault_5/app/catalog.py'   # the alarm pass derives its sensors from it
       - 'renault_5/config.yaml'
       - 'ui-tests/**'
       - '.github/workflows/ui-tests.yaml'

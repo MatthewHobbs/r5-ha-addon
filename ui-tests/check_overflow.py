@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
-"""Render the A290 dashboards across the mobile device matrix and fail on text truncation.
+"""Render the R5 dashboards across the mobile device matrix and fail on text truncation.
 
 For every device viewport x dashboard it: injects auth, navigates, waits for the custom
 cards + the Zen Dots font, then walks the (shadow-DOM-pierced) tree for any text element
 that is clipped (text-overflow:ellipsis / nowrap+overflow:hidden with scrollWidth >
 clientWidth) or any broken card (hui-error-card). A screenshot is saved per device. Exits
 non-zero with a report if any truncation or card error is found.
+
+A named pass (--pass-name alarm) writes its screenshots as <dashboard>__<pass>__<device>.png, so
+it never overwrites the normal pass's files, which the screenshot-drift workflow reads by name.
+--expect takes seed.py's manifest for the pass: it picks the dashboards and lists labels that must
+be visible on each, so a pass whose states failed to switch the cards on cannot pass.
 """
 import argparse
 import json
 import os
 import sys
+import time
+import traceback
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -60,6 +68,22 @@ JS_DETECT = r"""
 }
 """
 
+# Remove Home Assistant's transient startup toasts (e.g. "Starting radio_browser. Not
+# everything will be available until it is finished" from default_config) so they don't leak
+# into the captured documentation screenshots. The toast host (notification-manager) lives in
+# home-assistant's shadow root; clear it (and any stray ha-toast/snackbar) before each capture.
+JS_DISMISS_TOASTS = r"""
+() => {
+  const roots = [document];
+  const ha = document.querySelector('home-assistant');
+  if (ha && ha.shadowRoot) roots.push(ha.shadowRoot);
+  for (const r of roots) {
+    try { r.querySelectorAll('notification-manager, ha-toast, mwc-snackbar').forEach(e => e.remove()); }
+    catch (e) {}
+  }
+}
+"""
+
 # Opt-in capture diagnostics (UI_TESTS_DIAG=1): a JSON sidecar beside each screenshot recording
 # what the DOM contained at the moment of capture. Ported from the a290 twin (#122), where it
 # refuted the leading guess (the main dashboard was fully rendered at capture) and found the real
@@ -78,8 +102,14 @@ JS_DIAG = r"""
     }
   };
   walk(document);
+  // Playwright awaits document.fonts.ready before every screenshot; a face stuck 'loading' stalls it.
+  let fonts = [];
+  try { fonts = [...document.fonts].map(f => [f.family, f.weight, f.status]).slice(0, 60); } catch (e) {}
   return {
     cards: Object.values(tags).reduce((a, b) => a + b, 0), byTag: tags,
+    fontsStatus: document.fonts ? document.fonts.status : null, fonts, frames: window.frames.length,
+    navType: ((performance.getEntriesByType('navigation') || [])[0] || {}).type || null,
+    swController: !!(navigator.serviceWorker && navigator.serviceWorker.controller),
     scrollW: document.documentElement.scrollWidth,
     scrollH: document.documentElement.scrollHeight,
     imagesPending: Array.from(document.images).filter(i => !i.complete).length,
@@ -87,6 +117,131 @@ JS_DIAG = r"""
   };
 }
 """
+
+
+# True only while an OPEN Bubble pop-up shows an element whose own text is exactly `label`, both
+# inside the viewport. Each condition closes a way the pop-up capture can pass with it shut:
+#  - a document card count: the main-menu pop-up behind a failed open has ~24 cards;
+#  - `text=Charge Target`, which this harness used: a case-insensitive substring, so it would also
+#    match any longer name containing it (the a290 twin's "Charge Target SoC" entity);
+#  - Playwright "visible": a non-empty box, not "on screen" and not opacity>0. Bubble 3.2.5 detaches
+#    a closed standalone pop-up, but its centered/adaptive-dialog modes keep a closed one in layout
+#    at opacity 0, and a closing one animates out while still in the DOM (measured on the a290 twin).
+JS_POPUP_SHOWS = r"""
+(label) => {
+  const inView = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0
+        && r.top < innerHeight && r.left < innerWidth;
+  };
+  const hasLabel = (root) => {
+    let nodes; try { nodes = root.querySelectorAll('*'); } catch (e) { return false; }
+    for (const el of nodes) {
+      let own = '';
+      for (const n of el.childNodes) if (n.nodeType === 3) own += n.textContent;
+      if (own.trim() === label && getComputedStyle(el).visibility === 'visible' && inView(el)) return true;
+      if (el.shadowRoot && hasLabel(el.shadowRoot)) return true;
+    }
+    return false;
+  };
+  const findOpen = (root) => {
+    let nodes; try { nodes = root.querySelectorAll('*'); } catch (e) { return false; }
+    for (const el of nodes) {
+      const c = el.classList;
+      if (c && c.contains('bubble-pop-up') && c.contains('is-popup-opened') && !c.contains('is-closing')
+          && parseFloat(getComputedStyle(el).opacity) > 0 && inView(el) && hasLabel(el)) return true;
+      if (el.shadowRoot && findOpen(el.shadowRoot)) return true;
+    }
+    return false;
+  };
+  return findOpen(document);
+}
+"""
+
+
+# True once an element whose own text is exactly `label` is laid out anywhere in the pierced tree.
+JS_SHOWS_TEXT = r"""
+(label) => {
+  const find = (root) => {
+    let nodes; try { nodes = root.querySelectorAll('*'); } catch (e) { return false; }
+    for (const el of nodes) {
+      let own = '';
+      for (const n of el.childNodes) if (n.nodeType === 3) own += n.textContent;
+      if (own.trim() === label && getComputedStyle(el).visibility === 'visible') {
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) return true;
+      }
+      if (el.shadowRoot && find(el.shadowRoot)) return true;
+    }
+    return false;
+  };
+  return find(document);
+}
+"""
+
+
+def _missing_labels(page, labels, timeout_ms=5000):
+    """Findings for each expected label that never became visible. Only a timeout is a finding;
+    any other error (a torn-down context) propagates to the caller's retry like the rest."""
+    missing = []
+    for label in labels:
+        try:
+            page.wait_for_function(JS_SHOWS_TEXT, arg=label, timeout=timeout_ms)
+        except PlaywrightTimeout:
+            missing.append({"type": "not-rendered", "tag": "-", "text": label})
+    return missing
+
+
+def _failing_step(err):
+    """The deepest line of THIS file `err` came through, plus its message's first line. The last
+    traceback frame is inside Playwright, which cannot tell a screenshot timeout from a scan one."""
+    here = os.path.abspath(__file__)
+    frames = [f for f in traceback.extract_tb(err.__traceback__) if os.path.abspath(f.filename) == here]
+    where = f"line {frames[-1].lineno}: {frames[-1].line}" if frames else "outside check_overflow.py"
+    msg = (str(err).strip().splitlines() or [""])[0]
+    return f"{where} — {msg}"
+
+
+class _Stages:
+    """Which step of the pop-up capture is running, and how long each took: a skip used to print
+    only the error's type, so an intermittent TimeoutError could not be tied to a step."""
+
+    def __init__(self, first):
+        self.name, self.t0, self.done = first, time.monotonic(), []
+
+    def next(self, name):
+        self.done.append((self.name, round(time.monotonic() - self.t0, 2)))
+        self.name, self.t0 = name, time.monotonic()
+
+    def elapsed(self):
+        return round(time.monotonic() - self.t0, 2)
+
+
+class _NavLog:
+    """Frame navigations since the page opened. A pop-up capture failed with "Execution context was
+    destroyed ... navigation" on one HA leg only, so a skip prints what navigated, and when."""
+
+    def __init__(self, page):
+        self.page, self.t0, self.items = page, time.monotonic(), []
+        page.on("framenavigated", self.record)
+
+    def record(self, frame):
+        self.items.append((round(time.monotonic() - self.t0, 2),
+                           "main" if frame == self.page.main_frame else "sub", frame.url[-90:]))
+
+
+def _popup_skip_diag(page, stages, nav):
+    """What a skipped pop-up capture was doing and what the page looked like at the time."""
+    try:
+        d = page.evaluate(JS_DIAG)
+        fonts = d.get("fonts") or []
+        state = {k: d.get(k) for k in ("fontsStatus", "frames", "navType", "swController", "readyState")}
+        state["fonts"] = f"{len(fonts)} faces, not loaded: {[f for f in fonts if f[2] != 'loaded']}"
+    except Exception as err:      # the context may be gone; that is itself the finding
+        state = {"error": f"{type(err).__name__}: {(str(err).strip().splitlines() or [''])[0]}"}
+    return [f"stage {stages.name} after {stages.elapsed()}s; completed {stages.done}",
+            f"url now: {page.url[-90:]}; navigations: {nav.items[-6:]}",
+            f"page: {state}"]
 
 
 def _write_diag(page, shot_path):
@@ -122,21 +277,148 @@ JS_RENDERED = r"""
 """
 
 
-# Remove Home Assistant's transient startup toasts (e.g. "Starting radio_browser. Not
-# everything will be available until it is finished" from default_config) so they don't leak
-# into the captured documentation screenshots. The toast host (notification-manager) lives in
-# home-assistant's shadow root; clear it (and any stray ha-toast/snackbar) before each capture.
-JS_DISMISS_TOASTS = r"""
-() => {
-  const roots = [document];
-  const ha = document.querySelector('home-assistant');
-  if (ha && ha.shadowRoot) roots.push(ha.shadowRoot);
-  for (const r of roots) {
-    try { r.querySelectorAll('notification-manager, ha-toast, mwc-snackbar').forEach(e => e.remove()); }
-    catch (e) {}
-  }
+def auth_script(base, tokens):
+    payload = {
+        "access_token": tokens["access_token"],
+        "token_type": "Bearer",
+        "expires_in": tokens.get("expires_in", 1800),
+        "hassUrl": base,
+        "clientId": base + "/",
+        "expires": 4102444800000,  # year 2100 — don't trigger a refresh during the run
+        "refresh_token": tokens["refresh_token"],
+    }
+    return f"window.localStorage.setItem('hassTokens', {json.dumps(json.dumps(payload))});"
+
+
+# How far card-mod (the pinned v4.2.1) has got. It styles a card only through prototype patches
+# (hui-card._loadElement, ha-card.firstUpdated, hui-grid-section.firstUpdated: src/patch/*.ts), so
+# a card built before card-mod.js runs is NEVER styled on that load. That is a lost load-order race,
+# not a slow apply, and no wait recovers it; run.sh loads card-mod as a frontend module for a head
+# start in that race, which is not a guarantee.
+# Scanning an unstyled page reports every wrapping label as truncated, so this proves the styles
+# are in before the scan. A card is applied once card-mod's `_cardMod` list on the element that
+# declares `card_mod` is non-empty and each <card-mod> in it is connected, has processed its
+# input, rendered its own `.` style into its <style>, and resolved every `selector$` child
+# (recursively). Promises are peeked with Promise.race, so a pending one never blocks the probe.
+# hui-card/hui-section hold a card's config but are never styled themselves; conditional and
+# entity-filter are skipped by card-mod (src/patch/hui-card.ts EXCLUDED_CARDS).
+JS_CARD_MOD_STATE = r"""
+async () => {
+  const PENDING = {};
+  const peek = (p) => Promise.race([p, Promise.resolve(PENDING)]);
+  const nonEmpty = (v) => (typeof v === 'string' ? v.trim() !== '' : !!v && Object.keys(v).length > 0);
+  // How many elements card-mod's selectTree(parent, key, all) would style now; a synchronous replica
+  // of src/helpers/selecttree.ts (split on '$' and ' ', '$' enters shadow roots, first match onward).
+  const targets = (cm, key) => {
+    let el = [cm.parentElement || cm.parentNode];
+    const path = key.split(/(\$| )/);
+    while (path[path.length - 1] === '') path.pop();
+    for (const p of path) {
+      if (p === '$') { el = [...el].map((e) => e && e.shadowRoot); continue; }
+      if (!el[0]) return 0;
+      if (p.trim()) el = el[0].querySelectorAll(p);
+    }
+    return el.length;
+  };
+  const cmReady = async (cm, depth) => {
+    if (!cm || !cm.isConnected || cm._processStylesOnConnect) return false;
+    const fixed = cm._fixed_styles || {};
+    if (nonEmpty(cm.card_mod_input) && Object.keys(fixed).length === 0) return false;
+    // A `.` style must be in the <style>. For a template that means its first render_template
+    // result arrived: card-mod renders "" until then (src/helpers/templates.ts), so a template that
+    // legitimately renders "" reads as pending; none on these dashboards does (measured).
+    const own = typeof fixed['.'] === 'string' ? fixed['.'] : '';
+    if (own.trim()) {
+      const st = cm.querySelector(':scope > style');
+      if (!st || !st.textContent.trim()) return false;
+    }
+    if (depth > 8) return true;
+    const kids = cm.card_mod_children || {};
+    for (const key of Object.keys(fixed)) {
+      if (key === '.') continue;
+      if (!(key in kids)) return false;
+      const list = await peek(kids[key]);
+      if (list === PENDING) return false;
+      // Nullish: card-mod gave up on the selector (or a restyle cancelled it). Ready only while
+      // nothing matches it: then there is nothing to style (mushroom-template-card has no
+      // mushroom-state-info at all). A target that exists but was given up on stays pending.
+      if (list == null) {
+        if (targets(cm, key) > 0) return false;
+        continue;
+      }
+      for (const p of list) {
+        const child = await peek(p);
+        if (child === PENDING || !(await cmReady(child, depth + 1))) return false;
+      }
+    }
+    return true;
+  };
+  const WRAPPERS = new Set(['hui-card', 'hui-section']);
+  const EXCLUDED = new Set(['conditional', 'entity-filter']);
+  // `ids` names each declaring element across polls, so the caller can see the set change.
+  const ids = window.__cardModProbeIds = window.__cardModProbeIds || new WeakMap();
+  const out = { declared: 0, applied: 0, pending: [], ids: [], loaded: !!customElements.get('card-mod') };
+  const walk = async (root) => {
+    let nodes; try { nodes = root.querySelectorAll('*'); } catch (e) { return; }
+    for (const el of nodes) {
+      let cfg = null;
+      try { cfg = el._config || el.config; } catch (e) {}
+      if (!WRAPPERS.has(el.localName) && cfg && typeof cfg === 'object' && nonEmpty(cfg.card_mod)
+          && !EXCLUDED.has(String(cfg.type || '').toLowerCase())) {
+        out.declared++;
+        if (!ids.has(el)) ids.set(el, (window.__cardModProbeSeq = (window.__cardModProbeSeq || 0) + 1));
+        out.ids.push(ids.get(el));
+        const cms = Array.isArray(el._cardMod) ? el._cardMod : [];
+        let ok = cms.length > 0;
+        for (const cm of cms) if (ok && !(await cmReady(cm, 0))) ok = false;
+        if (ok) out.applied++;
+        else out.pending.push(el.localName + (cfg.type ? ' (' + cfg.type + ')' : ''));
+      }
+      if (el.shadowRoot) await walk(el.shadowRoot);
+    }
+  };
+  await walk(document);
+  return out;
 }
 """
+
+# A lost race never recovers, so this cap only decides how long a failure takes to report.
+CARD_MOD_WAIT_S = 25
+# How long the set of declaring cards must hold still, all applied. "All applied" is also true of
+# a page whose card_mod cards have not rendered yet (0 of 0); readiness only requires ONE custom
+# card, so a later card must not slip in after this returns. Cold loads declare their last card
+# within ~0.3 s of the first, and the scan already waits 1.2 s past the first card before this.
+CARD_MOD_QUIET_S = 1.0
+
+
+def _wait_card_mod(page, cap_s=CARD_MOD_WAIT_S, poll_ms=250, quiet_s=CARD_MOD_QUIET_S):
+    """Wait until card-mod has applied every `card_mod` the page declares, with the same cards
+    declaring it for `quiet_s`. Returns [] once it has (or when nothing on the page declares
+    card_mod for that long), else a single finding: a page card-mod never styled must fail the
+    gate by name, never pass on whatever the scan happens to measure."""
+    deadline = time.monotonic() + cap_s
+    quiet_since, last_ids = None, None
+    while True:
+        st = page.evaluate(JS_CARD_MOD_STATE)
+        now = time.monotonic()
+        done = st["applied"] == st["declared"]
+        if not (done and st["ids"] == last_ids and quiet_since is not None):
+            quiet_since = now if done else None
+        last_ids = st["ids"]
+        if quiet_since is not None and now - quiet_since >= quiet_s:
+            return []
+        if now >= deadline:
+            break
+        page.wait_for_timeout(poll_ms)
+    missing = st["declared"] - st["applied"]
+    if not missing:
+        return [{"type": "card-mod-not-applied", "tag": "card-mod",
+                 "text": f"card-mod state never settled within {cap_s}s: the cards declaring card_mod "
+                         f"kept changing ({st['declared']} at the cap)"}]
+    return [{"type": "card-mod-not-applied", "tag": "card-mod",
+             "text": f"card-mod never applied to {missing} of {st['declared']} card(s) declaring card_mod "
+                     f"within {cap_s}s (card-mod.js {'loaded' if st['loaded'] else 'NOT loaded'}); "
+                     f"e.g. {', '.join(st['pending'][:4])}"}]
 
 
 def _stable_issues(page, settle_ms=500, max_passes=12):
@@ -156,29 +438,21 @@ def _stable_issues(page, settle_ms=500, max_passes=12):
     the entire window. So keep scanning up to `max_passes`; exit early only on a clean state
     (confirmed by two consecutive empty scans, to rule out a transient empty), and otherwise report
     whatever is still flagged when the window closes. Fast path: a clean pair returns quickly; a
-    genuine failure uses the full window (~6s), which is fine since failures are rare."""
+    genuine failure uses the full window (~6s), which is fine since failures are rare.
+
+    The window alone assumes card-mod DOES land; when it lost the load race it never will, and the
+    window reported the unstyled page as mass truncation. So first wait for card-mod
+    (`_wait_card_mod`), whose own finding fails the gate by name when it never applies."""
+    not_applied = _wait_card_mod(page)
     issues, clean_streak = [], 0
     for i in range(max_passes):
         issues = page.evaluate(JS_DETECT)
         clean_streak = clean_streak + 1 if not issues else 0
         if clean_streak >= 2:                  # two consecutive clean scans → genuinely settled
-            return []
+            return not_applied
         if i < max_passes - 1:                 # no point sleeping after the final scan
             page.wait_for_timeout(settle_ms)
-    return issues                              # still flagged when the window closed → genuine
-
-
-def auth_script(base, tokens):
-    payload = {
-        "access_token": tokens["access_token"],
-        "token_type": "Bearer",
-        "expires_in": tokens.get("expires_in", 1800),
-        "hassUrl": base,
-        "clientId": base + "/",
-        "expires": 4102444800000,  # year 2100 — don't trigger a refresh during the run
-        "refresh_token": tokens["refresh_token"],
-    }
-    return f"window.localStorage.setItem('hassTokens', {json.dumps(json.dumps(payload))});"
+    return not_applied + issues                # still flagged when the window closed → genuine
 
 
 def run():
@@ -188,8 +462,18 @@ def run():
     ap.add_argument("--devices", default=os.path.join(HERE, "devices.json"))
     ap.add_argument("--dashboards", nargs="+", default=["renault-5", "renault-5-bubble"])
     ap.add_argument("--out", default=os.path.join(HERE, "screenshots"))
+    ap.add_argument("--pass-name", default="", help="names this pass in screenshots and the report")
+    ap.add_argument("--expect", metavar="MANIFEST",
+                    help="seed.py --manifest output {dashboard: [labels]}; replaces --dashboards")
     args = ap.parse_args()
 
+    expect = {}
+    if args.expect:
+        with open(args.expect, encoding="utf-8") as fh:
+            expect = json.load(fh)
+        if not expect:
+            sys.exit(f"{args.expect} names no dashboard: this pass would check nothing")
+        args.dashboards = list(expect)
     tokens = json.load(open(args.tokens))
     devices = json.load(open(args.devices))["devices"]
     os.makedirs(args.out, exist_ok=True)
@@ -217,9 +501,12 @@ def run():
                 reduced_motion="reduce")
             ctx.add_init_script(init)
             page = ctx.new_page()
+            nav = _NavLog(page)
             for dash in args.dashboards:
                 slug = dev["name"].lower().replace(" ", "_").replace("(", "").replace(")", "")
-                shot = os.path.join(args.out, f"{dash}__{slug}.png")
+                stem = f"{dash}__{args.pass_name}" if args.pass_name else dash
+                where = f"{dash} [{args.pass_name}]" if args.pass_name else dash
+                shot = os.path.join(args.out, f"{stem}__{slug}.png")
                 issues = None
                 for attempt in range(MAX_RENDER_ATTEMPTS):
                     try:
@@ -240,6 +527,7 @@ def run():
                             pass
                         page.wait_for_timeout(1200)  # settle layout + late cards
                         issues = _stable_issues(page)   # confirm truncations across two passes (see helper)
+                        issues += _missing_labels(page, expect.get(dash, []))
                         # Drop HA's startup toasts only AFTER the truncation scan, so removing the
                         # toast node can never perturb the gate's measurement — it only cleans the shot.
                         page.evaluate(JS_DISMISS_TOASTS)
@@ -252,7 +540,7 @@ def run():
                         # attempts are exhausted. Genuine truncations are returned by _stable_issues,
                         # not raised, so they never reach this branch and are never retried away.
                         if attempt < MAX_RENDER_ATTEMPTS - 1:
-                            print(f"    [retry {attempt + 1}/{MAX_RENDER_ATTEMPTS - 1}] {dash} @ "
+                            print(f"    [retry {attempt + 1}/{MAX_RENDER_ATTEMPTS - 1}] {where} @ "
                                   f"{dev['name']}: transient {type(err).__name__} — re-rendering")
                             page.wait_for_timeout(600)
                             continue
@@ -266,43 +554,65 @@ def run():
                 # The Smart Charging pop-up ("tab") capture is best-effort and ISOLATED from the
                 # gate: opening it via hash navigation can tear down the JS context on slower
                 # viewports ("Execution context was destroyed"), and that must never fail the run.
-                # When the scan DOES complete, its issues (truncation + broken cards) go through the
-                # same two-pass stability filter, so the pop-up keeps its coverage without the flake.
+                # When the scan DOES complete, its issues (truncation + broken cards) are escalated
+                # through the same two-pass stability filter as the main dashboard, so the pop-up
+                # keeps its truncation coverage without the transient flake. A context teardown at
+                # any point is caught here and skipped — the pop-up config is identical across
+                # viewports, so a real break still surfaces on the ones that scan cleanly.
                 if dash == "renault-5-bubble":
+                    stages = _Stages("open 1")
                     try:
                         # COMPLETENESS, not just settling. The selector wait used to be swallowed
                         # by a bare `except: pass` and the capture ran anyway, so a pop-up that
                         # failed to open wrote an EMPTY page as the documentation screenshot (on
                         # the a290 twin: 24 cards one run, 0 the next, 99.89% of pixels different).
-                        # Reopen once; if still nothing rendered, skip and keep the committed file.
-                        # Judge by the pop-up's own content becoming VISIBLE, never by a document
-                        # card count: the main view behind a failed pop-up has cards too. "Charge
-                        # Target" exists only in the deploy-injected #r5-charging pop-up.
+                        # Reopen once; if it still is not open, skip and keep the committed file.
+                        # Judge completeness by the pop-up itself being open and showing its label
+                        # (JS_POPUP_SHOWS), never by a document card count: the main view behind a
+                        # failed open has cards. "Charge Target" exists only in the deploy-injected
+                        # #r5-charging pop-up.
                         for popup_attempt in range(2):
                             page.evaluate("() => { location.hash = '#r5-charging'; }")
                             try:  # the pop-up's inner cards lazy-render (Bubble Card)
-                                page.wait_for_selector("text=Charge Target", state="visible", timeout=8000)
-                                opened = True
-                            except Exception:
-                                opened = False
-                            page.wait_for_timeout(800)
+                                page.wait_for_function(JS_POPUP_SHOWS, arg="Charge Target", timeout=8000)
+                                stages.next(f"settle {popup_attempt + 1}")
+                                page.wait_for_timeout(800)
+                                page.evaluate(JS_DISMISS_TOASTS)
+                                stages.next(f"recheck {popup_attempt + 1}")
+                                # Re-check after the settle: seen opening is not still open. The
+                                # pop-up can close in that window, or the page reload under it: on
+                                # the a290 twin HA reloaded once, ~3s after a context's first load,
+                                # as its service worker took control (Bubble 3.2.5 and 3.4.0),
+                                # leaving the pop-up sliding in below the viewport. Treated as a
+                                # failed open, so the reopen recovers it.
+                                opened = page.evaluate(JS_POPUP_SHOWS, "Charge Target")
+                                why = "open, then gone at the recheck"
+                            except Exception as err:
+                                opened, why = False, _failing_step(err)
                             if opened:
                                 break
-                            print(f"    [popup empty {popup_attempt + 1}/2] {dash} @ "
-                                  f"{dev['name']}: pop-up content never became visible — reopening")
+                            print(f"    [popup empty {popup_attempt + 1}/2] {where} @ "
+                                  f"{dev['name']}: pop-up not open on screen ({why}) — reopening")
+                            if popup_attempt == 0:
+                                stages.next("open 2")
                             page.evaluate("() => { location.hash = ''; }")
                             page.wait_for_timeout(400)
                         else:
-                            print(f"    [popup skipped] {dash} @ {dev['name']}: pop-up never "
-                                  f"rendered; not overwriting the committed screenshot")
-                            raise RuntimeError("smart-charging pop-up never became visible")
-                        page.evaluate(JS_DISMISS_TOASTS)
-                        pshot = os.path.join(args.out, f"{dash}__smart_charging__{slug}.png")
+                            print(f"    [popup skipped] {where} @ {dev['name']}: pop-up never "
+                                  f"stayed open; not overwriting the committed screenshot")
+                            raise RuntimeError("smart-charging pop-up never stayed open on screen")
+                        stages.next("write-diag")
+                        pshot = os.path.join(args.out, f"{stem}__smart_charging__{slug}.png")
                         _write_diag(page, pshot)
+                        stages.next("screenshot")
                         page.screenshot(path=pshot, full_page=True, animations="disabled")
+                        stages.next("stable-issues")
                         issues += _stable_issues(page)
                     except Exception as err:
-                        print(f"    pop-up capture skipped ({type(err).__name__}) — not failing the gate")
+                        print(f"    pop-up capture skipped ({type(err).__name__}) — not failing the gate\n"
+                              f"      at {_failing_step(err)}")
+                        for line in _popup_skip_diag(page, stages, nav):
+                            print(f"    [popup diag] {line}")
                 # De-dupe: the pop-up scan re-walks the whole document, so a main-dashboard finding
                 # can otherwise appear twice when both the main view and the pop-up are flagged.
                 _seen, _uniq = set(), []
@@ -313,9 +623,9 @@ def run():
                         _uniq.append(_it)
                 issues = _uniq
                 if issues:
-                    failures.append((dash, dev["name"], dev["width"], issues))
+                    failures.append((where, dev["name"], dev["width"], issues))
                 status = "FAIL" if issues else "ok"
-                print(f"  [{status}] {dash} @ {dev['name']} ({dev['width']}px): "
+                print(f"  [{status}] {where} @ {dev['name']} ({dev['width']}px): "
                       f"{len(issues)} issue(s)  -> {os.path.relpath(shot, HERE)}")
             ctx.close()
         browser.close()
@@ -334,7 +644,8 @@ def run():
             if len(issues) > 12:
                 print(f"  …and {len(issues) - 12} more")
         sys.exit(1)
-    print("All dashboards render with no text truncation across the device matrix. ✅")
+    print(f"All dashboards render with no text truncation across the device matrix"
+          f"{f' ({args.pass_name} pass)' if args.pass_name else ''}. ✅")
 
 
 if __name__ == "__main__":
