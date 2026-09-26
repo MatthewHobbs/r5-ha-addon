@@ -19,7 +19,7 @@ version). With the optional `charger_*` options set, a **Smart Charging** sectio
 *(Rendered by the UI-test harness with sample data — no real account or location data.)*
 
 **What this app is really for.** Its primary purpose is to be an **updated, maintained
-data layer** for the Renault 5 — a drop-in replacement for the fragile `venv` +
+data layer** for the Renault 5, replacing the fragile `venv` +
 `renault-api` CLI + shell-script layer behind [Topolino65](https://github.com/Topolino65)'s
 [renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view). Its
 `sensor.r5_*` entity ids are its own: Topolino65's dashboards use differently named entities
