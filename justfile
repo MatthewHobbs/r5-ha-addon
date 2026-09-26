@@ -35,7 +35,7 @@ ha-min:
 
 lint:
     yamllint -c .yamllint renault_5 repository.yaml
-    shellcheck renault_5/run.sh
+    shellcheck renault_5/run.sh scripts/supervisor-pilot.sh
     ruff check renault_5/app renault_5/tests scripts ui-tests
 
 test: venv
