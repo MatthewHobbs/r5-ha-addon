@@ -114,7 +114,9 @@ on that PR confirms the combination before it is pinned. Keep them identical to 
 minimum (`homeassistant:` in `renault_5/config.yaml`, currently 2026.8.1), read from the manifest so
 the test cannot drift from the claim. `scripts/ha_minimum_check.py` (CI Lint job, `just ha-min`)
 fails if the minimum is missing or newer than the `.1` of the month before current stable, read
-live from `version.home-assistant.io/stable.json`.
+live from `version.home-assistant.io/stable.json`, or is not a published release on PyPI (exact
+spelling, no pre-releases); an unreachable PyPI fails the step too. The script is shared verbatim
+with a290, as is `scripts/pii_check.py`, so change either in both repos together.
 
 Ruff config (`ruff.toml`): line-length 120, target py314, `select = E,F,W,B,I`,
 `ignore = E501,B008`.
