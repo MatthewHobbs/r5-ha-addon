@@ -8,9 +8,9 @@ no `secrets.yaml`. Credentials are entered on the add-on's Configuration page. I
 (full credit for the original dashboards, assets and design), replacing that project's
 fragile `venv` + `renault-api` CLI + shell-script data layer.
 
-**Data class: Public. Audience: others** (`.data-class`, owner-approved 2026-09-24). Public
-means either provider may review it; others install it, so runtime changes get the container
-boot below. Global rules (review, trunk/merge policy, Conventional Commits, HA cadence) live in
+**Data class: Public. Audience: others** (`.data-class`, a machine-local marker the global git
+excludes keep out of the repo; owner-approved 2026-09-24). Public means either provider may review
+it; others install it, so runtime changes get the container boot below. Global rules (review, trunk/merge policy, Conventional Commits, HA cadence) live in
 `~/.claude/CLAUDE.md`; this file is R5-specifics only.
 
 A sibling repo, **`MatthewHobbs/a290-ha-addon`**, is the Alpine A290 add-on this is **ported
