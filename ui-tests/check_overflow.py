@@ -9,8 +9,12 @@ non-zero with a report if any truncation or card error is found.
 
 A named pass (--pass-name alarm) writes its screenshots as <dashboard>__<pass>__<device>.png, so
 it never overwrites the normal pass's files, which the screenshot-drift workflow reads by name.
---expect takes seed.py's manifest for the pass: it picks the dashboards and lists labels that must
-be visible on each, so a pass whose states failed to switch the cards on cannot pass.
+--expect takes seed.py's manifest for the pass: it picks the dashboards, lists labels that must
+be visible on each, so a pass whose states failed to switch the cards on cannot pass, and lists
+the Bubble pop-ups to open on each. Bubble renders a pop-up only while it is open, so each is
+opened by its hash, proved open by its header name, scanned and screenshotted as
+<dashboard>__popup_<hash>__<device>.png (the Smart Charging one keeps its smart_charging name,
+which the drift workflow reads). Without --expect no pop-up is opened.
 """
 import argparse
 import json
@@ -128,7 +132,7 @@ JS_DIAG = r"""
 #    a closed standalone pop-up, but its centered/adaptive-dialog modes keep a closed one in layout
 #    at opacity 0, and a closing one animates out while still in the DOM (measured on the a290 twin).
 JS_POPUP_SHOWS = r"""
-(label) => {
+({ hash, label }) => {
   const inView = (el) => {
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0
@@ -144,12 +148,23 @@ JS_POPUP_SHOWS = r"""
     }
     return false;
   };
+  const hashOf = (el) => {
+    let p = el;
+    for (let i = 0; i < 8 && p; i++) {
+      const cfg = p.config || p._config;
+      if (cfg && cfg.hash) return cfg.hash;
+      const n = p.parentNode;
+      p = n && n.host ? n.host : n;
+    }
+    return null;
+  };
   const findOpen = (root) => {
     let nodes; try { nodes = root.querySelectorAll('*'); } catch (e) { return false; }
     for (const el of nodes) {
       const c = el.classList;
       if (c && c.contains('bubble-pop-up') && c.contains('is-popup-opened') && !c.contains('is-closing')
-          && parseFloat(getComputedStyle(el).opacity) > 0 && inView(el) && hasLabel(el)) return true;
+          && parseFloat(getComputedStyle(el).opacity) > 0 && inView(el) && hashOf(el) === hash
+          && hasLabel(el)) return true;
       if (el.shadowRoot && findOpen(el.shadowRoot)) return true;
     }
     return false;
@@ -180,15 +195,20 @@ JS_SHOWS_TEXT = r"""
 """
 
 
-def _missing_labels(page, labels, timeout_ms=5000):
-    """Findings for each expected label that never became visible. Only a timeout is a finding;
-    any other error (a torn-down context) propagates to the caller's retry like the rest."""
+def _missing_labels(page, labels, popup=None, timeout_ms=5000):
+    """Findings for each expected label that never became visible: anywhere on the page, or, with
+    `popup` (a hash), inside that open pop-up. Only a timeout is a finding; any other error (a
+    torn-down context) propagates to the caller's retry like the rest."""
     missing = []
     for label in labels:
         try:
-            page.wait_for_function(JS_SHOWS_TEXT, arg=label, timeout=timeout_ms)
+            if popup:
+                page.wait_for_function(JS_POPUP_SHOWS, arg={"hash": popup, "label": label}, timeout=timeout_ms)
+            else:
+                page.wait_for_function(JS_SHOWS_TEXT, arg=label, timeout=timeout_ms)
         except PlaywrightTimeout:
-            missing.append({"type": "not-rendered", "tag": "-", "text": label})
+            missing.append({"type": "not-rendered", "tag": "-",
+                            "text": f"{label} (in pop-up {popup})" if popup else label})
     return missing
 
 
@@ -455,6 +475,119 @@ def _stable_issues(page, settle_ms=500, max_passes=12):
     return not_applied + issues                # still flagged when the window closed → genuine
 
 
+# Screenshot stems for the pop-ups whose file the screenshot-drift workflow reads by name
+# (refresh-screenshots.yaml); every other pop-up is popup_<hash without #>.
+POPUP_SHOT_NAMES = {"#r5-charging": "smart_charging"}
+
+
+def _open_popup(page, popup, where, dev_name, stages, nav):
+    """Open the Bubble pop-up `popup` ({hash, name}) by hash navigation and return once it is
+    open on screen showing its header name, or False when two attempts never got it there.
+    COMPLETENESS, not just settling. The selector timeout used to be swallowed by a bare
+    `except: pass`, after which the capture ran anyway; so when the pop-up failed to open, an
+    EMPTY page was written as the documentation screenshot. Measured on the a290 twin: the same
+    shot captured 24 cards on one run and 0 on the next, at identical page dimensions, differing
+    in 99.89% of its pixels. Judge completeness by the pop-up itself being open and showing its
+    label (JS_POPUP_SHOWS), never by a document card count: the main menu behind a failed open
+    has cards."""
+    arg = {"hash": popup["hash"], "label": popup["name"]}
+    for attempt in range(2):
+        page.evaluate("(h) => { location.hash = h; }", popup["hash"])
+        try:  # the pop-up's inner cards lazy-render (Bubble Card)
+            page.wait_for_function(JS_POPUP_SHOWS, arg=arg, timeout=8000)
+            stages.next(f"settle {attempt + 1}")
+            page.wait_for_timeout(800)
+            page.evaluate(JS_DISMISS_TOASTS)
+            stages.next(f"recheck {attempt + 1}")
+            # Re-check after the settle: seen opening is not still open. The pop-up can close in
+            # that window, or the page reload under it: HA reloads once, ~3-5s after a context's
+            # first load, as its service worker takes control (measured on Bubble 3.2.5, 3.4.0 and
+            # 3.4.1; this repo saw it land inside a pop-up scan on 4 of 8 legs), leaving the
+            # pop-up sliding in below the viewport. Treated as a failed open, so the reopen
+            # recovers it.
+            if page.evaluate(JS_POPUP_SHOWS, arg):
+                return True
+            why = "open, then gone at the recheck"
+        except Exception as err:
+            why = _failing_step(err)
+        print(f"    [popup empty {attempt + 1}/2] {where} @ {dev_name}: {popup['hash']} not open on "
+              f"screen ({why}) — reopening")
+        if attempt == 0:
+            stages.next("open 2")
+        page.evaluate("() => { location.hash = ''; }")
+        page.wait_for_timeout(400)
+    return False
+
+
+def _capture_popup(page, popup, where, dev_name, shot, nav):
+    """Open one pop-up, scan it, then screenshot it. Returns its findings, or None when it never
+    stayed open or its scan never completed (reported; the committed screenshot is kept rather
+    than overwritten by the menu behind it). run() then FAILS that device for that pop-up: a
+    truncation is specific to a width, so a pop-up scanned at 430px says nothing about 360px, and
+    a skip that passed was a false green for that viewport (Codex on a290 #171).
+    The one miss that recurs is HA's own reload: once, a few seconds after a context's first
+    load, as its service worker takes control. It usually tears down the JS context ("Execution
+    context was destroyed") in whatever call is in flight, which the retry below already catches
+    -- but landing BETWEEN two polls of _stable_issues raises nothing: the reload completes, and
+    the scan quietly finishes against whatever the reload left on screen (the main menu, or the
+    popup Bubble reopened from the still-set hash), never the popup mid-scan (Codex round 2). So
+    the popup's open/label state is checked again after the scan, not just before it; a close
+    during the scan is then indistinguishable from one during the open and gets the same
+    reopen-and-rescan retry. It does not recur, so reopen and rescan once, and only then give up."""
+    stages = _Stages("open 1")
+    for attempt in range(2):
+        try:
+            if not _open_popup(page, popup, where, dev_name, stages, nav):
+                if attempt == 0:
+                    print(f"    [popup reopen] {where} @ {dev_name}: {popup['hash']} never stayed open — "
+                          "trying once more")
+                    page.wait_for_timeout(600)
+                    continue
+                print(f"    [popup skipped] {where} @ {dev_name}: {popup['hash']} never stayed open twice; "
+                      "not overwriting its screenshot")
+                for line in _popup_skip_diag(page, stages, nav):
+                    print(f"    [popup diag] {line}")
+                return None
+            # Labels first, THEN scan (Codex round 4): Bubble's inner cards lazy-render, and
+            # _stable_issues can exit on its fast path (two clean scans, as little as ~1s) before a
+            # slower card finishes painting. Waiting on the expected labels first (up to 5s each)
+            # gives that content its chance to appear before the truncation scan looks at it. A
+            # pop-up with no expected labels (most of the normal pass) gets no such wait either
+            # way -- there is no general "fully rendered" signal beyond the labels a pass declares
+            # -- so this narrows the gap rather than closing it outright.
+            stages.next("labels")
+            # A pop-up with no declared labels has no completeness signal here (r5 #115): this
+            # wait only narrows the gap for the ones that declare some.
+            label_issues = _missing_labels(page, popup.get("labels", []), popup["hash"])
+            stages.next("stable-issues")
+            issues = _stable_issues(page)
+            issues += label_issues
+            # Re-confirm open+labelled, the same check _open_popup already passed: a reload
+            # landing during either wait above leaves this scan silently measuring the wrong page.
+            still_open = {"hash": popup["hash"], "label": popup["name"]}
+            if not page.evaluate(JS_POPUP_SHOWS, still_open):
+                raise RuntimeError(f"{popup['hash']} was no longer open after its scan")
+            page.evaluate(JS_DISMISS_TOASTS)
+            stages.next("write-diag")
+            _write_diag(page, shot)
+            stages.next("screenshot")
+            page.screenshot(path=shot, full_page=True, animations="disabled")
+            for it in issues:   # the report names the pop-up; the de-dupe in run() ignores this key
+                it.setdefault("popup", popup["hash"])
+            return issues
+        except Exception as err:
+            if attempt == 0:
+                print(f"    [popup rescan] {where} @ {dev_name}: {popup['hash']}: {type(err).__name__} "
+                      f"during the scan — reopening\n      at {_failing_step(err)}")
+                page.wait_for_timeout(600)
+                continue
+            print(f"    [popup skipped] {where} @ {dev_name}: {popup['hash']} scan failed twice "
+                  f"({type(err).__name__})\n      at {_failing_step(err)}")
+            for line in _popup_skip_diag(page, stages, nav):
+                print(f"    [popup diag] {line}")
+            return None
+
+
 def run():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://localhost:8123")
@@ -464,7 +597,7 @@ def run():
     ap.add_argument("--out", default=os.path.join(HERE, "screenshots"))
     ap.add_argument("--pass-name", default="", help="names this pass in screenshots and the report")
     ap.add_argument("--expect", metavar="MANIFEST",
-                    help="seed.py --manifest output {dashboard: [labels]}; replaces --dashboards")
+                    help="seed.py --manifest output {dashboard: {labels, popups}}; replaces --dashboards")
     args = ap.parse_args()
 
     expect = {}
@@ -474,6 +607,8 @@ def run():
         if not expect:
             sys.exit(f"{args.expect} names no dashboard: this pass would check nothing")
         args.dashboards = list(expect)
+    popups = {dash: expect.get(dash, {}).get("popups", []) for dash in args.dashboards}
+    captured = {(dash, p["hash"]): [0, 0] for dash in args.dashboards for p in popups[dash]}  # [scanned, skipped]
     tokens = json.load(open(args.tokens))
     devices = json.load(open(args.devices))["devices"]
     os.makedirs(args.out, exist_ok=True)
@@ -527,7 +662,7 @@ def run():
                             pass
                         page.wait_for_timeout(1200)  # settle layout + late cards
                         issues = _stable_issues(page)   # confirm truncations across two passes (see helper)
-                        issues += _missing_labels(page, expect.get(dash, []))
+                        issues += _missing_labels(page, expect.get(dash, {}).get("labels", []))
                         # Drop HA's startup toasts only AFTER the truncation scan, so removing the
                         # toast node can never perturb the gate's measurement — it only cleans the shot.
                         page.evaluate(JS_DISMISS_TOASTS)
@@ -551,73 +686,32 @@ def run():
                             page.screenshot(path=shot, full_page=True, animations="disabled")
                         except Exception:
                             pass
-                # The Smart Charging pop-up ("tab") capture is best-effort and ISOLATED from the
-                # gate: opening it via hash navigation can tear down the JS context on slower
-                # viewports ("Execution context was destroyed"), and that must never fail the run.
-                # When the scan DOES complete, its issues (truncation + broken cards) are escalated
-                # through the same two-pass stability filter as the main dashboard, so the pop-up
-                # keeps its truncation coverage without the transient flake. A context teardown at
-                # any point is caught here and skipped — the pop-up config is identical across
-                # viewports, so a real break still surfaces on the ones that scan cleanly.
-                if dash == "renault-5-bubble":
-                    stages = _Stages("open 1")
-                    try:
-                        # COMPLETENESS, not just settling. The selector wait used to be swallowed
-                        # by a bare `except: pass` and the capture ran anyway, so a pop-up that
-                        # failed to open wrote an EMPTY page as the documentation screenshot (on
-                        # the a290 twin: 24 cards one run, 0 the next, 99.89% of pixels different).
-                        # Reopen once; if it still is not open, skip and keep the committed file.
-                        # Judge completeness by the pop-up itself being open and showing its label
-                        # (JS_POPUP_SHOWS), never by a document card count: the main view behind a
-                        # failed open has cards. "Charge Target" exists only in the deploy-injected
-                        # #r5-charging pop-up.
-                        for popup_attempt in range(2):
-                            page.evaluate("() => { location.hash = '#r5-charging'; }")
-                            try:  # the pop-up's inner cards lazy-render (Bubble Card)
-                                page.wait_for_function(JS_POPUP_SHOWS, arg="Charge Target", timeout=8000)
-                                stages.next(f"settle {popup_attempt + 1}")
-                                page.wait_for_timeout(800)
-                                page.evaluate(JS_DISMISS_TOASTS)
-                                stages.next(f"recheck {popup_attempt + 1}")
-                                # Re-check after the settle: seen opening is not still open. The
-                                # pop-up can close in that window, or the page reload under it: on
-                                # the a290 twin HA reloaded once, ~3s after a context's first load,
-                                # as its service worker took control (Bubble 3.2.5 and 3.4.0),
-                                # leaving the pop-up sliding in below the viewport. Treated as a
-                                # failed open, so the reopen recovers it.
-                                opened = page.evaluate(JS_POPUP_SHOWS, "Charge Target")
-                                why = "open, then gone at the recheck"
-                            except Exception as err:
-                                opened, why = False, _failing_step(err)
-                            if opened:
-                                break
-                            print(f"    [popup empty {popup_attempt + 1}/2] {where} @ "
-                                  f"{dev['name']}: pop-up not open on screen ({why}) — reopening")
-                            if popup_attempt == 0:
-                                stages.next("open 2")
-                            page.evaluate("() => { location.hash = ''; }")
-                            page.wait_for_timeout(400)
-                        else:
-                            print(f"    [popup skipped] {where} @ {dev['name']}: pop-up never "
-                                  f"stayed open; not overwriting the committed screenshot")
-                            raise RuntimeError("smart-charging pop-up never stayed open on screen")
-                        stages.next("write-diag")
-                        pshot = os.path.join(args.out, f"{stem}__smart_charging__{slug}.png")
-                        _write_diag(page, pshot)
-                        stages.next("screenshot")
-                        page.screenshot(path=pshot, full_page=True, animations="disabled")
-                        stages.next("stable-issues")
-                        issues += _stable_issues(page)
-                    except Exception as err:
-                        print(f"    pop-up capture skipped ({type(err).__name__}) — not failing the gate\n"
-                              f"      at {_failing_step(err)}")
-                        for line in _popup_skip_diag(page, stages, nav):
-                            print(f"    [popup diag] {line}")
+                # Every pop-up the manifest lists for this dashboard, in its order: Bubble renders a
+                # pop-up only while it is open, so the scan above saw none of them but the one the
+                # dashboard auto-opens.
+                for popup in popups[dash]:
+                    pname = POPUP_SHOT_NAMES.get(popup["hash"], "popup_" + popup["hash"].lstrip("#"))
+                    pshot = os.path.join(args.out, f"{stem}__{pname}__{slug}.png")
+                    found = _capture_popup(page, popup, where, dev["name"], pshot, nav)
+                    captured[(dash, popup["hash"])][found is None] += 1
+                    if found is None:
+                        # Not covered on this device, so not green on it: a truncation at this
+                        # width would have been missed, whatever the other devices found.
+                        issues.append({"type": "popup-not-scanned", "tag": "-", "popup": popup["hash"],
+                                       "text": f"pop-up {popup['hash']} could not be opened or scanned on "
+                                               "this device after a retry"})
+                    else:
+                        issues += found
                 # De-dupe: the pop-up scan re-walks the whole document, so a main-dashboard finding
-                # can otherwise appear twice when both the main view and the pop-up are flagged.
+                # can otherwise appear twice when both the main view and the pop-up are flagged. The
+                # popup hash is part of the key too (Codex round 3): two DIFFERENT pop-ups sharing an
+                # identical card-mod failure or truncated label are two findings, not one, and
+                # collapsing them hid which pop-ups still needed the fix. A main-view item's `popup`
+                # is always None, so main-view duplicates still merge exactly as before; only two
+                # items that are both from a pop-up now need the SAME hash to merge.
                 _seen, _uniq = set(), []
                 for _it in issues:
-                    _k = (_it["type"], _it.get("tag"), _it.get("text"))
+                    _k = (_it["type"], _it.get("tag"), _it.get("text"), _it.get("popup"))
                     if _k not in _seen:
                         _seen.add(_k)
                         _uniq.append(_it)
@@ -630,17 +724,24 @@ def run():
             ctx.close()
         browser.close()
 
+    # Each skip already failed its device above; the summary names the pop-up once so a hash that
+    # opens nothing anywhere reads as one fact rather than ten device failures.
     print()
+    for (dash, phash), (scanned, skipped) in captured.items():
+        if skipped:
+            print(f"  pop-up {phash} on {dash}: scanned on {scanned}, skipped on {skipped} of "
+                  f"{scanned + skipped} device(s)" + ("" if scanned else " — never checked at all"))
     if failures:
         print(f"=== {len(failures)} device/dashboard combos with issues ===")
         for dash, name, width, issues in failures:
-            print(f"\n{dash} @ {name} ({width}px):")
+            print(f"\n{dash} @ {name}{f' ({width}px)' if width else ''}:")
             for i in issues[:12]:
+                where = f" in pop-up {i['popup']}" if i.get("popup") else ""
                 if i["type"] == "truncated":
-                    print(f"  - TRUNCATED <{i['tag']}> {i['scrollWidth']}>{i['clientWidth']}px: "
+                    print(f"  - TRUNCATED <{i['tag']}> {i['scrollWidth']}>{i['clientWidth']}px{where}: "
                           f"{i['text']!r}")
                 else:
-                    print(f"  - {i['type'].upper()} <{i['tag']}>: {i['text']!r}")
+                    print(f"  - {i['type'].upper()} <{i['tag']}>{where}: {i['text']!r}")
             if len(issues) > 12:
                 print(f"  …and {len(issues) - 12} more")
         sys.exit(1)
