@@ -14,12 +14,13 @@ on:
       - .github/workflows/supervisor.yml
       - scripts/supervisor-pilot.sh
       # Everything the Supervisor installs or runs: the image ships app/,
-      # run.sh and the dashboards. r5 defaults to deploy_dashboard: none, so the
-      # pilot does not deploy them, and nothing probes a deploy. An allow-list
-      # missed dashboards/ once (a290), so it is the whole add-on minus what
-      # cannot change a run: prose and the unit tests, which the image does not
-      # contain. Both .md patterns, as in ui-tests.yaml: whether `**/` matches
-      # zero directories is not assumed.
+      # run.sh and the dashboards, which the pilot's options (deploy_dashboard:
+      # standard; r5's default is none) deploy through Core, and the probe reads
+      # back from Core's Lovelace API. An allow-list missed dashboards/ once
+      # (a290), so it is the whole add-on minus what cannot change a run: prose
+      # and the unit tests, which the image does not contain. Both .md patterns,
+      # as in ui-tests.yaml: whether `**/` matches zero directories is not
+      # assumed.
       - renault_5/**
       - "!renault_5/*.md"
       - "!renault_5/**/*.md"
@@ -29,7 +30,7 @@ on:
       break:
         description: Break the run on purpose, to show the probes can fail
         type: choice
-        options: [none, start, apparmor]
+        options: [none, start, apparmor, dashboard]
         default: none
   schedule:
     - cron: "17 4 * * *"

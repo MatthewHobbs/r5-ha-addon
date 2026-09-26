@@ -2,7 +2,7 @@
 
 ## 1.8.7
 
-Matches the a290 twin's 1.28.3.
+Matches the a290 twin's 1.28.3, ported after 1.8.6 had already mirrored its 1.28.4.
 
 - **The add-on's AppArmor profile now names the policy version it was written for.** Without that,
   a newer AppArmor compiles the profile using the running kernel's newest rules. Under enforcing
