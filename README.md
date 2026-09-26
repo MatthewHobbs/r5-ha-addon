@@ -21,15 +21,14 @@ an **updated data layer** for
 It replaces that project's fragile `venv` + `renault-api` CLI + shell-script data layer with
 a proper **Home Assistant app** that polls the
 [Renault/Kamereon API](https://github.com/hacf-fr/renault-api) and publishes
-`sensor.r5_*` entities over **MQTT auto-discovery**. Entity names follow Topolino65's naming,
-so **their UI binds straight to these entities** — keep using their dashboards and let this
-app feed them fresh data.
+`sensor.r5_*` entities over **MQTT auto-discovery**. These entity ids are the app's own:
+Topolino65's dashboards use differently named entities (template sensors ending `_api` and
+`script.` controls), so they **do not bind to this app** without editing.
 
-It can **also** auto-deploy a dashboard for you (`deploy_dashboard`, off by default) — a
-**modified version of Topolino65's UI**, ported from the maintainer's
+To see the data, use the app's **bundled dashboards** (`deploy_dashboard`, off by default): a
+**modified version of Topolino65's UI**, built for these entities and ported from the maintainer's
 [Alpine A290 app](https://github.com/MatthewHobbs/a290-ha-addon) (the R5 E-Tech and Alpine
-A290 share the same Renault EV platform). It's a bonus, not the point: use it, or keep
-Topolino65's own.
+A290 share the same Renault EV platform).
 
 | Standard dashboard | Bubble dashboard | Smart Charging |
 | --- | --- | --- |
@@ -120,10 +119,9 @@ key needed.
    you have multiple accounts — it's auto-discovered otherwise), then **Start**. The
    `sensor.r5_*` / `binary_sensor.r5_*` entities and `button.r5_*` controls appear under an
    **R5** device within a minute.
-4. **Get a dashboard:** use **[Topolino65's renault-5-dashboard-view](https://github.com/Topolino65/renault-5-dashboard-view)**
-   (the entities follow their naming, so they bind straight to it), **or** set `deploy_dashboard`
-   to `standard`, `bubble`, or `both` to have this app install its own (a modified version
-   of their UI) and restart — it installs the dashboard + assets via CDN, nothing to copy — **or**
+4. **Get a dashboard:** set `deploy_dashboard` to `standard`, `bubble`, or `both` to have this
+   app install its bundled dashboard (a modified version of Topolino65's UI, built for these
+   entities) and restart — it installs the dashboard + assets via CDN, nothing to copy — **or**
    copy `renault_5/dashboards/front-end*.txt` into a new dashboard's raw config manually. With
    `both`, the standard dashboard lands at your `dashboard_url_path` and the bubble one gets a
    `-bubble` suffix (e.g. `renault-5` and `renault-5-bubble`).
