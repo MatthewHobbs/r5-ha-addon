@@ -26,6 +26,7 @@ from __future__ import annotations
 import ast
 import json
 import re
+import sys
 from pathlib import Path
 
 import catalog
@@ -47,12 +48,19 @@ def _slug(text: str) -> str:
 
 
 _DEVICE_SLUG = _slug(catalog.DEVICE["name"])  # "r5"
-_DOMAINS = ("sensor", "binary_sensor", "number", "button", "device_tracker",
-            "input_boolean", "input_button", "input_number", "input_datetime", "input_text")
 # Entity-id prefix, object_id prefix, and the brand word. Matching only the entity-id prefix
 # would silently skip an id written as an object_id wherever the two differ.
 _PREFIXES = sorted({_DEVICE_SLUG + "_", catalog.OBJ_PREFIX, _DEVICE_SLUG.split("_")[0] + "_"})
-_REF = re.compile(r"\b(" + "|".join(_DOMAINS) + r")\.((?:" + "|".join(_PREFIXES) + r")[a-z0-9_]+)")
+# ANY domain, not a listed few: a fixed domain list made ``switch.r5_battery_level`` (or
+# ``climate.``, ``select.`` ...) invisible to every check below, while the >= 20 guard stayed
+# satisfied. Which domains are legitimate is derived (from discovery and _NOT_PUBLISHED) and
+# checked in test_dashboard_references_use_a_domain_this_build_publishes. Core's
+# valid_entity_id admits digits in the domain, so ``sensor2.`` must be caught too.
+_REF = re.compile(r"\b([a-z0-9_]+)\.((?:" + "|".join(_PREFIXES) + r")[a-z0-9_]+)")
+# Domains a dashboard may reference although neither discovery nor _NOT_PUBLISHED defines
+# them, each with the reason. Empty today: the core's device_tracker comes out of discovery and
+# the input_* helpers are listed by id in _NOT_PUBLISHED, so nothing needs listing by hand.
+_ALLOWED_DOMAINS: dict[str, str] = {}
 
 # Referenced but never published by the add-on. The A290 twin derives this set from the helper
 # packages it ships (Packages/, Templates/); this add-on ships none (README "Optional": users
@@ -127,6 +135,11 @@ def _seeded() -> set[str]:
     }
 
 
+def _allowed(eid: str) -> bool:
+    """A reference in a domain _ALLOWED_DOMAINS admits, so no check below expects to find it."""
+    return eid.split(".", 1)[0] in _ALLOWED_DOMAINS
+
+
 def _elsewhere(eid: str, published: set[str]) -> list[str]:
     """The same name published under another domain, if any."""
     name = eid.split(".", 1)[1]
@@ -176,7 +189,7 @@ def test_dashboard_entities_exist(published) -> None:
     unknown = sorted(
         f"{src}: {eid}"
         for src, eid in _dashboard_refs()
-        if eid not in published and eid not in _NOT_PUBLISHED and not _elsewhere(eid, published)
+        if eid not in published and eid not in _NOT_PUBLISHED and not _elsewhere(eid, published) and not _allowed(eid)
     )
     assert not unknown, (
         "Dashboards reference entity ids this build does not publish. Home Assistant names "
@@ -191,9 +204,46 @@ def test_dashboard_entities_use_the_domain_the_catalog_publishes(published) -> N
     wrong = sorted(
         f"{src}: {eid} — published as {', '.join(_elsewhere(eid, published))}"
         for src, eid in _dashboard_refs()
-        if eid not in published and _elsewhere(eid, published)
+        if eid not in published and _elsewhere(eid, published) and not _allowed(eid)
     )
     assert not wrong, "Dashboard entity domains disagree with what is published:\n  " + "\n  ".join(wrong)
+
+
+def _domains(ids: set[str]) -> set[str]:
+    return {eid.split(".", 1)[0] for eid in ids}
+
+
+def test_dashboard_references_use_a_domain_this_build_publishes(published) -> None:
+    """A prefixed reference in a domain nothing here defines (``switch.``, ``climate.``, ``select.``)
+    is named, not skipped: such an id can resolve on no install, and the specific checks above
+    only ever compare against ids that do exist."""
+    known = _domains(published) | _domains(_NOT_PUBLISHED) | set(_ALLOWED_DOMAINS)
+    assert {"sensor", "binary_sensor", "number", "button", "device_tracker", "input_boolean"} <= known
+    foreign = sorted(f"{src}: {eid}" for src, eid in _dashboard_refs() if eid.split(".", 1)[0] not in known)
+    assert not foreign, (
+        "Dashboards reference add-on entities in a domain neither discovery nor _NOT_PUBLISHED "
+        f"defines (known: {', '.join(sorted(known))}). Fix the reference, or add the domain to "
+        "_ALLOWED_DOMAINS with its reason:\n  " + "\n  ".join(foreign)
+    )
+
+
+def test_allowed_domain_admits_a_reference_every_check_would_otherwise_reject(published, monkeypatch) -> None:
+    """The escape hatch the failure message points at has to work end to end: a listed domain
+    passes the existence and wrong-domain checks too, not only the domain check, and the same
+    reference fails all three without the listing."""
+    name = next(iter(published)).split(".", 1)[1]
+    # One name published under another domain (the wrong-domain check's case) and one nothing
+    # publishes (the existence check's case): the two checks split the cases between them.
+    refs = {("fixture", f"switch.{name}"), ("fixture", "switch.r5_nothing_publishes_this")}
+    monkeypatch.setattr(sys.modules[__name__], "_dashboard_refs", lambda: refs)
+    checks = (test_dashboard_entities_exist, test_dashboard_entities_use_the_domain_the_catalog_publishes,
+              test_dashboard_references_use_a_domain_this_build_publishes)
+    for check in checks:
+        with pytest.raises(AssertionError):
+            check(published)
+    monkeypatch.setattr(sys.modules[__name__], "_ALLOWED_DOMAINS", {"switch": "fixture"})
+    for check in checks:
+        check(published)
 
 
 def test_dashboards_do_not_reference_retired_sensors() -> None:
