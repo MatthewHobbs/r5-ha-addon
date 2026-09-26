@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.8.5
+
+Matches the a290 twin's 1.28.2.
+
+- **Pressing the same button again while it is still being sent sends it to the car once.** The
+  add-on already ignored a repeat within 5 seconds, but a login to Renault can take up to a minute,
+  so a second press after 5 seconds while the first was still logging in reached the car too (two
+  horn blasts, two climate starts). A repeat is now ignored, and logged, for as long as the first
+  press is still being sent, as well as for 5 seconds from it. Each button is separate, so Start
+  Climate followed straight away by Stop Climate still sends both, and the charge-limit sliders
+  still apply every value.
+- **A press that failed before anything reached the car no longer blocks the retry.** If the login
+  to Renault failed, pressing again straight away used to be ignored as a repeat although nothing
+  had been sent. It now goes through. Once the car has been sent the action, a repeat within 5
+  seconds is still ignored, because the first may have worked.
+- **The 5-second window is timed on a clock that the system time cannot move.** If the system clock
+  was corrected backwards just after a press (by NTP or by hand), that button could stay ignored
+  for as long as the correction.
+
 ## 1.8.4
 
 Matches the a290 twin's 1.28.1.
