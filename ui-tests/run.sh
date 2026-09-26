@@ -41,7 +41,12 @@ echo "==> Vendor dashboard background images into the HA www/"
 mkdir -p "$CONFIG/www/backgrounds"
 find "$HERE/../renault_5/dashboards/Images" -type f \( -name '*.webp' -o -name '*.png' \) \
   -exec cp {} "$CONFIG/www/backgrounds/" \;
-printf 'default_config:\n' > "$CONFIG/configuration.yaml"
+# card-mod loads as a frontend module, not a Lovelace resource. It styles a card only via prototype
+# patches, so a card built before card-mod.js runs stays unstyled for that load; as a resource it
+# lost that race on CI (mass false truncation). A module starts with the page instead of after the
+# dashboard config: a head start, not a guarantee, so check_overflow.py still fails by name if
+# card-mod never applies. (card-mod README: "Performance improvements".)
+printf 'default_config:\nfrontend:\n  extra_module_url:\n    - /local/cards/card-mod.js\n' > "$CONFIG/configuration.yaml"
 
 echo "==> Start Home Assistant ($HA_IMAGE)"
 docker run -d --name ha-ui -p 8123:8123 -v "$CONFIG":/config "$HA_IMAGE" >/dev/null
@@ -65,7 +70,21 @@ curl -fsS -X POST "$BASE/api/onboarding/integration" -H "Authorization: Bearer $
   -d "{\"client_id\":\"$CID\",\"redirect_uri\":\"$CID\"}" -o /dev/null
 
 echo "==> Seed entity states + dashboards"
-"$PY" "$HERE/seed.py" --base "$BASE" --token "$ACCESS"
+"$PY" "$HERE/seed.py" --base "$BASE" --token "$ACCESS" --manifest "$CONFIG/pass.json"
 
 echo "==> Render + truncation check across the device matrix"
-"$PY" "$HERE/check_overflow.py" --base "$BASE" --tokens "$CONFIG/tokens.json"
+rc=0
+"$PY" "$HERE/check_overflow.py" --base "$BASE" --tokens "$CONFIG/tokens.json" --expect "$CONFIG/pass.json" || rc=1
+
+# The seed is a parked car on a working add-on, so the text the problem sensors switch on (Not
+# Polling, Auth Failure, Last Updated) never renders above. seed.py derives the passes that render
+# it, each a state production can publish, and each re-checks the dashboards it changes. They run
+# even after a failure above, so one run reports every pass.
+PASSES="$("$PY" "$HERE/seed.py" --list-passes)"
+for pass in $PASSES; do
+  echo "==> $pass pass: reseed the problem sensors, re-check the dashboards that show them"
+  "$PY" "$HERE/seed.py" --base "$BASE" --token "$ACCESS" --pass "$pass" --manifest "$CONFIG/pass-$pass.json"
+  "$PY" "$HERE/check_overflow.py" --base "$BASE" --tokens "$CONFIG/tokens.json" \
+    --pass-name "$pass" --expect "$CONFIG/pass-$pass.json" || rc=1
+done
+[ "$rc" -eq 0 ] || exit 1
