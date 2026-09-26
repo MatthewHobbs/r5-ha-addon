@@ -202,7 +202,9 @@ mirroring to `a290-ha-addon`, bump **`alpine_a290/config.yaml`** there. Feature 
   dashboards/*.txt` in the Dockerfile) and read locally by `deploy.py` (no runtime
   raw.githubusercontent.com fetch), aligned with the A290 add-on. Images are still served via
   the jsDelivr CDN (`renault_5/dashboards/Images/...` at the version tag). They keep
-  Topolino65's naming (modernised, locale-aware). Typography is intentionally uniform across
+  Topolino65's design, but the entity ids are this app's own (`sensor.r5_*`): Topolino65's
+  dashboards use `_api`-suffixed template sensors and `script.` controls, so they do not bind to
+  this add-on (checked 2026-09-26). Typography is intentionally uniform across
   tabs (no per-screen font/size changes); overflow is handled by `white-space:normal`
   clean-word-break wrapping, not by shrinking text. The `reference/` upstream is sourced for
   assets only and is never committed.
