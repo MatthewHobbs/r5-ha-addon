@@ -235,7 +235,9 @@ def test_on_message_ignores_non_command_and_no_loop(monkeypatch):
 def test_on_connect_subscribes_and_announces():
     c = _FakeClient()
     mqtt._on_connect(c, None, None, 0)
-    assert c.subs == [f"{mqtt.CMD_PREFIX}#"]
+    # Core v0.19.0 also listens for Home Assistant's birth message, so a restarted HA gets the
+    # discovery (and every retirement) re-published instead of missing it.
+    assert c.subs == [f"{mqtt.CMD_PREFIX}#", "homeassistant/status"]
     assert (mqtt.AVAIL_TOPIC, "online") in c.pubs
 
 
