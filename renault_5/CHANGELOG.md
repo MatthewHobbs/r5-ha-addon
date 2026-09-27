@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.8.10
+
+Matches the a290 twin's 1.28.7. Shared core `renault-mqtt` v0.19.0.
+
+- **An entity the add-on retires no longer stays behind as a permanent orphan when Home Assistant
+  was offline at the time.** The add-on retires an entity (the old `soc_min_target` and
+  `soc_max_target` sensors, now sliders, an endpoint the car turns out not to support, or the
+  location tracker when `publish_location` is switched off) by clearing its retained discovery
+  config. If Home Assistant was not running at that moment it never saw the clearance, and the
+  entity sat in the registry as *unavailable* for good. The add-on now re-publishes its discovery
+  whenever Home Assistant announces it is online, and sends each retirement in a form Home
+  Assistant acts on even for an entity it has never seen in the current run, so such orphans clear
+  on the next Home Assistant start. One path, the location opt-out, is covered by the core's unit
+  tests but not by its end-to-end Home Assistant harness; the other paths are.
+
 ## 1.8.9
 
 Matches the a290 twin's 1.28.6.
