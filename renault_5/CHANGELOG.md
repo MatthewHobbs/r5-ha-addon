@@ -11,6 +11,32 @@ Matches the a290 twin's 1.28.6.
   instead. Re-copy or redeploy the Bubble dashboard to pick it up (`redeploy_dashboard: true`, or
   paste `front-end-bubble.txt` again).
 
+## 1.8.8
+
+Matches the a290 twin's 1.28.5. Shared core `renault-mqtt` v0.18.0.
+
+- **Entity ids are now pinned by the add-on to the names Home Assistant already assigns.** Every
+  entity's discovery config now carries `default_entity_id`, set to the id Home Assistant derives
+  from the device and entity names (`sensor.r5_battery_level` and so on), so a future rename of
+  the car's device, or an area assigned to it, cannot put a prefix on the ids the bundled
+  dashboards use. Entities already registered keep the ids they have: on a plain install those are
+  the same ids, so nothing changes. If yours already carry a prefix (for example
+  `sensor.garage_r5_battery_level`, from a device put in an area before its entities were first
+  registered), the pin does not rename them; see *Entity ids with an area prefix* under Entities in
+  the docs.
+
+## 1.8.7
+
+Matches the a290 twin's 1.28.3, ported after 1.8.6 had already mirrored its 1.28.4.
+
+- **The add-on's AppArmor profile now names the policy version it was written for.** Without that,
+  a newer AppArmor compiles the profile using the running kernel's newest rules. Under enforcing
+  AppArmor on Linux 6.17 with AppArmor 4.1, the a290 twin, whose profile is the same, was denied
+  the internal socket its process supervisor needs and never started. Home Assistant OS currently
+  ships an older AppArmor, so no install is known to be affected today; the pin keeps the profile
+  meaning what it was written to mean when that changes. Nothing else changes: no options,
+  entities or dashboards move.
+
 ## 1.8.6
 
 Matches the a290 twin's 1.28.4.
