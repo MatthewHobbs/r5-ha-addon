@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.8.12
+
+Matches the a290 twin's 1.28.9 (ADR 0004).
+
+- **Pop-up button names no longer scroll and clip; they wrap instead.** The Presets "Steering
+  Wheel" toggle, the main menu's "Smart Charging" button, and the Diagnostics and Last Charge
+  buttons used to show a scrolling marquee that could cut a name short with a fade on narrow
+  phones. They now wrap onto a second line, matching the rule already applied to separator
+  headings and tile labels.
+- **Last Charge and Diagnostics buttons are two per row, not three.** A row of three left too
+  little room for a name beside its icon on a phone. Last Charge's nine captured-data buttons
+  are now five rows of two (the last on its own); Diagnostics' three buttons are two rows.
+- **Activity's timestamps, and Last Charge's Started, Ended and Date, show a short date**
+  ("27 Sep 09:30") instead of Home Assistant's full date and time, which no longer fit once the
+  scrolling stopped.
+- **The UI gate that renders these dashboards now catches two kinds of clipping it missed
+  before:** a name cut short behind a fade (the scrolling marquee), and a name or date cut off
+  vertically by a two-line limit. Nothing in the add-on itself changes; this only affects how
+  its bundled dashboards are tested.
+
 ## 1.8.10
 
 Matches the a290 twin's 1.28.7. Shared core `renault-mqtt` v0.19.0.
