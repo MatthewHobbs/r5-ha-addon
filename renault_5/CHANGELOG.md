@@ -1,30 +1,5 @@
 # Changelog
 
-## 1.8.14
-
-Ports a290's ADR 0003 (PR #182, commit 5f2efb4), rows 1 to 5.
-
-- **The UI gate now waits for every pop-up's own cards before scanning it, not just the labels a
-  pass declares.** `seed.py`'s manifest carries, per pop-up, one item per card it renders with
-  every text that card must show: static fields, the branch a template selects, the state its
-  entity's seeded value renders as, and a hand declaration (`DECLARED`) for the Charge Status
-  badges and the Smart Charging pop-up's off-peak window, which are JavaScript and Jinja fields
-  nothing can read automatically. `STATE_TEXT_OVERRIDE` separately predicts what the Activity and
-  Last Charge short-date buttons' `styles` override writes into `.bubble-state`, instead of the
-  raw state — without it the gate would silently mispredict those buttons and never notice.
-  `check_overflow.py` then holds each pop-up, once with one timeout, until every card the
-  manifest lists is met by a distinct laid-out element holding all its texts, before letting the
-  truncation scan look; a card that never paints fails the device by name.
-  Nothing in the add-on itself changes; this only affects how its bundled dashboards are tested.
-- **A named pass now reposts every entity on every pass, not just the ones it changes.** Each
-  pass runs as its own process, so a plain `KNOWN` age no pass ever names (the Activity buttons'
-  last-activity sensors) was recomputed fresh against that process's own clock but never
-  reposted, drifting behind the value still held in Home Assistant whenever an unrelated sibling
-  in the same pop-up forced a reopen — a source of flaky not-rendered findings unrelated to
-  whatever pass was actually under test.
-- **`ui-tests/completeness_fixtures.py`** is the isolated proof of the completeness wait (a290's
-  ADR 0003 row 6), run against static pages and Playwright with no Home Assistant.
-
 ## 1.8.13
 
 Matches the a290 twin's 1.28.8.
