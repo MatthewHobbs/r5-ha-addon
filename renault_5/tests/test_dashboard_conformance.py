@@ -16,7 +16,9 @@ and derives ``entity_id = slug(device name + " " + entity name)``: the object_id
 prefix, the object_id prefix and the brand word (all ``r5_`` on this model; the A290 twin, where
 they differ, shares this code), so an object_id-shaped id fails rather than being skipped. The
 ids are taken from the discovery configs the shared core's real ``publish_discovery`` emits,
-which also covers the core-published device_tracker without a hand-kept list.
+which also covers the core-published device_tracker without a hand-kept list. Since core v0.18.0
+each config also pins that id as ``default_entity_id`` (core ADR 0001), so a device area or
+rename cannot prefix it; the pin is checked against the same derivation.
 
 Pure string/AST work plus one in-process discovery run: no HA, no browser, no network.
 """
@@ -89,9 +91,15 @@ class _Recorder:
         self.retained[topic] = payload
 
 
+def _name_derived_id(domain: str, conf: dict) -> str:
+    """The id Home Assistant gives a new MQTT entity when nothing pins it: the domain plus
+    slug(device name + " " + entity name)."""
+    return f"{domain}.{_slug(conf['device']['name'] + ' ' + conf['name'])}"
+
+
 @pytest.fixture
-def published(monkeypatch) -> set[str]:
-    """Every entity_id this build can publish, as Home Assistant would name it.
+def configs(monkeypatch) -> dict[str, dict]:
+    """Every discovery config this build can publish, keyed by its ``<domain>/<segment>``.
 
     Runs the core's real publish_discovery with every optional capability on (all endpoints
     supported, location and the opt-in refresh button enabled), so this is the most this build
@@ -103,14 +111,19 @@ def published(monkeypatch) -> set[str]:
                 | {ep for *_, ep in catalog.ACTION_BUTTONS.values()})
     rec = _Recorder()
     mqtt.publish_discovery(rec, every_ep, "km")
-    ids = set()
+    found = {}
     for topic, payload in rec.retained.items():
         parts = topic.split("/")
         if parts[0] != mqtt.DISCOVERY_PREFIX or parts[-1] != "config" or not payload:
             continue          # state/attribute topics, and cleared (tombstoned) configs
-        conf = json.loads(payload)
-        ids.add(f"{parts[1]}.{_slug(conf['device']['name'] + ' ' + conf['name'])}")
-    return ids
+        found[f"{parts[1]}/{parts[-2]}"] = json.loads(payload)
+    return found
+
+
+@pytest.fixture
+def published(configs) -> set[str]:
+    """Every entity_id this build can publish, as Home Assistant would name it from the names."""
+    return {_name_derived_id(key.split("/")[0], conf) for key, conf in configs.items()}
 
 
 def _dashboard_refs() -> set[tuple[str, str]]:
@@ -172,6 +185,43 @@ def test_entity_ids_are_derived_from_names(published) -> None:
     for obj in catalog.RETIRED_SENSORS:
         assert f"number.{obj}" in published
         assert f"sensor.{obj}" not in published
+
+
+def test_every_config_pins_the_name_derived_id(configs) -> None:
+    """Every discovery config carries ``default_entity_id``, and it is the id Home Assistant
+    already derives from the names (core ADR 0001). Without the pin a device with an area gets
+    ``<area>_`` prefixed ids; with a different pin new installs get ids no dashboard uses. Both
+    are silent, so the value is checked per config, not just its presence."""
+    assert len(configs) >= 20, sorted(configs)
+    wrong = sorted(
+        f"{key}: default_entity_id={conf.get('default_entity_id')!r}, "
+        f"HA derives {_name_derived_id(key.split('/')[0], conf)!r}"
+        for key, conf in configs.items()
+        if conf.get("default_entity_id") != _name_derived_id(key.split("/")[0], conf)
+    )
+    assert not wrong, "Discovery configs pin an id other than the name-derived one:\n  " + "\n  ".join(wrong)
+    # The pin names the id under the domain the config is published on, never another.
+    assert all(conf["default_entity_id"].split(".", 1)[0] == key.split("/")[0] for key, conf in configs.items())
+
+
+def test_pinned_ids_are_exactly_the_published_ids(configs, published) -> None:
+    """The set of pins is the set of name-derived ids: nothing pinned that is not published,
+    nothing published without a pin. The dashboards are matched against ``published``, so this
+    is what makes their references the pinned ids and not merely the name-derived ones."""
+    pinned = {conf["default_entity_id"] for conf in configs.values()}
+    assert pinned == published, (sorted(pinned - published), sorted(published - pinned))
+
+
+def test_dashboard_entities_are_the_pinned_ids(configs) -> None:
+    """Every add-on entity a dashboard references is exactly a ``default_entity_id`` this build
+    sends, so an install with the device in an area, or a renamed device, still resolves them."""
+    pinned = {conf["default_entity_id"] for conf in configs.values()}
+    unpinned = sorted(
+        f"{src}: {eid}"
+        for src, eid in _dashboard_refs()
+        if eid not in pinned and eid not in _NOT_PUBLISHED and not _allowed(eid)
+    )
+    assert not unpinned, "Dashboards reference ids no discovery config pins:\n  " + "\n  ".join(unpinned)
 
 
 def test_entity_names_keep_the_slug_valid() -> None:
