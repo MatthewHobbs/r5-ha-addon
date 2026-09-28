@@ -71,7 +71,6 @@ legacy	alpine_a290/app/panel.html	both	re:num\(d\.	12	the panel reads poll_once'
 legacy	alpine_a290/app/catalog.py	both	py:<docstring>	6	r5's docstring records its Topolino65 naming
 model	alpine_a290/app/catalog.py	both	py:OBJ_PREFIX,ENV_PREFIX,NODE	12	each comment names the OTHER twin ("the r5 twin sets r5_"), which normalisation cannot make equal; plus obj[len(OBJ_PREFIX):] vs removeprefix wording (main.py _P)
 model	alpine_a290/app/catalog.py	both	py:DEVICE	2	device name and manufacturer (Alpine / Renault)
-pending	alpine_a290/app/catalog.py	both	py:MQTT_KEEPALIVE	2	60 s on a290, 30 s on r5; RFC open difference, unclear which is right. Target: owner decision, then one value in both
 pending	alpine_a290/app/catalog.py	both	py:SENSORS	8	r5 publishes Cabin Temperature, a290 retired it (the A290 never returns it; whether an R5 does is not established; RFC open difference), plus comment wording. Target: owner decision on cabin temperature
 pending	alpine_a290/app/catalog.py	both	py:RETIRED_SENSORS	7	a290 retires cabin_temperature; comment wording. Target: follows the cabin-temperature decision
 pending	alpine_a290/app/catalog.py	both	py:OPTIONAL_ENDPOINTS,PESSIMISTIC_ENDPOINTS	13	a290 makes hvac-settings optional and pessimistic because the A290 answers 502000; r5 polls it always (R5 behaviour unobserved; RFC open difference). Target: owner decision on hvac-settings
@@ -149,8 +148,6 @@ local	justfile	a290	re:git\ clone\ \-\-quiet\ \-\-depth\ 1\ https://github\.com/
 local	justfile	r5	re:twin="\$tmp/a290\-ha\-addon"	1	each repo names the OTHER as the twin its parity job checks out and compares against
 local	justfile	r5	re:git\ clone\ \-\-quiet\ \-\-depth\ 1\ https://github\.com/MatthewHobbs/a290\-ha\-	1	each repo names the OTHER as the twin its parity job checks out and compares against
 pending	.github/workflows/ci.yaml	both	re:uses: \S+@[0-9a-f]{40} +#	28	pinned-action comments: two spaces on a290, one on r5, and r5 names exact tags (v3.1.1, v2.21.1) where a290 says v3, v2. The house rule wants an exact upstream tag. Target: r5's exact tags into a290, one spacing in both
-pending	.github/workflows/ci.yaml	both	re:--cov-fail-under=	2	coverage floor 95 on a290, 90 on r5; r5 measures 98 (RFC open difference). Target: 95 in r5
-pending	justfile	both	re:--cov-fail-under=	2	as ci.yaml. Target: 95 in r5
 pending	.github/workflows/ci.yaml	both	hunk:declared minimum HA must	2	comment wording. Target: converge, either way
 pending	.github/workflows/ci.yaml	both	hunk:optional test package|ported template package	2	comment follows the bundled-template difference. Target: follows the Templates decision
 pending	.github/workflows/ci.yaml	both	hunk:a VIN in a test fixture|pair of public add-on repos	5	PII-step comment wording. Target: converge, either way
