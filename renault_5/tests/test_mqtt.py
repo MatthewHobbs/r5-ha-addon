@@ -263,7 +263,7 @@ def test_mqtt_connect(monkeypatch):
     c = holder["c"]
     assert client is c
     assert c.creds == ("u", "p")
-    assert c.conn == ("broker", 1884, 30)
+    assert c.conn == ("broker", 1884, 60)
     assert c.delay == {"min_delay": 1, "max_delay": 120}
     assert c.started is True
 
