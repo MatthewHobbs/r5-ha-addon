@@ -114,6 +114,29 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  parity:
+    name: Parity with a290
+    runs-on: ubuntu-latest
+    # ADR 0001 (a290) stage A: fail on any difference from a290-ha-addon that scripts/parity/expected.tsv
+    # does not explain, and on any entry there whose difference is gone. It reads a290's main as it
+    # is NOW, so a merge on a290 can turn this red without a change here (a stale entry to delete,
+    # usually). That is why it is its own job and not yet a required check; see the ADR.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check out a290-ha-addon main (read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: MatthewHobbs/a290-ha-addon
+          ref: main
+          path: .parity-twin
+          persist-credentials: false
+      - name: Parity check can fail
+        run: python3 scripts/parity_check.py --self-test
+      - name: r5 and a290 differ only as listed
+        run: python3 scripts/parity_check.py --twin .parity-twin
+
   test:
     name: Tests
     runs-on: ubuntu-latest
