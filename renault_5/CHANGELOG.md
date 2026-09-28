@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.8.14
+
+Matches the a290 twin's policy (ADR 0001).
+
+- **MQTT keepalive is now 60s, not 30s.** Halves the keepalive pings the poller sends its
+  broker; no behaviour change users would notice, other than slightly less MQTT chatter.
+- **A failed poll only forces a fresh Renault login on a confirmed auth error, or every 3rd
+  failure otherwise.** Every failure used to re-authenticate, including a transient network
+  blip that had nothing to do with the login — needlessly discarding a still-good session and
+  risking Renault-side throttling from repeated logins during an outage.
+
 ## 1.8.13
 
 Matches the a290 twin's 1.28.8.

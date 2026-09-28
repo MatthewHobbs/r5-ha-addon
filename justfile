@@ -39,4 +39,4 @@ lint:
     ruff check renault_5/app renault_5/tests scripts ui-tests
 
 test: venv
-    .venv/bin/python -m pytest renault_5/tests -q --cov=renault_5/app --cov-report=term-missing --cov-fail-under=90
+    .venv/bin/python -m pytest renault_5/tests -q --cov=renault_5/app --cov-report=term-missing --cov-fail-under=95
