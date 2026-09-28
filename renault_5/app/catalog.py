@@ -22,7 +22,7 @@ ENV_PREFIX = "R5_"
 # sensors whose unit follows the locale (mi/km) instead of a fixed one. The a290 twin sets its own.
 NODE = "renault_5"
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
-MQTT_KEEPALIVE = 30
+MQTT_KEEPALIVE = 60
 DIST_UNIT_OBJS = ("r5_battery_autonomy", "r5_vehicle_mileage")
 
 # object_id -> (name, device_class, unit, state_class). Object_ids follow the Topolino

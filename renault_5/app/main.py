@@ -771,7 +771,6 @@ async def main():
         except Exception as err:  # noqa: BLE001
             fails += 1
             LOG.error("Poll failed (%d in a row): %s", fails, redact(err))
-            await vsession.invalidate()   # next cycle re-authenticates (self-heal)
             last_ok = state.get("last_success", 0)
             # No new payload, so the last known car timestamp simply ages. poll_failing keeps
             # the exact rule data_stale used to carry here, so the connectivity alarm users
@@ -781,6 +780,11 @@ async def main():
             # message text for gigya/library errors that aren't raised as ClientResponseError.
             auth = (isinstance(err, aiohttp.ClientResponseError) and err.status in (401, 403)) or \
                 any(s in str(err).lower() for s in ("login", "password", "credential", "401", "403"))
+            # Re-login on a confirmed auth error, or every 3rd failure otherwise (a290 twin's
+            # policy) — invalidating every failure re-authenticated against transient network
+            # blips that had nothing to do with the login itself.
+            if auth or fails % 3 == 0:
+                await vsession.invalidate()
             client.publish(mqtt.STATE_TOPIC, json.dumps({
                 "api_auth_failure": "on" if auth else "off",
                 "last_successful_poll": iso(last_ok),

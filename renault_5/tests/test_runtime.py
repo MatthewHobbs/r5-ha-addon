@@ -1180,6 +1180,92 @@ def test_main_failure_branch_flags_auth_and_staleness(monkeypatch, tmp_path):
     assert all("data_stale" not in d for d in state_payloads)
 
 
+def _skip_real_sleeps(monkeypatch):
+    """The inter-poll backoff sleep is real seconds otherwise (up to the 30-minute cap) —
+    short-circuit it the same way test_failure_backoff_never_drops_below_the_interval does."""
+    real_wait_for = asyncio.wait_for
+
+    async def fake_wait_for(aw, timeout):
+        if getattr(aw, "__qualname__", "") == "Event.wait":
+            aw.close()
+            raise asyncio.TimeoutError
+        return await real_wait_for(aw, timeout)
+
+    monkeypatch.setattr(main.asyncio, "wait_for", fake_wait_for)
+
+
+def test_relogin_only_on_auth_error_or_every_third_failure(monkeypatch, tmp_path):
+    """a290 twin's policy: invalidating on every failure re-authenticated against transient
+    network blips too, so only a confirmed auth error or every 3rd failure re-logs in."""
+    calls = {"n": 0}
+
+    async def poll(stop, *a, **k):
+        calls["n"] += 1
+        if calls["n"] == 5:
+            stop.set()
+        raise RuntimeError("Kamereon unreachable")   # never auth-flavoured
+
+    fc = _wire_main(monkeypatch, tmp_path, poll)
+    _skip_real_sleeps(monkeypatch)
+
+    class SpySession:
+        def __init__(self, locale):
+            self.invalidations = []
+
+        async def invalidate(self):
+            self.invalidations.append(calls["n"])
+
+        async def close(self):
+            pass
+
+    spy = {}
+
+    def make_spy(locale):
+        s = SpySession(locale)
+        spy["session"] = s
+        return s
+
+    monkeypatch.setattr(main, "VehicleSession", make_spy)
+    asyncio.run(main.main())
+    assert spy["session"].invalidations == [3]   # 1st and 2nd skipped, 3rd re-logs in
+    assert len(fc.pubs) > 0   # sanity: the loop actually ran
+
+
+def test_relogin_on_every_auth_failure(monkeypatch, tmp_path):
+    calls = {"n": 0}
+
+    async def poll(stop, *a, **k):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            stop.set()
+        raise RuntimeError("HTTP 401 invalid credentials")
+
+    fc = _wire_main(monkeypatch, tmp_path, poll)
+    _skip_real_sleeps(monkeypatch)
+
+    class SpySession:
+        def __init__(self, locale):
+            self.invalidations = []
+
+        async def invalidate(self):
+            self.invalidations.append(calls["n"])
+
+        async def close(self):
+            pass
+
+    spy = {}
+
+    def make_spy(locale):
+        s = SpySession(locale)
+        spy["session"] = s
+        return s
+
+    monkeypatch.setattr(main, "VehicleSession", make_spy)
+    asyncio.run(main.main())
+    assert spy["session"].invalidations == [1, 2]   # every failure, not just every 3rd
+    assert len(fc.pubs) > 0
+
+
 def test_main_exits_without_required_config(monkeypatch):
     for k in ("R5_USERNAME", "R5_PASSWORD", "R5_VIN", "MQTT_HOST"):
         monkeypatch.delenv(k, raising=False)
