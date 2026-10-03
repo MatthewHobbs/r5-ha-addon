@@ -51,3 +51,4 @@ export R5_CHARGER_TARGET_TIME="$(bashio::config 'charger_target_time')"
 export R5_CHARGER_DISPATCHING="$(bashio::config 'charger_dispatching')"
 
 exec python3 -u /app/main.py
+# throwaway: comment-only change
