@@ -1,7 +1,7 @@
 # ADR 0001 — Releases are batched and cut on request
 
 - **Repo:** r5-ha-addon
-- **Status:** Proposed. I adopt a290-ha-addon/ADR 0006 here once I accept this.
+- **Status:** Accepted (2026-10-03). I delegated the acceptance, and the other decisions in this port, to the session driving it, having accepted a290-ha-addon/ADR 0006 myself; this ADR states the same rule for r5.
 - **Context:** `release.yaml` publishes a release for any merge that moves `version` in `renault_5/config.yaml`, and the rule in `CLAUDE.md` was that every user-facing change moves it. I decided in a290-ha-addon/ADR 0006 that I want releases batched until I ask for one; r5 follows a290 and is never ahead of it (that ADR, row 5). a290-ha-addon/ADR 0006 holds the reasoning, the alternatives and five review rounds on the guard; I do not copy them here.
 - **North star:** a release happens when I ask for one, and in no other way: no merge can publish a version, and the version on `main` always has its image.
 
