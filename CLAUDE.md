@@ -217,10 +217,9 @@ image. Such a change must work with the currently released image: adding an opti
 ignores is fine; removing or renaming one, changing `image`/`arch`/`slug`, or an `apparmor.txt`
 rule the old image does not need, is not, and belongs in the release PR's company, never in an
 ordinary merge. The docs-sync check refuses any `config.*` or `build.*` file other than
-`renault_5/config.yaml`, because the Supervisor treats every one it finds as an add-on. When
-mirroring to `a290-ha-addon`, the entry goes under `## Unreleased` in
-**`alpine_a290/CHANGELOG.md`** (a290 leads). Feature branches are **squash-merged** to `main`
-and deleted once merged.
+`renault_5/config.yaml`, because the Supervisor treats every one it finds as an add-on. a290
+leads: r5's changes mirror a290's and never merge ahead of them. Feature branches are
+**squash-merged** to `main` and deleted once merged.
 
 ## Gotchas
 
