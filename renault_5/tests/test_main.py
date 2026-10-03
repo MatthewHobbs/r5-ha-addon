@@ -5,7 +5,9 @@ contract. The config/util/debug/charge/mqtt seams are covered in their own test 
 """
 import catalog
 import main
+import pytest
 from renault_api.kamereon.enums import ChargeState, PlugState
+from renault_api.kamereon.exceptions import UnauthorizedException
 from renault_mqtt import charge
 
 
@@ -342,6 +344,30 @@ def test_poll_once_produces_every_core_sensor_key(monkeypatch):
     # the key the success-log line reads must exist (regression guard for the log-key bug)
     assert "charger_plug_status" in data
     assert data["charging"] == "off" and "plug_suspect" in data
+
+
+class _UnauthorizedVehicle(_FakeVehicle):
+    """The same fake, but the named requests answer with Kamereon's unauthorized reply."""
+
+    def _maybe(self, name):
+        if name in self._fail:
+            raise UnauthorizedException("err.func.wired.unauthorized", "Not authorized")
+
+
+def test_unauthorized_on_the_battery_request_escapes_poll_once(monkeypatch):
+    # The battery request is the one poll_once does not guard, so Kamereon's unauthorized reply on
+    # it reaches the main loop's classifier (test_runtime.py). This pins that half of the path.
+    with pytest.raises(UnauthorizedException):
+        _poll(_UnauthorizedVehicle(fail={"battery"}), set(), monkeypatch)
+
+
+def test_unauthorized_on_an_optional_request_is_swallowed_by_poll_once(monkeypatch):
+    # Every optional request catches its own errors, so the same reply on one of them is logged and
+    # the poll carries on: it never reaches the classifier, and the sensor is not turned on. The
+    # changelog says exactly this; a claim that the sensor covers every endpoint was caught in review.
+    data, _loc = _poll(_UnauthorizedVehicle(fail={"cockpit"}), set(), monkeypatch)
+    assert data["battery_level"] == 80
+    assert "vehicle_mileage" not in data
 
 
 def test_poll_once_degrades_when_one_endpoint_fails(monkeypatch):
