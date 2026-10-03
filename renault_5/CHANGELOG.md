@@ -11,12 +11,16 @@
   token it has just received from Renault, without checking its signature; the add-on never
   verifies tokens or uses HMAC keys, so this is hygiene rather than a fix for an exploitable
   path here.
-- **API Auth Failure now turns on when Renault's API answers "unauthorized".** That reply
-  (`err.func.wired.unauthorized`) reads `('err.func.wired.unauthorized', 'Not authorized')`, which
-  contains none of the words the add-on looked for, so it counted as an ordinary failure: the
-  sensor stayed off, and the sign-in was only dropped on every third failed poll. It is now
-  recognised by what it is, so the sensor turns on and the sign-in is dropped at once, so the next
-  poll signs in again. Poll Failing is unchanged. This gap is not new and was not caused by the
+- **API Auth Failure now turns on when Renault's API answers "unauthorized" to the battery
+  request.** That reply (`err.func.wired.unauthorized`) reads
+  `('err.func.wired.unauthorized', 'Not authorized')`, which contains none of the words the add-on
+  looked for, so it counted as an ordinary failure: the sensor stayed off, and the sign-in was only
+  dropped on every third failed poll. It is now recognised by what it is, so the sensor turns on
+  and the sign-in is dropped at once, so the next poll signs in again. Poll Failing is unchanged.
+  This covers the battery request only, because that is the one request whose failure fails the
+  whole poll: the same reply on any other, optional request (mileage, climate, preconditioning
+  settings and schedules, charge limits, tyres, charge mode, location, charge history) is logged
+  and the poll carries on, exactly as before. This gap is not new and was not caused by the
   renault-api 0.5.14 update (0.5.13 produced the same text); 0.5.14 only gives the reply a class
   of its own, which is what makes recognising it by type possible. Renault's reply can also mean
   a permissions problem and not an expired sign-in; then the sensor is on for a cause signing in
