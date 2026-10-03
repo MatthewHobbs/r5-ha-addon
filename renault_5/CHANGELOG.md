@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Updated to renault-api 0.5.14.** The library's endpoint table for the R5 (`R5E1VE`) is
+  unchanged; the corrections in this release are for the A290. One change reaches every model: an
+  `err.func.wired.unauthorized` reply now raises `UnauthorizedException` instead of the generic
+  response error. No settings change and no entity change.
+- **Updated PyJWT to 2.15.1** (from 2.13.0), clearing thirteen advisories that fail `pip-audit`.
+  PyJWT is a transitive dependency, used only by renault-api to read the expiry of the sign-in
+  token it has just received from Renault, without checking its signature; the add-on never
+  verifies tokens or uses HMAC keys, so this is hygiene rather than a fix for an exploitable
+  path here.
+
 ## 1.8.14
 
 Matches the a290 twin's policy (ADR 0001).
