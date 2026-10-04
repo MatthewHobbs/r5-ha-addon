@@ -137,8 +137,7 @@ class Runner:
             popup["cards"] = items
         shot = os.path.join(self.tmp, f"shot-{int(time.time() * 1000)}.png")
         t0 = time.monotonic()
-        # r5's _capture_popup also takes a NavLog (`nav`), a diagnostic r5 carries that a290's
-        # does not; both trees under test here are r5's own, so both need it.
+        # Both trees under test here are r5's own, so both take the navigation log.
         nav = new._NavLog(page)
         issues = mod._capture_popup(page, popup, "fixture", "chromium", shot, nav)
         secs = time.monotonic() - t0
