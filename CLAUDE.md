@@ -245,3 +245,5 @@ leads: r5's changes mirror a290's and never merge ahead of them. Feature branche
   tabs (no per-screen font/size changes); overflow is handled by `white-space:normal`
   clean-word-break wrapping, not by shrinking text. The `reference/` upstream is sourced for
   assets only and is never committed.
+
+<!-- throwaway 2: checking the required render checks; closed unmerged -->
