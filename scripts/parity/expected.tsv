@@ -108,7 +108,7 @@ pending	alpine_a290/app/deploy.py	both	py:_WS	2	one comment. Target: converge, e
 
 local	ui-tests/completeness_fixtures.py	both	py:<docstring>	18	each docstring names its own provenance: a290's cites its own ADR 0003 row 6 directly, r5's cites porting from the a290 twin (PR #182, commit 5f2efb4) and names its own pre-change SHA
 local	ui-tests/completeness_fixtures.py	both	py:PRE_CHANGE_REF	6	the pre-change reference comment and SHA are each repo's own pinned pre-port commit
-pending	ui-tests/completeness_fixtures.py	both	py:Runner	5	r5's _capture_popup takes an extra NavLog diagnostic (`nav`) that a290's does not, as check_overflow.py's own residue entry below. Target: follows that entry
+pending	ui-tests/completeness_fixtures.py	both	py:Runner	6	a290 builds the navigation log only when the tree under test has one (`hasattr(mod, "_NavLog")`); r5 always builds it, both trees under test being r5's own. Target: converge wording
 pending	ui-tests/completeness_fixtures.py	both	py:main	2	the same NBSP/narrow-NBSP whitespace normalised as an escape sequence on a290, a literal Unicode character on r5; no behaviour differs. Target: converge to one representation, either way
 # ---------------------------------------------------------------- dashboards
 pending	alpine_a290/dashboards/front-end.txt	both	re:sensor\.(a290_)?test_	32	a290's test-mode package is namespaced a290_test_*; r5's is bare test_* (audit H-C4). Target: port to r5 with Packages/a290_test.yaml
@@ -173,12 +173,12 @@ pending	scripts/docs_cite_ignore.txt	both	*	3	the comment follows the bundled-te
 # --- UI gate coverage: dispatching-off pass and all Bubble pop-ups
 # Listed before the whole-file harness entries below so these lines are taken here, not there.
 pending	ui-tests/seed.py	both	py:<docstring>,<imports>,TOGGLES,MIN_POPUPS,TEMPLATE_DIR,HELPER_STATES,helper_states,state_for,derive_passes,TEXT_KEYS,IF_IS_STATE,ACTION_KEYS,_reads_state,expected_labels,popups_in,write_manifest,main	37	a290 derives a pass per TOGGLES entry (the off-peak badge's "Peak rate"), lists every Bubble pop-up with its labels in the manifest, and seeds the bundled pretty-location template at a real length. Target: r5's harness PR porting this
-pending	ui-tests/check_overflow.py	both	py:<docstring>,JS_POPUP_SHOWS,_missing_labels,POPUP_SHOT_NAMES,_open_popup,_capture_popup,run	116	a290 opens every Bubble pop-up by hash, proves each open by hash and header name, rescans once after HA's service-worker reload, and fails a pop-up skipped on every device. Target: r5's harness PR porting this
+pending	ui-tests/check_overflow.py	both	py:<docstring>,JS_POPUP_SHOWS,_missing_labels,POPUP_SHOT_NAMES,_open_popup,_capture_popup,run	87	the service-worker barrier, fresh-document pop-up recovery and card-mod retry are ported; residue is comment wording and the JS_POPUP_SHOWS pop-up-by-hash match, which a290 has and r5 has not ported. Target: converge wording; port the hash match
 
 # ---------------------------------------------------------------- UI harness (r5's harness PR is in flight)
-pending	ui-tests/check_overflow.py	both	*	91	residue after r5 #105 ported the harness: dashboard slugs, diag comments and wording. Target: converge wording; slugs follow ADR 0001 row 13
+pending	ui-tests/check_overflow.py	both	*	78	residue after r5 #105 ported the harness: dashboard slugs, diag comments and wording. Target: converge wording; slugs follow ADR 0001 row 13
 pending	ui-tests/seed.py	both	*	109	residue after r5 #105: dashboard slugs, the r5 ids in KNOWN/DERIVED_AGE/IMPLIES, comment wording, and the date-padding self-test's dashboard-slug lines (r5 #135, a290 #205). Target: converge wording; ids follow ADR 0001 row 13
-pending	ui-tests/README.md	both	*	69	residue after r5 #105: tile and timestamp names in the prose. Target: converge wording; names follow ADR 0001 row 13
+pending	ui-tests/README.md	both	*	81	residue after r5 #105: tile and timestamp names in the prose. Target: converge wording; names follow ADR 0001 row 13
 
 # ---------------------------------------------------------------- prose and tests, excused wholesale
 # These are the only unguarded entries (count *): drift inside them is not caught. They are
