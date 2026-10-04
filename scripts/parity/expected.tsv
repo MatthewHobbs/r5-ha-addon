@@ -123,6 +123,7 @@ pending	alpine_a290/dashboards/front-end-bubble.txt	both	re:# Ghost tile:	2	comm
 local	justfile	both	hunk:parity	2	each repo's `parity` comment names the OTHER as the twin it needs (r5 the a290 twin, a290 the r5 twin)
 local	justfile	both	re:^# (and nothing else \((a290's )?ADR 0006\)|merging it publishes the image and the tag\. `just release|`chore\(release\): <version>`; merging it publishes|`just release <version> --dry-run` only prints)	5	each repo's `release` recipe comment cites ADR 0006 from its own side (r5 says "a290's ADR 0006") and wraps it differently
 local	docs/adr/0001-release-on-request.md	r5	only	1	r5's own ADR for release on request; it restates a290's ADR 0006 for r5, which a290 keeps as docs/adr/0006-release-on-request.md
+local	docs/adr/0002-release-waits-for-the-ui-gate.md	r5	only	1	r5's own ADR for the UI-gate wait; it ports a290's ADR 0005 for r5, which a290 keeps as docs/adr/0005-release-waits-for-the-ui-gate.md
 local	.github/workflows/ci.yaml	a290	re:name:\ Parity\ with\ r5	1	each repo names the OTHER as the twin its parity job checks out and compares against
 local	.github/workflows/ci.yaml	r5	re:name:\ Parity\ with\ a290	1	each repo names the OTHER as the twin its parity job checks out and compares against
 local	.github/workflows/ci.yaml	a290	re:\#\ ADR\ 0001\ stage\ A:\ fail\ on\ any\ difference\ from\ r5\-ha\-addon\ that\ 	1	each repo names the OTHER as the twin its parity job checks out and compares against
