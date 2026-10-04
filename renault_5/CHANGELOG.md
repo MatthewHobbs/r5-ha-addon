@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.8.15
 
 - **Updated to renault-api 0.5.14.** The library's endpoint table for the R5 (`R5E1VE`) is
   unchanged; the corrections in this release are for the A290. One change reaches every model: an
