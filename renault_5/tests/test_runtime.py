@@ -111,7 +111,7 @@ class _FakeClient:
     def publish(self, topic, payload="", retain=False):
         self.pubs.append((topic, payload))
 
-    def connect(self, host, port, keepalive=60):
+    def connect_async(self, host, port, keepalive=60):
         self.conn = (host, port, keepalive)
 
     def loop_start(self):
