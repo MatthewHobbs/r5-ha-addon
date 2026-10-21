@@ -50,12 +50,13 @@ ruff.toml / repository.yaml / README.md / LICENSE
 
 ## Dependencies
 
-`renault_5/app/requirements.txt` — all pinned, keep them pinned:
-`renault-api==0.5.13`, `paho-mqtt==2.1.0`, `PyYAML==6.0.3`. Pinned in BOTH
-`requirements.in` (the source) and `requirements.txt` (hash-locked) — bump both, or the next
+`renault_5/app/requirements.txt` pins the Python dependencies and keeps them pinned:
+`renault-api`, `paho-mqtt` and `PyYAML`, at the versions in those two files. Each is pinned in BOTH
+`requirements.in` (the source) and `requirements.txt` (hash-locked). Bump both, or the next
 regeneration silently reverts the one you missed.
 
-**Do not bump `renault-api` casually.** Per-model endpoint support is hard-coded in the
+**renault-api comes through Dependabot, in its own PR; review each one.** `tests/test_api_contract.py`
+pins the R5's endpoint map and fails on any change to it. Per-model endpoint support is hard-coded in the
 library at `renault_api/kamereon/models.py` → `_VEHICLE_ENDPOINTS` (R5 is model `R5E1VE`,
 A290 is `A5E1AE`). That map — not the readthedocs pages — is the authoritative source for
 what each car exposes. The R5 supports **all six native controls** — charge-start, flash

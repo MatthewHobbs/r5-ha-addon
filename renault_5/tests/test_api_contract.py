@@ -2,12 +2,12 @@
 
 The poller reads specific attribute names + helper methods off renault-api's models
 (`batteryLevel`, `batteryAutonomy`, `totalMileage`, `gpsLatitude`, `get_plug_status()`, …).
-Those are pinned to `renault-api==0.5.12`, but a deliberate bump could rename a field or
+Those are pinned in requirements.txt, but a bump could rename a field or
 change a helper and silently break the matching sensor — the rest of the suite uses synthetic
 stubs that wouldn't notice. This loads a representative API response through the **library's
 own schemas** and asserts every field/method the poller depends on, so such a change fails CI
 instead of shipping a dead sensor. If this breaks after a renault-api bump, update the poller
-(and this contract) together. See CLAUDE.md "Do not bump renault-api casually".
+(and this contract) together. See CLAUDE.md, "Dependencies".
 """
 import renault_api.kamereon.schemas as schemas
 from renault_api.kamereon.enums import ChargeState, PlugState
@@ -115,3 +115,67 @@ def test_soc_levels_model_contract():
     # The endpoint name the poller probes at startup; any other string gates the sliders off.
     import main
     assert main.SOC_ENDPOINT == "soc-levels"
+
+
+# What the library declares for the R5 (model R5E1VE): every key, including the ones set to
+# None. The add-on probes supports_endpoint() at startup and publishes only what this allows, and a
+# key that DISAPPEARS falls back to renault-api's default map, which reads as supported (that is
+# how hvac-settings was polled into 502000 errors on the A290). Dependabot proposes renault-api like
+# any dependency; this fails CI on any change to the map until someone has looked at it.
+_KCA = "/kca/car-adapter/v1/cars/{vin}"
+R5E1VE_MAP = {
+    "actions/charge-set-mode": None,
+    "actions/charge-set-schedule": None,
+    "actions/charge-start": ("/kcm/v1/vehicles/{vin}/ev/settings", "kcm-settings"),
+    "actions/charge-stop": None,
+    "actions/horn-start": (f"{_KCA}/actions/horn-lights", "default"),
+    "actions/hvac-set-schedule": None,
+    "actions/hvac-start": (f"{_KCA}/actions/hvac-start", "default"),
+    "actions/hvac-stop": (f"{_KCA}/actions/hvac-start", "kca-stop"),
+    "actions/lights-start": (f"{_KCA}/actions/horn-lights", "default"),
+    "actions/refresh-location": (f"{_KCA}/actions/refresh-location", "default"),
+    "alerts": ("/vehicles/{vin}/alerts", "default"),
+    "battery-status": ("/kca/car-adapter/v2/cars/{vin}/battery-status", "default"),
+    "charge-history": None,
+    "charge-mode": None,
+    "charge-schedule": ("/kcm/v1/vehicles/{vin}/ev/settings", "kcm-settings"),
+    "charges": (f"{_KCA}/charges", "default"),
+    "charging-settings": None,
+    "cockpit": (f"{_KCA}/cockpit", "default"),
+    "hvac-history": None,
+    "hvac-sessions": None,
+    "hvac-settings": (f"{_KCA}/hvac-settings", "default"),
+    "hvac-status": (f"{_KCA}/hvac-status", "default"),
+    "location": (f"{_KCA}/location", "default"),
+    "lock-status": None,
+    "notification-settings": None,
+    "pressure": None,
+    "res-state": None,
+    "soc-levels": ("/kcm/v1/vehicles/{vin}/ev/soc-levels", "default"),
+}
+
+
+def test_r5_endpoint_map_is_the_reviewed_one():
+    from renault_api.kamereon.models import _VEHICLE_ENDPOINTS
+    declared = {ep: None if v is None else (v.endpoint, v.mode)
+                for ep, v in _VEHICLE_ENDPOINTS["R5E1VE"].items()}
+    changed = {ep: (R5E1VE_MAP.get(ep, "<absent>"), declared.get(ep, "<absent>"))
+               for ep in R5E1VE_MAP.keys() | declared.keys() if R5E1VE_MAP.get(ep, 0) != declared.get(ep, 0)}
+    assert not changed, f"R5E1VE endpoint map changed (reviewed, now): {changed}"
+
+
+def test_requirements_in_pins_match_the_lock():
+    """A bump that edits requirements.in but not the hash-locked requirements.txt (or the reverse)
+    would pass every other gate while the image kept installing the old version."""
+    import re
+    from pathlib import Path
+    app = Path(__file__).resolve().parents[1] / "app"
+    pin = re.compile(r"^([A-Za-z0-9_.-]+)==([^\s\\;]+)", re.M)
+    norm = lambda n: re.sub(r"[-_.]+", "-", n).lower()   # noqa: E731
+    lock = {norm(n): v for n, v in pin.findall((app / "requirements.txt").read_text())}
+    src = [ln.strip() for ln in (app / "requirements.in").read_text().splitlines()
+           if ln.strip() and not ln.strip().startswith("#")]
+    assert all(pin.match(ln) for ln in src), f"requirements.in must pin every package with ==: {src}"
+    wanted = {norm(n): v for n, v in pin.findall("\n".join(src))}
+    assert wanted, "requirements.in has no pins"
+    assert {n: lock.get(n) for n in wanted} == wanted
