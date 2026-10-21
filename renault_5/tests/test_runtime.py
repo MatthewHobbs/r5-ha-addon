@@ -1743,7 +1743,7 @@ def test_ws_cmd_raises_on_unsuccessful_result():
             return {"id": self._last["id"], "type": "result",
                     "success": False, "error": {"message": "denied"}}
 
-    api = deploy._WS(None, WS(), "tok")
+    api = deploy._WS(WS(), "tok")
     with pytest.raises(RuntimeError):
         asyncio.run(api.dashboards())
 
