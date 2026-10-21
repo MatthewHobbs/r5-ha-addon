@@ -764,7 +764,7 @@ Quality + documentation pass.
 
 ## 0.6.0
 
-Review-panel P1/P2 follow-ups (reliability + supply-chain hygiene).
+Review follow-ups (reliability + supply-chain hygiene).
 
 - **Atomic state file** — `state.json` is written to a temp file then `os.replace()`d, so a
   kill mid-write never corrupts charge-session history.
@@ -782,7 +782,7 @@ Review-panel P1/P2 follow-ups (reliability + supply-chain hygiene).
 
 ## 0.5.0
 
-Review-panel fixes (security / privacy / reliability / QA) before first release.
+Review fixes (security / privacy / reliability / QA) before first release.
 
 - **Privacy: `debug_dump` hardened.** Dropped the location, contracts and notification-settings
   endpoints from the dump (location/contact/account PII, no diagnostic value); the redactor now
