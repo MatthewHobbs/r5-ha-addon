@@ -7,7 +7,7 @@ change a helper and silently break the matching sensor — the rest of the suite
 stubs that wouldn't notice. This loads a representative API response through the **library's
 own schemas** and asserts every field/method the poller depends on, so such a change fails CI
 instead of shipping a dead sensor. If this breaks after a renault-api bump, update the poller
-(and this contract) together. See CLAUDE.md, "Dependencies".
+(and this contract) together. See CONTRIBUTING.md, "Dependencies".
 """
 import renault_api.kamereon.schemas as schemas
 from renault_api.kamereon.enums import ChargeState, PlugState

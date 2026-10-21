@@ -2,10 +2,10 @@
 
 - **Repo:** r5-ha-addon
 - **Status:** Accepted (2026-10-03). I delegated the acceptance, and the other decisions in this port, to the session driving it, having accepted a290-ha-addon/ADR 0006 myself; this ADR states the same rule for r5.
-- **Context:** `release.yaml` publishes a release for any merge that moves `version` in `renault_5/config.yaml`, and the rule in `CLAUDE.md` was that every user-facing change moves it. I decided in a290-ha-addon/ADR 0006 that I want releases batched until I ask for one; r5 follows a290 and is never ahead of it (that ADR, row 5). a290-ha-addon/ADR 0006 holds the reasoning, the alternatives and five review rounds on the guard; I do not copy them here.
+- **Context:** `release.yaml` publishes a release for any merge that moves `version` in `renault_5/config.yaml`, and the rule in the contributor notes was that every user-facing change moves it. I decided in a290-ha-addon/ADR 0006 that I want releases batched until I ask for one; r5 follows a290 and is never ahead of it (that ADR, row 5). a290-ha-addon/ADR 0006 holds the reasoning, the alternatives and five review rounds on the guard; I do not copy them here.
 - **North star:** a release happens when I ask for one, and in no other way: no merge can publish a version, and the version on `main` always has its image.
 
-<!-- Format: claude-config docs/adr/0000-template.md, referenced at source rather than copied.
+<!-- Format: my ADR template, referenced at source rather than copied.
 The Decision table is the plan and is kept current; the rest is the dated record. -->
 
 ## Decision
@@ -14,7 +14,7 @@ The same rule as a290-ha-addon/ADR 0006. Ordinary PRs stop moving `version`: a u
 
 | # | Step | Owner | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| 1 | Take a290's guard and script verbatim, the `justfile` recipes and the `just ci` line, the Docs sync job's PyYAML install and both self-tests, and the `CLAUDE.md` rule | r5 | Done | This PR. Both self-tests were run in r5 and pass (41 and 11 cases). Mutation-tested here, not assumed from a290: removing the release-shape call from `main()`, removing the config write in `prepare_release.py`, and reversing the version-goes-up comparison each make a self-test fail, and restoring the files makes them pass again |
+| 1 | Take a290's guard and script verbatim, the `justfile` recipes and the `just ci` line, the Docs sync job's PyYAML install and both self-tests, and the contributor-notes rule | r5 | Done | This PR. Both self-tests were run in r5 and pass (41 and 11 cases). Mutation-tested here, not assumed from a290: removing the release-shape call from `main()`, removing the config write in `prepare_release.py`, and reversing the version-goes-up comparison each make a self-test fail, and restoring the files makes them pass again |
 | 2 | `release.yaml`: only a PR or push that actually moves the version may publish an image (a290-ha-addon/ADR 0006 row 8) | r5 | Done | r5 #133. `scripts/release_decision.py` is copied verbatim from a290 (`cmp`), with its self-test (15 cases) in the `justfile` recipe and the Docs sync job. r5's `release.yaml` has no `validated` job, so only the row-8 parts were ported, and every other line of the file is unchanged. Seven single-point mutants of the script each fail its self-test, including the old rule `publish = is_new`. The workflow's real decision step, extracted and run against a throwaway git remote: an ordinary change, a version moved back to a released one, a tag absent with the version unchanged, and a PR into a non-default branch each give `publish=false`; a release gives `publish=true`; an unreachable remote exits 1. Live check below |
 | 3 | First batched release: the renault-api 0.5.14 and pyjwt 2.15.1 bumps already sat under `## Unreleased` with no version change; cut as one release | r5 | Done | r5 #138, v1.8.15, 2026-10-04, cut because I asked for it. The PR changed exactly `renault_5/CHANGELOG.md` and `renault_5/config.yaml`, one line each, and the merge commit `d31a4e5` is signed and verified. The release path ran end to end; see the first Verification entry for the runs |
 
@@ -24,9 +24,9 @@ Status is one of **Open**, **Done**, **Blocked**, **Dropped**. A **Done** row ca
 
 r5's `release.yaml` builds and pushes the image on the PR that moves the version, and a required check blocks the merge until the image is pullable; on push to `main` it republishes and tags `v<version>`. That sequence is not the fault. The fault was a rule that made every merged change move the version, as in a290.
 
-r5 tracks two files the Supervisor reads from `main` besides the changelog and docs: `renault_5/config.yaml` and `renault_5/apparmor.txt`. It tracks no `build.*` file and no other `config.*` file (checked with `git ls-files`, 2026-10-03). The `CLAUDE.md` paragraph on what reaches users on merge applies to both.
+r5 tracks two files the Supervisor reads from `main` besides the changelog and docs: `renault_5/config.yaml` and `renault_5/apparmor.txt`. It tracks no `build.*` file and no other `config.*` file (checked with `git ls-files`, 2026-10-03). The contributor notes' paragraph on what reaches users on merge applies to both.
 
-`CLAUDE.md` used to say `main.py` carries a `VERSION` constant to keep in sync with `config.yaml`. It does not: `main.py` reads `R5_VERSION`, which the Dockerfile sets from `BUILD_VERSION`. The new rule drops that sentence.
+The contributor notes used to say `main.py` carries a `VERSION` constant to keep in sync with `config.yaml`. It does not: `main.py` reads `R5_VERSION`, which the Dockerfile sets from `BUILD_VERSION`. The new rule drops that sentence.
 
 ## Consequences
 
