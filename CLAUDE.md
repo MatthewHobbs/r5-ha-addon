@@ -50,9 +50,9 @@ ruff.toml / repository.yaml / README.md / LICENSE
 
 ## Dependencies
 
-`renault_5/app/requirements.txt` — all pinned, keep them pinned:
-`renault-api==0.5.13`, `paho-mqtt==2.1.0`, `PyYAML==6.0.3`. Pinned in BOTH
-`requirements.in` (the source) and `requirements.txt` (hash-locked) — bump both, or the next
+`renault_5/app/requirements.txt` pins the Python dependencies and keeps them pinned:
+`renault-api`, `paho-mqtt` and `PyYAML`, at the versions in those two files. Each is pinned in BOTH
+`requirements.in` (the source) and `requirements.txt` (hash-locked). Bump both, or the next
 regeneration silently reverts the one you missed.
 
 **renault-api comes through Dependabot, in its own PR; review each one.** `tests/test_api_contract.py`
