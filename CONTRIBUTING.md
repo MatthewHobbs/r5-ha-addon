@@ -101,7 +101,10 @@ What is known about the R5 endpoints:
 CI (`.github/workflows/ci.yaml`) runs **Lint, Docs sync, Parity with a290, Tests, Security and
 Build (amd64 sanity)**. Run them locally before pushing, not just ruff and pytest. macOS and Linux
 behave differently (the UI gate has caught Linux-only font truncations a local macOS run missed),
-so a green local partial run is not a green CI. `just ci` runs the static gates.
+so a green local partial run is not a green CI. `just ci` runs lint (ruff, yamllint, shellcheck),
+the PII and HA-minimum checks, the parity and docs-sync self-tests and the tests; hadolint, the HA
+add-on linter, Bandit, pip-audit, Trivy, the full parity comparison (`just parity`) and the image
+build run only in CI, or by hand with the commands below.
 
 ```sh
 # lint
@@ -124,8 +127,10 @@ home-directory paths). Keep test data synthetic. It is shared verbatim with a290
 
 ## UI gate
 
-The `ui-tests/` gate (its own `ui-tests.yaml` workflow, path-filtered to dashboards and
-ui-tests) is run with `ui-tests/run.sh`. It boots a throwaway HA container, seeds entities, and
+The `ui-tests/` gate (its own `ui-tests.yaml` workflow) is run with `ui-tests/run.sh`. The workflow
+runs on every PR and decides in-job whether to render: a change to the dashboards, `deploy.py`,
+`catalog.py`, `config.yaml`, `ui-tests/` or the workflow itself renders; anything else reports
+success with the render skipped. It boots a throwaway HA container, seeds entities, and
 uses Playwright across seven phone viewports to fail on any text truncation or
 `hui-error-card`. Run it whenever you touch `renault_5/dashboards/` or `ui-tests/`, with
 `UI_TESTS_DARK=1` to match CI. A light-theme run (no `UI_TESTS_DARK`) is the one that shows
@@ -142,7 +147,8 @@ on that PR confirms the combination before it is pinned. Keep them identical to 
 
 The gate renders against that stable pin and against the declared minimum (`homeassistant:` in
 `renault_5/config.yaml`, currently 2026.8.1), read from the manifest so the test cannot drift
-from the claim. `scripts/ha_minimum_check.py` (CI Lint job, `just ha-min`) fails if the minimum is
+from the claim. The stable leg warns (does not fail) while its pin lags current stable; the fix is
+merging Renovate's render-inputs PR. `scripts/ha_minimum_check.py` (CI Lint job, `just ha-min`) fails if the minimum is
 missing or newer than the `.1` of the month before current stable, read live from
 `version.home-assistant.io/stable.json`, or is not a published release on PyPI (exact spelling,
 no pre-releases). An unreachable PyPI fails the step too. The script is shared verbatim with
@@ -265,8 +271,9 @@ branches are **squash-merged** to `main` and deleted once merged.
   or above whatever `log_level` says. At DEBUG, renault-api (checked at 0.5.13; its Kamereon
   logging module is unchanged in 0.6.1) logs every Kamereon request URL and body, every full
   response body (unrounded GPS, the person/account record) and, for a locale it doesn't bundle,
-  the fetched API-key config, none of it redacted. The Gigya JWT is sent as a header and is not
-  logged. The clamp keeps those records from ever being created; `debug_dump` is the redacted
+  the fetched API-key config. The root log filter masks only the configured VIN, account id and
+  credentials in those lines; GPS and the response bodies pass through. The Gigya JWT is sent as
+  a header and is not logged. The clamp keeps those records from ever being created; `debug_dump` is the redacted
   route.
 - **Dashboards live under `renault_5/dashboards/`**, bundled into the image (`COPY
   dashboards/*.txt` in the Dockerfile) and read locally by `deploy.py` (no runtime
