@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-- **renault-api 0.6.1.** No change in what the R5 exposes (the endpoint map test confirms R5E1VE
-  is unchanged).
+- **renault-api 0.6.1.** No change in what the R5 exposes. Renault now requires two-factor
+  sign-in for some accounts; the add-on cannot complete it, and such an account shows as API Auth
+  Failure.
 - **Tile names are readable again on Home Assistant's light theme.** The standard dashboard keeps
   its dark sections whatever the theme, but on the light theme the cards inside drew dark text on
   them, so names such as Battery Level were nearly invisible. The sections now set light text.
