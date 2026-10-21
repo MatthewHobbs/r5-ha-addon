@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Security: updated aiohttp and multidict** (and yarl alongside them) to versions that clear
+  published security advisories in the previous ones.
+
 ## 1.8.15
 
 - **Updated to renault-api 0.5.14.** The library's endpoint table for the R5 (`R5E1VE`) is
