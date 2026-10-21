@@ -148,12 +148,7 @@ pending	.github/workflows/ci.yaml	both	re:BUILD_FROM|FROM ghcr.io/home-assistant
 local	.github/workflows/ui-tests.yaml	both	hunk:NOT the prose in there	21	the paths-filter comment names each repo's own prose docs (a290 USER-GUIDE.md and INSTALLATION.md, r5 CUSTOMISING.md) and its own dashboards/ contents; the filter patterns themselves are identical
 local	.github/workflows/release.yaml	both	re:^# `v<version>` being absent \(scripts/release_decision\.py, (a290-ha-addon/)?ADR 0006 row 8\)\. Tag-absent alone is not$	2	each repo cites ADR 0006 from its own side: r5 writes a290-ha-addon/ADR 0006, which re-wraps that comment line
 local	.github/workflows/release.yaml	both	re:check-regexp: '\^\(Lint\|Tests\|Security\|Build \\\(amd64 sanity\\\)\|Docs sync\|Parity with (r5|a290)\)\$'	2	each repo's `validated` job waits for its own parity job by name: a290 waits for `Parity with r5`, r5 for `Parity with a290`
-local	.github/workflows/renault-api-watch.yaml	r5	re:Ported from the A290 twin	1	r5's provenance note pointing at a290
-pending	.github/workflows/renault-api-watch.yaml	both	re:cron:	2	schedule comment wording. Target: converge, either way
-pending	.github/workflows/renault-api-watch.yaml	both	hunk:sort -V ranks	8	a290's comment also covers compound versions such as 0.5.14rc1.dev2. Target: port a290's comment to r5
-pending	.github/workflows/renault-api-watch.yaml	a290	re:ha_cadence_watch\.py|--paginate, or only|a failed listing must fail	3	a290 explains --paginate and the failure mode; r5 has the same code without the comment. Target: port the comment to r5
 pending	.github/renovate.json	both	re:"Strict vX\.Y\.Z	4	rule descriptions worded differently for the same strict-tag rule. Target: converge, either way
-pending	.github/templates/renault-api-release.md	both	*	36	a290's issue template carries the upstream #2254/#2255 notes, r5's lists what test_api_contract covers (audit H-B3); the mirror direction differs (H-D8). Target: merge the model-agnostic parts both ways
 pending	.gitignore	both	*	20	section order differs; a290 ignores .bak* backups of *.local.json; r5 ignores a local reference/ checkout. Target: port .bak* to r5, one section order
 pending	.trivyignore	r5	*	3	r5 still ignores AVD-DS-0026 (no HEALTHCHECK) although its Dockerfile has one (audit H-D2). Target: delete from r5
 pending	.yamllint	a290	*	4	a290 exempts dashboards/ because it bundles upstream YAML packages there. Target: follows the Packages/Templates decision
