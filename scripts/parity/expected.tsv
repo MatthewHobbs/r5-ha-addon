@@ -105,10 +105,6 @@ model	alpine_a290/app/deploy.py	both	py:_CHARGE_TARGET_REC	4	"Alpine's recommend
 pending	alpine_a290/app/deploy.py	both	py:_fetch_dashboard,_REFRESH_LOCATION_BUTTON,_references,_drop_cards_referencing,_deploy_one,run_deploy	35	comment wording and the unrelated bubble/standard injection branches each add below the shared pruning logic. Target: converge wording
 pending	alpine_a290/app/deploy.py	both	py:_WS	2	one comment. Target: converge, either way
 
-local	ui-tests/completeness_fixtures.py	both	py:<docstring>	18	each docstring names its own provenance: a290's cites its own ADR 0003 row 6 directly, r5's cites porting from the a290 twin (PR #182, commit 5f2efb4) and names its own pre-change SHA
-local	ui-tests/completeness_fixtures.py	both	py:PRE_CHANGE_REF	6	the pre-change reference comment and SHA are each repo's own pinned pre-port commit
-pending	ui-tests/completeness_fixtures.py	both	py:Runner	6	a290 builds the navigation log only when the tree under test has one (`hasattr(mod, "_NavLog")`); r5 always builds it, both trees under test being r5's own. Target: converge wording
-pending	ui-tests/completeness_fixtures.py	both	py:main	2	the same NBSP/narrow-NBSP whitespace normalised as an escape sequence on a290, a literal Unicode character on r5; no behaviour differs. Target: converge to one representation, either way
 # ---------------------------------------------------------------- dashboards
 pending	alpine_a290/dashboards/front-end.txt	both	re:sensor\.(a290_)?test_	32	a290's test-mode package is namespaced a290_test_*; r5's is bare test_* (audit H-C4). Target: port to r5 with Packages/a290_test.yaml
 pending	alpine_a290/dashboards/front-end.txt	r5	hunk:name: Cabin Temp	14	r5's Cabin Temp card; the A290 never returns cabin temperature. Target: follows the cabin-temperature decision
@@ -151,13 +147,11 @@ local	justfile	r5	re:twin="\$tmp/a290\-ha\-addon"	1	each repo names the OTHER as
 local	justfile	r5	re:git\ clone\ \-\-quiet\ \-\-depth\ 1\ https://github\.com/MatthewHobbs/a290\-ha\-	1	each repo names the OTHER as the twin its parity job checks out and compares against
 pending	.github/workflows/ci.yaml	both	re:uses: \S+@[0-9a-f]{40} +#	28	pinned-action comments: two spaces on a290, one on r5, and r5 names exact tags (v3.1.1, v2.21.1) where a290 says v3, v2. The house rule wants an exact upstream tag. Target: r5's exact tags into a290, one spacing in both
 pending	.github/workflows/ci.yaml	both	hunk:declared minimum HA must	2	comment wording. Target: converge, either way
-pending	.github/workflows/ci.yaml	both	hunk:optional test package|ported template package	2	comment follows the bundled-template difference. Target: follows the Templates decision
 pending	.github/workflows/ci.yaml	both	hunk:a VIN in a test fixture|pair of public add-on repos	5	PII-step comment wording. Target: converge, either way
 pending	.github/workflows/ci.yaml	both	re:BUILD_FROM|FROM ghcr.io/home-assistant/base	4	the same comment on the build step, in a different place. Target: one place in both
 local	.github/workflows/ui-tests.yaml	both	hunk:NOT the prose in there	21	the paths-filter comment names each repo's own prose docs (a290 USER-GUIDE.md and INSTALLATION.md, r5 CUSTOMISING.md) and its own dashboards/ contents; the filter patterns themselves are identical
 local	.github/workflows/release.yaml	both	re:^# `v<version>` being absent \(scripts/release_decision\.py, (a290-ha-addon/)?ADR 0006 row 8\)\. Tag-absent alone is not$	2	each repo cites ADR 0006 from its own side: r5 writes a290-ha-addon/ADR 0006, which re-wraps that comment line
 local	.github/workflows/release.yaml	both	re:check-regexp: '\^\(Lint\|Tests\|Security\|Build \\\(amd64 sanity\\\)\|Docs sync\|Parity with (r5|a290)\)\$'	2	each repo's `validated` job waits for its own parity job by name: a290 waits for `Parity with r5`, r5 for `Parity with a290`
-pending	.github/workflows/refresh-screenshots.yaml	both	re:ui-tests/screenshots/	10	screenshot file names carry each repo's dashboard slugs (alpine-standard/alpine-bubble vs renault-5/renault-5-bubble), in the cp lines and the pop-up guard. Target: follows the naming decision (ADR 0001 row 13)
 local	.github/workflows/renault-api-watch.yaml	r5	re:Ported from the A290 twin	1	r5's provenance note pointing at a290
 pending	.github/workflows/renault-api-watch.yaml	both	re:cron:	2	schedule comment wording. Target: converge, either way
 pending	.github/workflows/renault-api-watch.yaml	both	hunk:sort -V ranks	8	a290's comment also covers compound versions such as 0.5.14rc1.dev2. Target: port a290's comment to r5
@@ -167,7 +161,6 @@ pending	.github/templates/renault-api-release.md	both	*	36	a290's issue template
 pending	.gitignore	both	*	20	section order differs; a290 ignores .bak* backups of settings.local.json; r5 ignores a local reference/ checkout. Target: port .bak* to r5, one section order
 pending	.trivyignore	r5	*	3	r5 still ignores AVD-DS-0026 (no HEALTHCHECK) although its Dockerfile has one (audit H-D2). Target: delete from r5
 pending	.yamllint	a290	*	4	a290 exempts dashboards/ because it bundles upstream YAML packages there. Target: follows the Packages/Templates decision
-pending	scripts/docs_cite_ignore.txt	both	*	3	the comment follows the bundled-template difference. Target: follows the Templates decision
 
 # --- UI gate coverage: dispatching-off pass and all Bubble pop-ups
 # Listed before the whole-file harness entries below so these lines are taken here, not there.

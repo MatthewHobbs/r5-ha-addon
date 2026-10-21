@@ -35,7 +35,7 @@ Mushroom tile labels clipping on a phone.
    opens each by hash navigation, waits until **that** pop-up (matched to its hash through the
    `bubble-card` that renders it) is open on screen showing its header `name`, scans it with the
    same truncation check, and screenshots it as `<dashboard>__popup_<hash>__<device>.png`
-   (`#r5-charging` keeps its `smart_charging` name, which the drift workflow reads). Findings
+   (`#r5-charging` keeps its `smart_charging` name). Findings
    inside a pop-up are reported with its hash. **Known limit:** the scan starts once the pop-up's
    header is on screen and, for a pop-up whose manifest names expected labels, once those are laid
    out; a pop-up that names none gets no completeness signal before its scan, so a card that paints
@@ -66,7 +66,7 @@ Mushroom tile labels clipping on a phone.
    page, and then one on a freshly loaded document in the same context, because a retry on a
    document where nothing opens is not an independent try. That second chance is never silent:
    it prints `[popup reload]` and the pass summary counts the devices that needed it. A pop-up
-   still unscanned after that is reported, its committed screenshot is kept rather than
+   still unscanned after that is reported, its previous screenshot file is kept rather than
    overwritten by the menu behind it, and **that device fails for that pop-up**: a truncation is
    specific to a width, so a scan at 430px says nothing about 360px. A pop-up that also failed
    on a fresh document on two devices is not reloaded on later ones, which would only multiply the
@@ -136,8 +136,9 @@ Mushroom tile labels clipping on a phone.
 
 `devices.json` — the top mobile devices for 2024-25 plus the narrow/wide bounds (CSS
 viewport width is the truncation-critical dimension):
-iPhone 15 Pro Max / Pro / 15 / SE, Pixel 8 / 7a, Galaxy S24 / S23 / A54, and a 360px Android
-narrow bound.
+iPhone 15 Pro Max / Pro / SE, Pixel 8, Galaxy S24, Galaxy A54 and a 360px Android narrow
+bound: one device per width (430, 393, 375, 412, 360), plus the A54's fractional 2.625 scale
+and the 640px-high narrow bound at 360px, where sub-pixel truncation shows first.
 
 ## Run locally
 
@@ -150,30 +151,3 @@ PYTHON=/path/to/venv/bin/python bash ui-tests/run.sh
 
 Screenshots land in `ui-tests/screenshots/` (git-ignored; uploaded as a CI artifact). In CI
 this is the **UI Tests** workflow, which runs whenever the dashboards or this harness change.
-
-## Docs-screenshot drift report
-
-On a PR, a trusted `workflow_run` companion (`.github/workflows/refresh-screenshots.yaml`)
-downloads the rendered artifact, resizes the phone shots, and reports whether they differ from
-the committed `docs/screenshots/`. If they do, the regenerated PNGs are attached to the run as
-the **regenerated-screenshots** artifact; download and commit them yourself if the change is
-real. It writes a job summary and nothing else.
-
-**It does not commit, and it never fails the build.** Both are deliberate.
-
-It used to commit refreshed PNGs to the PR head via a GitHub App token, and that raced whoever
-was working on the PR: push → render differs → bot commits → head moves → your push is rejected
-non-fast-forward, or the `CLEAN` verdict you just read is invalidated and the merge refused. On
-the A290 twin that rejected three pushes in one session, twice mid-merge, and moved the head
-five times across the two repos. The `[refresh-shots]` guard only stopped the bot re-triggering
-*itself*; it did nothing about a human merging that commit and pushing again. CI writing to a
-branch a human is working on **is** the race, so CI no longer writes to it — the App token and
-its `Contents: write` scope are gone from the workflow entirely.
-
-It reports rather than failing because **the render is not yet reproducible**. Measured on the
-A290 twin: two consecutive runs of identical code against the same seed produced 10 of 30
-screenshots differing, two at different page *dimensions*. Freezing the CSS animations
-(`animations="disabled"` plus `reduced_motion`) and anchoring the seeded timestamps to run time
-fixed the fast oscillation; the remaining layout settling must be solved before this can become
-a required drift gate. **Treat the committed screenshots as UNTESTED** — a plausible picture,
-not a verified one.
