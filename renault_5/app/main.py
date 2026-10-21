@@ -75,7 +75,7 @@ mqtt.configure(catalog)
 
 LOG = logging.getLogger("renault_5")
 
-STATE_FILE = os.environ.get("R5_STATE_FILE", "/data/state.json")
+STATE_FILE = "/data/state.json"
 # Decimal places the published GPS is rounded to before it goes on the retained MQTT topic
 # (privacy — coarsens an otherwise full-precision home location). 4 dp ≈ 11 m. Default 4.
 # Tolerate the option being absent on an upgraded install (bashio can export "" or "null").

@@ -20,7 +20,7 @@ import yaml
 # _charger_cards — optional standard-dashboard "Smart Charging" block (Mushroom cards)
 # --------------------------------------------------------------------------- #
 def test_charger_cards_none_when_no_entities_set(monkeypatch):
-    for env, _ in deploy._CHARGER_ENTITIES:
+    for env in deploy._CHARGER_ENTITIES:
         monkeypatch.delenv(env, raising=False)
     assert deploy._charger_cards() is None
 
@@ -92,7 +92,7 @@ def _v4_targets(card):
 
 
 def test_no_generated_template_card_targets_mushroom_v4_parts(monkeypatch):
-    for env, _ in deploy._CHARGER_ENTITIES:
+    for env in deploy._CHARGER_ENTITIES:
         monkeypatch.setenv(env, "binary_sensor.disp" if env == "R5_CHARGER_DISPATCHING" else "switch.x")
     cards = list(_template_cards([deploy._charger_cards(), deploy._charger_popup()]))
     assert len(cards) == 2                      # standard badge + bubble pop-up badge
@@ -124,7 +124,7 @@ def test_fetch_dashboard_adds_charger_block_when_configured(tmp_path, monkeypatc
 
 
 def test_fetch_dashboard_no_charger_block_when_unset(tmp_path, monkeypatch):
-    for env, _ in deploy._CHARGER_ENTITIES:
+    for env in deploy._CHARGER_ENTITIES:
         monkeypatch.delenv(env, raising=False)
     (tmp_path / "front-end.txt").write_text("- title: Home\n  cards: []\n", encoding="utf-8")
     monkeypatch.setattr(deploy, "DASHBOARD_DIR", str(tmp_path))
@@ -159,7 +159,7 @@ def test_add_cards_cards_layout():
 # bubble dashboard — Smart Charging pop-up + main-menu restructure
 # --------------------------------------------------------------------------- #
 def test_charger_popup_none_when_unset(monkeypatch):
-    for env, _ in deploy._CHARGER_ENTITIES:
+    for env in deploy._CHARGER_ENTITIES:
         monkeypatch.delenv(env, raising=False)
     assert deploy._charger_popup() is None
 
@@ -246,7 +246,7 @@ def test_inject_bubble_charging_button_popup_and_location_full_width(monkeypatch
 
 
 def test_inject_bubble_charging_noop_when_unset(monkeypatch):
-    for env, _ in deploy._CHARGER_ENTITIES:
+    for env in deploy._CHARGER_ENTITIES:
         monkeypatch.delenv(env, raising=False)
     view = _bubble_menu_view()
     deploy._inject_bubble_charging(view)
@@ -315,7 +315,7 @@ def test_fetch_dashboard_keeps_refresh_location_tile_only_when_its_button_exists
     button.r5_refresh_location. Core v0.17.0 withholds that button by default, so a default
     deploy must not ship a tile that presses an entity which does not exist. Run against the
     REAL bundled dashboards, and assert that exactly one card goes - not the stack it sits in."""
-    for env, _ in deploy._CHARGER_ENTITIES:
+    for env in deploy._CHARGER_ENTITIES:
         monkeypatch.delenv(env, raising=False)
     monkeypatch.setattr(deploy, "DASHBOARD_DIR", _BUNDLED)
     bundled = yaml.safe_load(deploy._read_dashboard(style))
@@ -337,3 +337,11 @@ def test_deploy_imports_without_the_core():
     code = f"import sys; sys.modules['renault_mqtt'] = None; sys.path.insert(0, {app!r}); import deploy"
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+def test_charger_slots_keep_their_order():
+    """Both builders unpack _CHARGER_ENTITIES by position; a reorder would swap two tiles'
+    names and icons without changing any entity set."""
+    assert deploy._CHARGER_ENTITIES == (
+        "R5_CHARGER_SMART_CHARGE", "R5_CHARGER_BUMP_CHARGE", "R5_CHARGER_TARGET_SOC",
+        "R5_CHARGER_TARGET_TIME", "R5_CHARGER_DISPATCHING")

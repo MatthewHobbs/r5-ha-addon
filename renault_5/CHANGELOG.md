@@ -28,6 +28,8 @@
   `front-end.txt` / `front-end-bubble.txt` again.
 - **Security: updated aiohttp and multidict** (and yarl alongside them) to versions that clear
   published security advisories in the previous ones.
+- **The image no longer ships the base image's unused `tempio` binary.** It used to be rebuilt from
+  source to clear scanner findings; nothing uses it, so it is now removed. No change in behaviour.
 
 ## 1.8.15
 
