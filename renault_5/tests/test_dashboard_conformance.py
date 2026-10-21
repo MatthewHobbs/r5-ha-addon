@@ -333,7 +333,6 @@ def test_ui_gate_seeds_what_the_add_on_publishes(published) -> None:
     )
 
 
-
 def _doc_files() -> list[Path]:
     """The prose that tells people which entities to build automations on."""
     return sorted({*_REPO.glob("*/DOCS.md"), *_REPO.glob("*/README.md"), *_REPO.glob("*/dashboards/*.md"),
@@ -397,6 +396,7 @@ def test_unknown_documented_entity_is_reported(published) -> None:
         "sensor.r5_battery_levl",
     ]
     assert _unknown_doc_ids(f"`{real}`", published) == []
+
 
 # --- Visibility without the optional test package -------------------------------------------
 # The frontend's checkStateCondition reads a missing entity as "unknown". A condition needing
