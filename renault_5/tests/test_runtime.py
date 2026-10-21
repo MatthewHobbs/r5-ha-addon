@@ -782,6 +782,22 @@ def test_set_soc_rejects_min_not_below_target(monkeypatch, caplog, car_target):
     assert any("must be below target" in r.getMessage() for r in caplog.records)
 
 
+
+def test_set_soc_rejects_target_not_above_car_min(monkeypatch, caplog):
+    # The pair check from the target side. The sliders' ranges cannot overlap, so this needs the car
+    # to report a minimum above the slider range (set outside this add-on).
+    class HighMin(_SocVehicle):
+        async def get_battery_soc(self):
+            return _obj(socTarget=80, socMin=_TGT_LO + 10)
+
+    v = HighMin()
+    _soc_login(monkeypatch, v)
+    with caplog.at_level(logging.WARNING, logger=main.LOG.name):
+        asyncio.run(main.run_command("soc_max_target", str(_TGT_LO)))
+    assert v.soc_set is None
+    assert any("must be below target" in r.getMessage() for r in caplog.records)
+
+
 def test_set_soc_bails_when_opposing_limit_missing(monkeypatch):
     class _NoLimits(_SocVehicle):
         async def get_battery_soc(self):
@@ -1601,10 +1617,28 @@ def test_validate_url_path_rejects_bad(bad):
         deploy._validate_url_path(bad)
 
 
-def test_run_deploy_skips_reserved_url_path(monkeypatch):
-    # Reaches validation (token present) and returns before any WS connection / save.
+def _record_sessions(monkeypatch):
+    # run_deploy swallows every error, so "nothing happened" is only visible as "no session opened".
+    opened = []
+    monkeypatch.setattr(deploy.aiohttp, "ClientSession", lambda *a, **k: opened.append(1))
+    return opened
+
+
+def _warnings(caplog):
+    return [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+# _deploy_env sets a token, so in each early-exit test below deleting the guard under test reaches
+# the session instead of stopping at a later guard.
+def test_run_deploy_skips_reserved_url_path(monkeypatch, caplog):
+    # Must return before any WS connection / save: deploying to "energy" would overwrite a built-in
+    # HA panel.
     _deploy_env(monkeypatch, R5_DASHBOARD_URL_PATH="energy")
-    asyncio.run(deploy.run_deploy())
+    opened = _record_sessions(monkeypatch)
+    with caplog.at_level(logging.DEBUG):
+        asyncio.run(deploy.run_deploy())
+    assert opened == []
+    assert any("auto-deploy skipped" in m for m in _warnings(caplog))
 
 
 def test_deploy_targets():
@@ -1652,37 +1686,31 @@ def test_run_deploy_leaves_existing_dashboard_alone(monkeypatch):
     assert ws.created_dashboard is None and ws.saved is None   # left intact (no redeploy)
 
 
-def test_run_deploy_noop_when_disabled(monkeypatch):
+def test_run_deploy_noop_when_disabled(monkeypatch, caplog):
     _deploy_env(monkeypatch, R5_DEPLOY_DASHBOARD="none")
-
-    class Explode:
-        def __init__(self, *a, **k):
-            raise AssertionError("ClientSession must not be constructed when disabled")
-
-    monkeypatch.setattr(deploy.aiohttp, "ClientSession", Explode)
-    asyncio.run(deploy.run_deploy())                 # returns immediately
+    opened = _record_sessions(monkeypatch)
+    with caplog.at_level(logging.DEBUG):
+        asyncio.run(deploy.run_deploy())
+    assert opened == []
+    assert _warnings(caplog) == []     # "none" is a choice, not an unrecognised style
 
 
-def test_run_deploy_skips_unknown_style(monkeypatch):
+def test_run_deploy_skips_unknown_style(monkeypatch, caplog):
     _deploy_env(monkeypatch, R5_DEPLOY_DASHBOARD="fancy")
-
-    class Explode:
-        def __init__(self, *a, **k):
-            raise AssertionError("must not connect for an unknown style")
-
-    monkeypatch.setattr(deploy.aiohttp, "ClientSession", Explode)
-    asyncio.run(deploy.run_deploy())
+    opened = _record_sessions(monkeypatch)
+    with caplog.at_level(logging.DEBUG):
+        asyncio.run(deploy.run_deploy())
+    assert opened == []
+    assert any("'fancy' not recognised" in m for m in _warnings(caplog))
 
 
-def test_run_deploy_skips_without_supervisor_token(monkeypatch):
+def test_run_deploy_skips_without_supervisor_token(monkeypatch, caplog):
     _deploy_env(monkeypatch, SUPERVISOR_TOKEN=None)
-
-    class Explode:
-        def __init__(self, *a, **k):
-            raise AssertionError("must not connect without a token")
-
-    monkeypatch.setattr(deploy.aiohttp, "ClientSession", Explode)
-    asyncio.run(deploy.run_deploy())
+    opened = _record_sessions(monkeypatch)
+    with caplog.at_level(logging.DEBUG):
+        asyncio.run(deploy.run_deploy())
+    assert opened == []
+    assert any("No SUPERVISOR_TOKEN" in m for m in _warnings(caplog))
 
 
 def test_run_deploy_swallows_runtime_errors(monkeypatch):
