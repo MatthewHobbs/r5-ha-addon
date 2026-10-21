@@ -21,13 +21,13 @@ secrets.yaml
 htmlcov/
 .pytest_cache/
 
-# Personal/local settings only
-*.local.json
-
 # Editor / IDE
 .vscode/
 .idea/
 
 # Local `just ci` virtualenv (uv)
 .venv/
-.adv-review/
+
+# Machine-local settings files (local tool settings and the like) never belong in the repo.
+*.local.json
+*.local.json.bak*

@@ -2,10 +2,10 @@
 
 - **Repo:** r5-ha-addon
 - **Status:** Accepted (2026-10-04). I chose Option A of the RFC on the day it was raised.
-- **Context:** r5's `release.yaml` tagged v1.8.15 two minutes after the merge while the same commit's UI-gate render was still running for twelve more, and the UI gate is not a required PR check. a290-ha-addon fixed the same thing in its ADR 0005 after v1.28.11; r5 follows a290 and is never ahead of it. Proposed as [the RFC "r5-ha-addon: Release waits for the UI gate"](https://(private link removed)), which carries the options and the verification plan.
+- **Context:** r5's `release.yaml` tagged v1.8.15 two minutes after the merge while the same commit's UI-gate render was still running for twelve more, and the UI gate is not a required PR check. a290-ha-addon fixed the same thing in its ADR 0005 after v1.28.11; r5 follows a290 and is never ahead of it. Proposed as the RFC "r5-ha-addon: Release waits for the UI gate", indexed in my RFC index, which carries the options and the verification plan.
 - **North star:** a release cannot publish, and a PR cannot merge, ahead of a UI-gate verdict on that exact commit, whether or not the UI gate was relevant to what changed.
 
-<!-- Format: the owner's config repo docs/adr/0000-template.md, referenced at source rather than copied.
+<!-- Format: my ADR template, referenced at source rather than copied.
 The Decision table is the plan and is kept current; the rest is the dated record. -->
 
 ## Decision
@@ -53,6 +53,6 @@ Copied from the RFC at decision time.
 
 ## References
 
-- [RFC: r5-ha-addon: Release waits for the UI gate](https://(private link removed))
+- RFC: r5-ha-addon: Release waits for the UI gate (in my RFC index)
 - a290-ha-addon/ADR 0005, the design this ports
 - [ADR 0001](0001-release-on-request.md), which this builds on: a release happens when I ask for one
