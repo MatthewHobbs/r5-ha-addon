@@ -12,6 +12,10 @@
   look for `MQTT broker … unreachable — retrying` in the log.
 - **Logs are safer**: error tracebacks are redacted like other log lines, and the optional debug
   dump masks more spellings of location and number-plate keys, and the car's nickname.
+- **Charge limits outside the sliders' range are no longer sent to the car.** A value published
+  to `renault_5/cmd/soc_min_target` or `soc_max_target` by an automation or another MQTT client is
+  refused with a warning when it is outside the slider's range (15–45%, 55–100%, in steps of 5), not
+  a whole number, or would leave the minimum at or above the target. The sliders are unchanged.
 - **Security: updated aiohttp and multidict** (and yarl alongside them) to versions that clear
   published security advisories in the previous ones.
 

@@ -26,6 +26,7 @@ import asyncio
 import inspect
 import json
 import logging
+import math
 import os
 import signal
 import sys
@@ -349,6 +350,8 @@ LOCATION_CMDS = {oid.removeprefix(OBJ_PREFIX) for oid, vals in ACTION_BUTTONS.it
 # Command-topic suffixes that map to writable numbers, and each one's set_battery_soc role.
 NUMBER_CMDS = {oid.removeprefix(OBJ_PREFIX) for oid in NUMBERS}
 _NUMBER_ROLE = {oid.removeprefix(OBJ_PREFIX): role for oid, role in NUMBER_ROLES.items()}
+# The sliders' (min, max, step), enforced on the command too: any MQTT client can publish to the topic.
+NUMBER_RANGES = {oid.removeprefix(OBJ_PREFIX): (lo, hi, step) for oid, (_n, _i, lo, hi, step) in NUMBERS.items()}
 
 _soc_lock = None
 _soc_lock_loop = None
@@ -370,9 +373,18 @@ async def set_soc_level(which, payload):
     opposing slider's current value is read back first and re-sent unchanged. Serialised so
     adjusting both sliders in quick succession can't interleave and clobber a change."""
     try:
-        value = int(float(payload))
+        number = float(payload)
     except (TypeError, ValueError):
         LOG.warning("Ignoring non-numeric %s value: %r", which, payload)
+        return
+    # isfinite first: int(inf) raises OverflowError, outside the except above.
+    if not math.isfinite(number) or not number.is_integer():
+        LOG.warning("Ignoring %s value %r: not a whole number", which, payload)
+        return
+    value = int(number)
+    lo, hi, step = NUMBER_RANGES[which]
+    if not lo <= value <= hi or (value - lo) % step:
+        LOG.warning("Ignoring %s=%s: not %s-%s in steps of %s", which, value, lo, hi, step)
         return
     locale = cfg("R5_LOCALE", "en_GB")
     async with _soc_lock_get():
@@ -387,6 +399,10 @@ async def set_soc_level(which, payload):
                 if new_min is None or new_target is None:
                     LOG.error("Cannot set %s: current limits unavailable (min=%s, target=%s)",
                               which, cur_min, cur_target)
+                    return
+                if int(new_min) >= int(new_target):
+                    LOG.warning("Ignoring %s=%s: minimum %s%% must be below target %s%%",
+                                which, value, new_min, new_target)
                     return
                 await vehicle.set_battery_soc(min=int(new_min), target=int(new_target))
             LOG.info("Set charge limits: min=%s%%, target=%s%%", new_min, new_target)

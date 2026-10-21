@@ -82,7 +82,7 @@ pending	alpine_a290/app/catalog.py	both	py:DATA_GATED_SENSORS	10	comment wording
 # ---------------------------------------------------------------- main.py
 model	alpine_a290/app/main.py	both	py:<docstring>	27	each docstring states its own car's platform caveats, and r5's describes itself as Topolino65's data layer. B2 shrinks main.py to configuration
 pending	alpine_a290/app/main.py	both	py:<imports>	2	NUMBER_ROLES is r5's legacy role table; PESSIMISTIC_ENDPOINTS is a290's hvac-settings guard (both now import time: a290 for #157's monotonic clock). Target: follows those two entries
-pending	alpine_a290/app/main.py	both	py:_P,LOCATION_CMDS,NUMBER_CMDS	16	a290 strips the object-id prefix with obj[_P:]; r5 uses str.removeprefix(OBJ_PREFIX), the better form (audit P-D5). Target: port removeprefix to a290
+pending	alpine_a290/app/main.py	both	py:_P,LOCATION_CMDS,NUMBER_CMDS,NUMBER_RANGES	18	a290 strips the object-id prefix with obj[_P:]; r5 uses str.removeprefix(OBJ_PREFIX), the better form (audit P-D5). Target: port removeprefix to a290
 pending	alpine_a290/app/main.py	both	py:VERSION,CHARGE_STATUS_LABELS,RHD_LOCALES,MILES_LOCALES,PLUG_KM_DELTA,PLUG_SOC_DROP,PLUG_MIN_AGE,PLUG_MAX_AGE,setup_logging,API_TIMEOUT,start_health_server,save_state	26	comment and docstring wording only, plus an f-string vs concatenation in save_state; no behaviour differs. Target: converge when B1 moves this code into the core, or either way when touched
 pending	alpine_a290/app/main.py	both	py:freshness_fields	12	docstring wording (a290 cites its v1.24.0 history, r5 adds the parked-car note). Target: B1 moves freshness_fields into the core
 pending	alpine_a290/app/main.py	both	py:VehicleSession	16	docstring and comment wording only. Target: B1 moves VehicleSession into the core

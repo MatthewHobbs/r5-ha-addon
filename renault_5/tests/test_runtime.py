@@ -724,6 +724,80 @@ def test_set_soc_ignores_non_numeric(monkeypatch):
     assert v.soc_set is None             # never written
 
 
+# Bounds are read from the catalog so the test follows the sliders, not a copy of their literals.
+_MIN_LO, _MIN_HI = main.NUMBERS["r5_soc_min_target"][2:4]
+_TGT_LO, _TGT_HI = main.NUMBERS["r5_soc_max_target"][2:4]
+
+
+@pytest.mark.parametrize("cmd,payload", [
+    ("soc_max_target", str(_TGT_HI + 1)),
+    ("soc_max_target", str(_TGT_LO - 1)),
+    ("soc_max_target", "500"),
+    ("soc_max_target", "-5"),
+    ("soc_max_target", "0"),
+    ("soc_min_target", str(_MIN_HI + 1)),
+    ("soc_min_target", str(_MIN_LO - 1)),
+    ("soc_max_target", "inf"),
+    ("soc_max_target", "-inf"),
+    ("soc_min_target", "nan"),
+    ("soc_min_target", "45.9"),     # fractional: would truncate to an in-range 45
+    ("soc_min_target", "17"),       # in range, off the slider's step of 5
+    ("soc_max_target", "57"),
+])
+def test_set_soc_rejects_out_of_range_or_non_finite(monkeypatch, caplog, cmd, payload):
+    v = _SocVehicle()
+    _soc_login(monkeypatch, v)
+    with caplog.at_level(logging.WARNING, logger=main.LOG.name):
+        asyncio.run(main.run_command(cmd, payload))
+    assert v.soc_set is None             # nothing sent to the car
+    assert any(r.levelno == logging.WARNING and cmd in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize("cmd,payload,expected", [
+    ("soc_max_target", str(_TGT_LO), (20, _TGT_LO)),
+    ("soc_max_target", str(_TGT_HI), (20, _TGT_HI)),
+    ("soc_min_target", str(_MIN_LO), (_MIN_LO, 80)),
+    ("soc_min_target", str(_MIN_HI), (_MIN_HI, 80)),
+])
+def test_set_soc_accepts_range_edges(monkeypatch, cmd, payload, expected):
+    v = _SocVehicle()
+    _soc_login(monkeypatch, v)
+    asyncio.run(main.run_command(cmd, payload))
+    assert v.soc_set == expected
+
+
+@pytest.mark.parametrize("car_target", [_MIN_HI - 5, _MIN_HI])   # below, and equal (the >= edge)
+def test_set_soc_rejects_min_not_below_target(monkeypatch, caplog, car_target):
+    # In range on its own, but the car's current target (set elsewhere, e.g. the My Renault app)
+    # is not above it, so the pair is invalid.
+    class LowTarget(_SocVehicle):
+        async def get_battery_soc(self):
+            return _obj(socTarget=car_target, socMin=_MIN_LO)
+
+    v = LowTarget()
+    _soc_login(monkeypatch, v)
+    with caplog.at_level(logging.WARNING, logger=main.LOG.name):
+        asyncio.run(main.run_command("soc_min_target", str(_MIN_HI)))
+    assert v.soc_set is None
+    assert any("must be below target" in r.getMessage() for r in caplog.records)
+
+
+
+def test_set_soc_rejects_target_not_above_car_min(monkeypatch, caplog):
+    # The pair check from the target side. The sliders' ranges cannot overlap, so this needs the car
+    # to report a minimum above the slider range (set outside this add-on).
+    class HighMin(_SocVehicle):
+        async def get_battery_soc(self):
+            return _obj(socTarget=80, socMin=_TGT_LO + 10)
+
+    v = HighMin()
+    _soc_login(monkeypatch, v)
+    with caplog.at_level(logging.WARNING, logger=main.LOG.name):
+        asyncio.run(main.run_command("soc_max_target", str(_TGT_LO)))
+    assert v.soc_set is None
+    assert any("must be below target" in r.getMessage() for r in caplog.records)
+
+
 def test_set_soc_bails_when_opposing_limit_missing(monkeypatch):
     class _NoLimits(_SocVehicle):
         async def get_battery_soc(self):
@@ -1040,14 +1114,21 @@ def test_poll_once_survives_every_secondary_endpoint_failing():
 # --------------------------------------------------------------------------- #
 # main() — one full poll cycle (success + failure branch)
 # --------------------------------------------------------------------------- #
-def test_health_server_serves_200():
+def _bound_port(runner):
+    # HEALTH_PORT is patched to 0, so the OS picks a free port; read back the one it chose.
+    return runner.addresses[0][1]
+
+
+def test_health_server_serves_200(monkeypatch):
     import aiohttp
+
+    monkeypatch.setattr(main, "HEALTH_PORT", 0)
 
     async def scenario():
         runner = await main.start_health_server()
         try:
             async with aiohttp.ClientSession() as s:
-                async with s.get(f"http://127.0.0.1:{main.HEALTH_PORT}/healthz") as r:
+                async with s.get(f"http://127.0.0.1:{_bound_port(runner)}/healthz") as r:
                     assert r.status == 200 and (await r.text()) == "ok"
         finally:
             await runner.cleanup()
@@ -1058,11 +1139,13 @@ def test_health_server_serves_200():
 def test_status_panel_routes(monkeypatch):
     import aiohttp
 
+    monkeypatch.setattr(main, "HEALTH_PORT", 0)
+
     async def scenario():
         main._LATEST.update(ok=True, version="testver", supported=["x", "y"],
                             data={"battery_level": 42, "charger_plug_status": "Plugged"})
         runner = await main.start_health_server()
-        base = f"http://127.0.0.1:{main.HEALTH_PORT}"
+        base = f"http://127.0.0.1:{_bound_port(runner)}"
         try:
             async with aiohttp.ClientSession() as s:
                 async with s.get(f"{base}/api/state") as r:        # JSON snapshot
@@ -1372,7 +1455,7 @@ def _command_session():
 
 
 def _soc_session():
-    asyncio.run(main.set_soc_level(sorted(main.NUMBER_CMDS)[0], "70"))
+    asyncio.run(main.set_soc_level("soc_min_target", "30"))
 
 
 SESSION_PATHS = {"poll": _poll_session, "command": _command_session, "charge_limit": _soc_session}
@@ -1534,10 +1617,28 @@ def test_validate_url_path_rejects_bad(bad):
         deploy._validate_url_path(bad)
 
 
-def test_run_deploy_skips_reserved_url_path(monkeypatch):
-    # Reaches validation (token present) and returns before any WS connection / save.
+def _record_sessions(monkeypatch):
+    # run_deploy swallows every error, so "nothing happened" is only visible as "no session opened".
+    opened = []
+    monkeypatch.setattr(deploy.aiohttp, "ClientSession", lambda *a, **k: opened.append(1))
+    return opened
+
+
+def _warnings(caplog):
+    return [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+# _deploy_env sets a token, so in each early-exit test below deleting the guard under test reaches
+# the session instead of stopping at a later guard.
+def test_run_deploy_skips_reserved_url_path(monkeypatch, caplog):
+    # Must return before any WS connection / save: deploying to "energy" would overwrite a built-in
+    # HA panel.
     _deploy_env(monkeypatch, R5_DASHBOARD_URL_PATH="energy")
-    asyncio.run(deploy.run_deploy())
+    opened = _record_sessions(monkeypatch)
+    with caplog.at_level(logging.DEBUG):
+        asyncio.run(deploy.run_deploy())
+    assert opened == []
+    assert any("auto-deploy skipped" in m for m in _warnings(caplog))
 
 
 def test_deploy_targets():
@@ -1585,37 +1686,31 @@ def test_run_deploy_leaves_existing_dashboard_alone(monkeypatch):
     assert ws.created_dashboard is None and ws.saved is None   # left intact (no redeploy)
 
 
-def test_run_deploy_noop_when_disabled(monkeypatch):
+def test_run_deploy_noop_when_disabled(monkeypatch, caplog):
     _deploy_env(monkeypatch, R5_DEPLOY_DASHBOARD="none")
-
-    class Explode:
-        def __init__(self, *a, **k):
-            raise AssertionError("ClientSession must not be constructed when disabled")
-
-    monkeypatch.setattr(deploy.aiohttp, "ClientSession", Explode)
-    asyncio.run(deploy.run_deploy())                 # returns immediately
+    opened = _record_sessions(monkeypatch)
+    with caplog.at_level(logging.DEBUG):
+        asyncio.run(deploy.run_deploy())
+    assert opened == []
+    assert _warnings(caplog) == []     # "none" is a choice, not an unrecognised style
 
 
-def test_run_deploy_skips_unknown_style(monkeypatch):
+def test_run_deploy_skips_unknown_style(monkeypatch, caplog):
     _deploy_env(monkeypatch, R5_DEPLOY_DASHBOARD="fancy")
-
-    class Explode:
-        def __init__(self, *a, **k):
-            raise AssertionError("must not connect for an unknown style")
-
-    monkeypatch.setattr(deploy.aiohttp, "ClientSession", Explode)
-    asyncio.run(deploy.run_deploy())
+    opened = _record_sessions(monkeypatch)
+    with caplog.at_level(logging.DEBUG):
+        asyncio.run(deploy.run_deploy())
+    assert opened == []
+    assert any("'fancy' not recognised" in m for m in _warnings(caplog))
 
 
-def test_run_deploy_skips_without_supervisor_token(monkeypatch):
+def test_run_deploy_skips_without_supervisor_token(monkeypatch, caplog):
     _deploy_env(monkeypatch, SUPERVISOR_TOKEN=None)
-
-    class Explode:
-        def __init__(self, *a, **k):
-            raise AssertionError("must not connect without a token")
-
-    monkeypatch.setattr(deploy.aiohttp, "ClientSession", Explode)
-    asyncio.run(deploy.run_deploy())
+    opened = _record_sessions(monkeypatch)
+    with caplog.at_level(logging.DEBUG):
+        asyncio.run(deploy.run_deploy())
+    assert opened == []
+    assert any("No SUPERVISOR_TOKEN" in m for m in _warnings(caplog))
 
 
 def test_run_deploy_swallows_runtime_errors(monkeypatch):
