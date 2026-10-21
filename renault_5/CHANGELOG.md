@@ -20,8 +20,12 @@
   only showed it when the package's test-panel helper existed and read "off", so a default install
   never saw it. The Run Test Charge button on the Bubble Card dashboard is likewise hidden until the
   package is installed. With the package, nothing changes.
-- **Section headings wrap again on Home Assistant 2026.10**, which draws their titles differently
-  and was cutting long ones short on narrow phones.
+- **Section headings on the standard dashboard wrap again on Home Assistant 2026.10**, which draws
+  their titles differently and was cutting long ones short on narrow phones.
+- **To get the dashboard fixes above, update your dashboard**: an existing one is never
+  overwritten on its own. If the add-on deployed it, set `redeploy_dashboard: true` and restart
+  (this replaces your edits), then set it back to `false`. If you pasted it yourself, paste
+  `front-end.txt` / `front-end-bubble.txt` again.
 - **Security: updated aiohttp and multidict** (and yarl alongside them) to versions that clear
   published security advisories in the previous ones.
 
