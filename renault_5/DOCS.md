@@ -87,7 +87,7 @@ start**, so everything renders correctly the first time.
 | `debug_dump` | `true` logs every readable API endpoint to the app Log **once per restart**. Redaction is **best-effort** — it masks IDs, credentials, contact fields, location, vehicle delivery/registration dates, privacy-mode settings and the build-spec render URLs — but can't guarantee every field, so treat the whole dump as personal data and **do not paste it publicly** (share privately if you need help). Off by default. |
 | `deploy_dashboard` | `none` (default), `standard`, `bubble`, or `both`. Off by default; set it to install a bundled dashboard. Auto-installs the chosen dashboard(s) for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. With `both`, the standard dashboard lands at `dashboard_url_path` and the bubble one at the same path with `-bubble` appended. |
 | `dashboard_url_path` | URL slug for the deployed dashboard (default `renault-5`). With `deploy_dashboard: both` the bubble dashboard is installed at `<this>-bubble` (e.g. `renault-5-bubble`). |
-| `redeploy_dashboard` | `true` re-pushes the dashboard config on next start. Default `false`. |
+| `redeploy_dashboard` | Deployment is create-once: a dashboard that already exists is left untouched. `true` re-pushes the dashboard config on every start while it stays on (to pick up a layout update, or to switch an already-deployed `standard` to `bubble` at the same `dashboard_url_path`), overwriting your edits; set it back to `false` afterwards. Default `false` so your edits are never overwritten. |
 | `car_render` | The trim/colour render shown on the dashboard (e.g. `midnight-blue-iconic`), used when auto-deploying. Default `pop-yellow-techno`. See [Customising](https://github.com/MatthewHobbs/r5-ha-addon/tree/main/renault_5/dashboards/CUSTOMISING.md). |
 | `charger_smart_charge` | *(optional)* entity id of your EV charger's **smart-charge** switch — see [Smart Charging](#smart-charging-card) below. |
 | `charger_bump_charge` | *(optional)* entity id of your charger's **bump/boost-charge** switch. |
@@ -158,8 +158,8 @@ charger_dispatching:  binary_sensor.octopus_energy_electricity_<meter-id>_off_pe
 ```
 
 Paste each id exactly — a stray trailing space shows as **"Entity not found"**. The controls
-are added when the dashboard is deployed, so set `redeploy_dashboard: true` (and restart once)
-if you add the entities after the dashboard already exists.
+are added when the dashboard is deployed, so set `redeploy_dashboard: true`, restart, then set it
+back to `false` if you add the entities after the dashboard already exists.
 
 ## Status panel
 

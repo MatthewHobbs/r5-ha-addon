@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""pii-check: refuse committed VINs and high-precision coordinate pairs.
+"""pii-check: refuse committed VINs, coordinate pairs, email addresses and home-directory paths.
 
 This repo is public and the add-on publishes one real car's identity and location. Three
 real-PII leaks reached it in two days (a VIN in a test fixture, home coordinates in BACKLOG.md
 prose, the same coordinates in two test fixtures), each found by a grep run for another reason.
-No scanner has a rule for either shape, so this is the rule.
+A later review found shapes this check missed (a personal email address, a home-directory
+path, a VIN prefix in prose). No scanner has a rule for these shapes, so this is the rule.
 
 It replaces two inline CI steps that could not fail when they should have: the coordinate step
 piped `git grep` into `grep -v` under the default Actions shell (no pipefail), so a failing
@@ -13,11 +14,19 @@ as panel.html. Here every tracked text file is scanned, and anything that stops 
 CI and `just ci` both run it, so a leak is caught before push rather than after publication.
 
 Rules, applied to every git-tracked text file:
-  VIN         a 17-character string over A-HJ-NPR-Z0-9. Real VINs never contain I, O or Q, so a
-              stub such as VF1STUBVIN0000000 does not match and needs no exemption.
+  VIN         a 17-character string over A-HJ-NPR-Z0-9, in either case. Real VINs never contain
+              I, O or Q, so a stub such as VF1STUBVIN0000000 does not match and needs no
+              exemption.
+  VIN prefix  VYS followed by 3+ VIN characters, in either case: the start of a real VIN
+              quoted in prose, where the full 17 characters are not.
+  email       any address, except placeholders: a domain of example.<tld>, a domain ending
+              .invalid, users.noreply.github.com, or the local part noreply or git (an SSH remote).
+  home path   /Users/<name> or /home/<name>, in either case, with or without a trailing
+              slash. /home/runner (the CI runner) is allowed.
   coordinates two numbers with 4+ decimals forming a valid latitude/longitude in either order,
-              within GAP characters of each other on one line or across two adjacent
-              lines (pretty-printed JSON/YAML puts them on consecutive lines). A key whose
+              within GAP characters of each other on one line, across two adjacent lines
+              (pretty-printed JSON/YAML puts them on consecutive lines), or across two lines
+              with one other `key: value` or `key=value` line between them. A key whose
               number sits alone on a deeper line (`latitude:` then `  51.5...`) is read as
               if it were on the key's line, so the split form is caught exactly where the
               one-line form would be; nested mappings and block scalars are not joined.
@@ -38,10 +47,18 @@ GAP = 80
 
 # Neighbours are any letter or digit, but not underscore: \b let `car_<VIN>` through, and
 # excluding lower case keeps digit runs inside hex hashes from matching.
-VIN = re.compile(r"(?<![A-Za-z0-9])[A-HJ-NPR-Z0-9]{17}(?![A-Za-z0-9])")
+VIN = re.compile(r"(?<![A-Za-z0-9])[A-HJ-NPR-Z0-9]{17}(?![A-Za-z0-9])", re.IGNORECASE)
+VIN_PREFIX = re.compile(r"(?<![A-Za-z0-9])VYS[A-HJ-NPR-Z0-9]{3,}", re.IGNORECASE)
+# The TLD must be letters, so `pkg@1.2.3` and `uses: x@v4.1.0` are not addresses.
+EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})")
+EMAIL_OK_DOMAIN = re.compile(r"(?:example\.(?:com|org|net)|.+\.invalid|users\.noreply\.github\.com)", re.IGNORECASE)
+HOME_PATH = re.compile(r"(?<![A-Za-z0-9_.-])/(?:Users|home)/([A-Za-z0-9._-]+)(?![A-Za-z0-9._-])", re.IGNORECASE)
+HOME_OK = {"runner"}
 NUM = re.compile(r"(?<![\d.])[-+]?\d{1,3}\.\d{4,}(?![\d.])")
 # A trailing comment only: nothing quoted may follow it, or a string value could carry it.
 MARKER = re.compile(r"(#|//)\s*synthetic-coords:[^\"'`]*$")
+# `key: value` or `key=value` with an inline value: not a comment, a bare key or a block scalar.
+KEY_VALUE = re.compile(r"""^\s*(?:-\s+)?(?:"[^"]*"|'[^']*'|[A-Za-z_][\w.-]*)\s*[:=]\s*(?![|>])[^\s#]""")
 # `key:` with nothing after the colon but a comment. A block scalar (`key: |`) has content there.
 KEY_ONLY = re.compile(r"""^(\s*)(?:-\s+)?(?:"[^"]*"|'[^']*'|[^\s#"'-][^#]*?)\s*:\s*(?:#.*)?$""")
 # A lone, optionally quoted number, as a split key's value. A mapping (`x: 1.2345`) is not one.
@@ -51,7 +68,22 @@ BLANK_OR_COMMENT = re.compile(r"^\s*(?:#.*)?$")
 
 
 def vin_hits(lines):
-    return [i for i, line in enumerate(lines) if VIN.search(line)]
+    return [i for i, line in enumerate(lines) if VIN.search(line) or VIN_PREFIX.search(line)]
+
+
+def email_hits(lines):
+    hits = []
+    for i, line in enumerate(lines):
+        for m in EMAIL.finditer(line):
+            local = m.group(0)[: m.group(0).index("@")]
+            if local.lower() not in ("noreply", "git") and not EMAIL_OK_DOMAIN.fullmatch(m.group(1)):
+                hits.append(i)
+                break
+    return hits
+
+
+def path_hits(lines):
+    return [i for i, line in enumerate(lines) if any(m.group(1).lower() not in HOME_OK for m in HOME_PATH.finditer(line))]
 
 
 def _pair_in(text):
@@ -101,6 +133,14 @@ def coord_hits(lines):
         nxt = joined[k + 1][1] if k + 1 < len(joined) else ""
         if NUM.search(line) and NUM.search(nxt) and not MARKER.search(nxt) and _pair_in(line + " " + nxt):
             hits.append(i)
+            continue
+        # A pair with one `key: value` or `key=value` line between (pretty-printed attributes),
+        # which may hold a number of its own (altitude). A bare `key:` between opens a nested
+        # mapping, whose numbers are not a pair.
+        far = joined[k + 2][1] if k + 2 < len(joined) else ""
+        if (NUM.search(line) and KEY_VALUE.match(nxt)
+                and NUM.search(far) and not MARKER.search(far) and _pair_in(line + " " + far)):
+            hits.append(i)
     return hits
 
 
@@ -132,16 +172,22 @@ def scan():
     found = False
     for path in files:
         lines = read_text(path)
-        for rule, hits in (("VIN-shaped string", vin_hits(lines)), ("coordinate pair", coord_hits(lines))):
+        for rule, hits in (
+            ("VIN-shaped string", vin_hits(lines)),
+            ("coordinate pair", coord_hits(lines)),
+            ("email address", email_hits(lines)),
+            ("home-directory path", path_hits(lines)),
+        ):
             for i in hits:
                 found = True
                 print(f"::error file={path},line={i + 1}::{rule} committed ({path}:{i + 1})")
     if found:
         print("PII found. VINs: use a stub containing I, O or Q (e.g. VF1STUBVIN0000000). Coordinates: "
               "use a pair below four decimals, or mark a deliberate fixture with a same-line "
-              "'# synthetic-coords: <why>' comment.")
+              "'# synthetic-coords: <why>' comment. Emails: use name@example.invalid. Paths: "
+              "use a placeholder, not a real home directory.")
         return 1
-    print(f"pii-check: {len(files)} tracked files, no VINs or unmarked coordinate pairs")
+    print(f"pii-check: {len(files)} tracked files, no VINs, emails, home paths or unmarked coordinate pairs")
     return 0
 
 
@@ -149,16 +195,51 @@ def self_test():
     # Built at runtime so this file never contains the shapes it rejects.
     lat, lon = "12." + "3456", "-45." + "6789"
     vin = "VF1" + "A" * 14
+    at, name = "@", "someone"
     cases = [
+        ("vin, lower case", [f"vin: {vin.lower()}"], True),
+        ("vin prefix in prose", ["the car VYS" + "P01 is parked"], True),
+        ("vin prefix, lower case", ["vys" + "p01xyz"], True),
+        ("vin prefix too short", ["VYS" + "01 is not enough"], False),
+        ("vin prefix inside a word", ["ABCVYS" + "P01"], False),
+        ("email, real domain", [f"by {name}{at}gmail.com"], True),
+        ("email, work domain", [f"{name}.x{at}corp.co.uk"], True),
+        ("email, example.invalid", [f"{name}{at}example.invalid"], False),
+        ("email, example.com", [f"{name}{at}example.com"], False),
+        ("email, any .invalid", [f"{name}{at}host.invalid"], False),
+        ("email, github noreply", [f"1234+{name}{at}users.noreply.github.com"], False),
+        ("email, noreply local part", [f"noreply{at}mail.org"], False),
+        ("email, lookalike of example", [f"{name}{at}notexample.com"], True),
+        ("email, example only as a subdomain", [f"{name}{at}example.evil.com"], True),
+        ("email, git ssh remote", [f"git{at}github.com:owner/repo.git"], False),
+        ("email, second address on the line", [f"{name}{at}example.com and {name}{at}gmail.com"], True),
+        ("email, version pin is not one", [f"uses: actions/checkout{at}v4.1.0", f"pkg{at}1.2.3"], False),
+        ("email, no domain", [f"{name}{at}localhost"], False),
+        ("path, macOS home", [f"cp x /Users/{name}/Documents/y"], True),
+        ("path, Linux home", [f"ls /home/{name}/.config"], True),
+        ("path, CI runner", ["cd /home/runner/work/repo"], False),
+        ("path, placeholder", ["/Users/<name>/Documents"], False),
+        ("path, longer root", [f"/opt/Users/{name}/x"], False),
+        ("path, lower-case macOS home", [f"/users/{name}/x"], True),
+        ("path, no trailing slash", [f"cd /Users/{name}"], True),
+        ("path, quoted, no trailing slash", [f'HOME="/home/{name}"'], True),
+        ("path, CI runner in upper case", ["/HOME/Runner/work"], False),
         ("vin", [f"vin: {vin}"], True),
         ("vin stub with I/O/Q", ["vin: VF1STUBVIN0000000"], False),
         ("vin after an underscore", [f"car_{vin}"], True),
         ("vin inside a longer run", [f"X{vin}"], False),
-        ("digit run inside a hex hash", ["sha256:9f9a" + "f" + "1" * 17 + "f99"], False),
+        ("vin, digit run inside a hex hash", ["sha256:9f9a" + "f" + "1" * 17 + "f99"], False),
         ("pair, one line", [f"gpsLatitude={lat}, gpsLongitude={lon}"], True),
         ("pair, other keys between", [f'"latitude": {lat}, "gps_accuracy": 8, "source_type": "gps", "longitude": {lon}'], True),
         ("pair with an altitude between", [f"latitude: {lat}, altitude: 250.{'1234'}, longitude: {lon}"], True),
         ("pair, two lines", [f"latitude: {lat}", f"longitude: {lon}"], True),
+        ("pair, a key line between", [f'"latitude": {lat},', '"source_type": "gps",', f'"longitude": {lon}'], True),
+        ("pair, a key line between, marked", [f"latitude: {lat}", "source: gps", f"longitude: {lon}  # synthetic-coords: t"], False),
+        ("pair, a bare key between", [f"radius: {lat}", "zone_b:", f"radius: {lon}"], False),
+        ("pair, a blank line between", [f"latitude: {lat}", "", f"longitude: {lon}"], False),
+        ("pair, an altitude line between", [f"latitude: {lat}", f"altitude: 250.{'1234'}", f"longitude: {lon}"], True),
+        ("pair, a keyword argument between", [f"ns(gpsLatitude={lat},", 'gpsDirection="N",', f"gpsLongitude={lon})"], True),
+        ("pair, a block scalar between", [f"a: {lat}", "b: >", f"  {lon}"], False),
         ("marker, same line", [f"x = ({lat}, {lon})  # synthetic-coords: test"], False),
         ("marker, js comment", [f"f({lat}, {lon}); // synthetic-coords: test"], False),
         ("marker, second line of a split pair", [f"latitude: {lat}", f"longitude: {lon}  # synthetic-coords: t"], False),
@@ -191,7 +272,8 @@ def self_test():
     ]
     failed = 0
     for name, lines, want in cases:
-        got = bool(vin_hits(lines) if name.startswith("vin") else coord_hits(lines))
+        rule = {"vin": vin_hits, "email": email_hits, "path": path_hits}.get(name.split(",")[0].split()[0], coord_hits)
+        got = bool(rule(lines))
         if got != want:
             failed += 1
             print(f"pii-check self-test FAILED: {name}: expected {'hit' if want else 'clean'}", file=sys.stderr)

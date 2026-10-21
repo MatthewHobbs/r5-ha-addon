@@ -12,8 +12,8 @@ don't need to touch any files:
 1. **Settings → Apps → Renault 5 → Configuration → `car_render`** — pick your trim/colour
    (e.g. `midnight-blue-iconic`).
 2. Set **`redeploy_dashboard: true`** and **Restart** the app so the dashboard
-   re-deploys with your render. (Set it back to `false` afterwards if you want your manual
-   dashboard edits protected.)
+   re-deploys with your render. Then set it back to `false`: while it is on, every start
+   overwrites the dashboard and your edits.
 
 That's it — the matching render is served straight from the CDN, nothing to copy or edit.
 

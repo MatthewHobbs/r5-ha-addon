@@ -149,7 +149,7 @@ local	.github/workflows/ui-tests.yaml	both	hunk:NOT the prose in there	21	the pa
 local	.github/workflows/release.yaml	both	re:^# `v<version>` being absent \(scripts/release_decision\.py, (a290-ha-addon/)?ADR 0006 row 8\)\. Tag-absent alone is not$	2	each repo cites ADR 0006 from its own side: r5 writes a290-ha-addon/ADR 0006, which re-wraps that comment line
 local	.github/workflows/release.yaml	both	re:check-regexp: '\^\(Lint\|Tests\|Security\|Build \\\(amd64 sanity\\\)\|Docs sync\|Parity with (r5|a290)\)\$'	2	each repo's `validated` job waits for its own parity job by name: a290 waits for `Parity with r5`, r5 for `Parity with a290`
 pending	.github/renovate.json	both	re:"Strict vX\.Y\.Z	4	rule descriptions worded differently for the same strict-tag rule. Target: converge, either way
-pending	.gitignore	both	*	20	section order differs; a290 ignores .bak* backups of settings.local.json; r5 ignores a local reference/ checkout. Target: port .bak* to r5, one section order
+pending	.gitignore	both	*	16	section order differs; r5 ignores a local reference/ checkout. Target: one section order
 pending	.trivyignore	r5	*	3	r5 still ignores AVD-DS-0026 (no HEALTHCHECK) although its Dockerfile has one (audit H-D2). Target: delete from r5
 pending	.yamllint	a290	*	4	a290 exempts dashboards/ because it bundles upstream YAML packages there. Target: follows the Packages/Templates decision
 
@@ -169,7 +169,7 @@ pending	ui-tests/README.md	both	*	60	residue after r5 #105: tile and timestamp n
 pending	alpine_a290/tests/test_*.py	both	*	*	tests are largely rewritten per repo (test_runtime.py is 14% line-identical). Target: B1/B2 move the shared tests into the core; before that, r5's stronger tests (P-B3 to P-B7) port to a290 and a290's (P-C4, P-C5, P-C7) to r5
 pending	alpine_a290/DOCS.md	both	*	*	each add-on's options page; 38% shared. r5's claim that its entities bind straight to Topolino65 was corrected in r5 #102 (ADR 0001). Target: reconcile with r5's naming migration release
 pending	README.md	both	*	*	repository README; 44% shared. Target: same as DOCS.md
-pending	CLAUDE.md	both	*	*	each repo's session instructions; 65% shared. Target: same as DOCS.md
+pending	CONTRIBUTING.md	both	*	*	each repo's contributor notes, worded for its own car (names, model codes, endpoint facts, the boot recipe's env vars). Target: same as DOCS.md
 pending	alpine_a290/README.md	both	*	39	the add-on's store README. Target: same as DOCS.md
 pending	docs/dashboards-on-mobile.md	both	*	10	line wrapping only; r5's false auto-refresh claim was removed with the drift workflow. Target: rewrap either way
 # ---------------------------------------------------------------- Supervisor pilot + AppArmor pin (a290 #160, r5 #108, ADR 0002)
@@ -182,6 +182,6 @@ local	.github/renovate.json	both	hunk:Supervisor pilot	4	both carry the pilot's 
 local	.github/workflows/supervisor.yml	both	hunk:ADR 0002	10	each repo's header names its own decision record: a290's ADR 0002, r5's "the a290 twin's ADR 0002, mirrored"
 local	scripts/supervisor-pilot.sh	both	re:the a290 twin's ADR 0002|devcontainer \(ADR 0002\)	2	same provenance line in the script's header
 model	scripts/supervisor-pilot.sh	both	re:a290-supervisor|r5-supervisor|local_alpine_a290|local_renault_5|pilot-registry|pilot-build|pilot-no-egress	16	the pilot's container, registry, provenance-label and egress-rule names carry each add-on's own short name
-local	.github/workflows/supervisor.yml	both	hunk:deploy_dashboard	15	r5 defaults deploy_dashboard to none (a290: standard), so its pilot sets standard explicitly and its path-filter comment says so (r5's deliberate choice, confirmed by the r5 session 2026-09-27)
-local	scripts/supervisor-pilot.sh	both	hunk:deploy_dashboard	15	the same default difference in cmd_install (sets deploy_dashboard: standard) and the dashboard-probe comment (r5's deliberate choice, confirmed by the r5 session 2026-09-27)
-local	scripts/supervisor-pilot.sh	both	hunk:Published	4	r5's poll-success log line is "Published in <s>s" where a290's is "Published: ", so each pilot greps its own; the guard follows each repo's main.py and r5 keeps its line (confirmed by the r5 session 2026-09-27)
+local	.github/workflows/supervisor.yml	both	hunk:deploy_dashboard	15	r5 defaults deploy_dashboard to none (a290: standard), so its pilot sets standard explicitly and its path-filter comment says so (r5's deliberate choice, confirmed on r5 2026-09-27)
+local	scripts/supervisor-pilot.sh	both	hunk:deploy_dashboard	15	the same default difference in cmd_install (sets deploy_dashboard: standard) and the dashboard-probe comment (r5's deliberate choice, confirmed on r5 2026-09-27)
+local	scripts/supervisor-pilot.sh	both	hunk:Published	4	r5's poll-success log line is "Published in <s>s" where a290's is "Published: ", so each pilot greps its own; the guard follows each repo's main.py and r5 keeps its line (confirmed on r5 2026-09-27)

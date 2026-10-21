@@ -21,13 +21,13 @@ secrets.yaml
 htmlcov/
 .pytest_cache/
 
-# Claude Code — personal/local settings only (CLAUDE.md and any shared .claude/ config stay tracked)
-.claude/settings.local.json
-
 # Editor / IDE
 .vscode/
 .idea/
 
 # Local `just ci` virtualenv (uv)
 .venv/
-.adv-review/
+
+# Machine-local settings files (editor permission grants and the like) never belong in the repo.
+*.local.json
+*.local.json.bak*
