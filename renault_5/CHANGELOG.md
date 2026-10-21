@@ -8,7 +8,8 @@
   command.
 - **The add-on now waits for the MQTT broker** if the broker is not up when it starts, retrying with
   a backoff and logging each attempt, instead of exiting. Values then appear from the first poll
-  after the broker comes up.
+  after the broker comes up. A wrong broker host or port therefore no longer stops the add-on:
+  look for `MQTT broker … unreachable — retrying` in the log.
 - **Logs are safer**: error tracebacks are redacted like other log lines, and the optional debug
   dump masks more spellings of location and number-plate keys, and the car's nickname.
 - **Security: updated aiohttp and multidict** (and yarl alongside them) to versions that clear
