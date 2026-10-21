@@ -6,8 +6,8 @@ fails the build if any text is truncated or any card fails to render. Typography
 every screen (no font/size changes between phone and desktop); labels and headings **wrap on
 clean word breaks** rather than getting cut off.
 
-Devices validated each run: **iPhone 15 Pro Max, iPhone 15 Pro, iPhone 15, iPhone SE, Pixel 8,
-Pixel 7a, Galaxy S24, Galaxy S23, Galaxy A54, and a 360 px narrow Android bound.**
+Devices validated each run: **iPhone 15 Pro Max, iPhone 15 Pro, iPhone SE, Pixel 8,
+Galaxy S24, Galaxy A54, and a 360 px narrow Android bound.**
 
 ## Standard dashboard
 
@@ -29,6 +29,5 @@ pop-up "tab" on the bubble dashboard (below) and a matching block on the standar
 ![Smart Charging pop-up on the bubble dashboard](screenshots/smart-charging-iphone-15-pro.png)
 
 > Screenshots are produced by the **UI Tests** workflow ([`ui-tests/`](../ui-tests/)) in dark
-> mode with representative sample data (no real account/location data). The full per-device set
-> is uploaded as a build artifact on every run, and the shots above are **auto-refreshed** on
-> any PR that changes the dashboards (committed back to the PR branch), so they never go stale.
+> mode with representative sample data (no real account/location data); the full per-device set
+> is uploaded as a build artifact on every run.

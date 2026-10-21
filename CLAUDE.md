@@ -100,7 +100,7 @@ trivy fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --exit-code 1
 
 The `ui-tests/` gate (its own `ui-tests.yaml` workflow, path-filtered to dashboards +
 ui-tests) is run with `ui-tests/run.sh` — it boots a throwaway HA container, seeds entities,
-and uses Playwright across ~10 phone viewports to fail on any text truncation or
+and uses Playwright across 7 phone viewports to fail on any text truncation or
 `hui-error-card`. Run it whenever you touch `renault_5/dashboards/` or `ui-tests/`.
 
 The harness **pins its render inputs** in `ui-tests/run.sh` so the gate is deterministic: the

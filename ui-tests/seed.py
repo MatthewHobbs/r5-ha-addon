@@ -106,7 +106,7 @@ KNOWN = {
     # Timestamps are seeded RELATIVE to the run, not as fixed dates. A device_class:timestamp
     # sensor is rendered by mushroom as relative text ("2 months ago"), so a hard-coded date
     # produces different PIXELS as the wall clock moves past each unit boundary — fine for an
-    # overflow check, fatal for comparing a screenshot against a committed one.
+    # overflow check, fatal for comparing screenshots between runs.
     #
     # Offsets are xx:12, NOT xx:30: half-past is exactly the rounding boundary, so if the
     # frontend rounds to nearest rather than truncating, a few seconds of drift between seeding
