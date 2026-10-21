@@ -724,6 +724,64 @@ def test_set_soc_ignores_non_numeric(monkeypatch):
     assert v.soc_set is None             # never written
 
 
+# Bounds are read from the catalog so the test follows the sliders, not a copy of their literals.
+_MIN_LO, _MIN_HI = main.NUMBERS["r5_soc_min_target"][2:4]
+_TGT_LO, _TGT_HI = main.NUMBERS["r5_soc_max_target"][2:4]
+
+
+@pytest.mark.parametrize("cmd,payload", [
+    ("soc_max_target", str(_TGT_HI + 1)),
+    ("soc_max_target", str(_TGT_LO - 1)),
+    ("soc_max_target", "500"),
+    ("soc_max_target", "-5"),
+    ("soc_max_target", "0"),
+    ("soc_min_target", str(_MIN_HI + 1)),
+    ("soc_min_target", str(_MIN_LO - 1)),
+    ("soc_max_target", "inf"),
+    ("soc_max_target", "-inf"),
+    ("soc_min_target", "nan"),
+    ("soc_min_target", "45.9"),     # fractional: would truncate to an in-range 45
+    ("soc_min_target", "17"),       # in range, off the slider's step of 5
+    ("soc_max_target", "57"),
+])
+def test_set_soc_rejects_out_of_range_or_non_finite(monkeypatch, caplog, cmd, payload):
+    v = _SocVehicle()
+    _soc_login(monkeypatch, v)
+    with caplog.at_level(logging.WARNING, logger=main.LOG.name):
+        asyncio.run(main.run_command(cmd, payload))
+    assert v.soc_set is None             # nothing sent to the car
+    assert any(r.levelno == logging.WARNING and cmd in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize("cmd,payload,expected", [
+    ("soc_max_target", str(_TGT_LO), (20, _TGT_LO)),
+    ("soc_max_target", str(_TGT_HI), (20, _TGT_HI)),
+    ("soc_min_target", str(_MIN_LO), (_MIN_LO, 80)),
+    ("soc_min_target", str(_MIN_HI), (_MIN_HI, 80)),
+])
+def test_set_soc_accepts_range_edges(monkeypatch, cmd, payload, expected):
+    v = _SocVehicle()
+    _soc_login(monkeypatch, v)
+    asyncio.run(main.run_command(cmd, payload))
+    assert v.soc_set == expected
+
+
+@pytest.mark.parametrize("car_target", [_MIN_HI - 5, _MIN_HI])   # below, and equal (the >= edge)
+def test_set_soc_rejects_min_not_below_target(monkeypatch, caplog, car_target):
+    # In range on its own, but the car's current target (set elsewhere, e.g. the My Renault app)
+    # is not above it, so the pair is invalid.
+    class LowTarget(_SocVehicle):
+        async def get_battery_soc(self):
+            return _obj(socTarget=car_target, socMin=_MIN_LO)
+
+    v = LowTarget()
+    _soc_login(monkeypatch, v)
+    with caplog.at_level(logging.WARNING, logger=main.LOG.name):
+        asyncio.run(main.run_command("soc_min_target", str(_MIN_HI)))
+    assert v.soc_set is None
+    assert any("must be below target" in r.getMessage() for r in caplog.records)
+
+
 def test_set_soc_bails_when_opposing_limit_missing(monkeypatch):
     class _NoLimits(_SocVehicle):
         async def get_battery_soc(self):
@@ -1040,14 +1098,21 @@ def test_poll_once_survives_every_secondary_endpoint_failing():
 # --------------------------------------------------------------------------- #
 # main() — one full poll cycle (success + failure branch)
 # --------------------------------------------------------------------------- #
-def test_health_server_serves_200():
+def _bound_port(runner):
+    # HEALTH_PORT is patched to 0, so the OS picks a free port; read back the one it chose.
+    return runner.addresses[0][1]
+
+
+def test_health_server_serves_200(monkeypatch):
     import aiohttp
+
+    monkeypatch.setattr(main, "HEALTH_PORT", 0)
 
     async def scenario():
         runner = await main.start_health_server()
         try:
             async with aiohttp.ClientSession() as s:
-                async with s.get(f"http://127.0.0.1:{main.HEALTH_PORT}/healthz") as r:
+                async with s.get(f"http://127.0.0.1:{_bound_port(runner)}/healthz") as r:
                     assert r.status == 200 and (await r.text()) == "ok"
         finally:
             await runner.cleanup()
@@ -1058,11 +1123,13 @@ def test_health_server_serves_200():
 def test_status_panel_routes(monkeypatch):
     import aiohttp
 
+    monkeypatch.setattr(main, "HEALTH_PORT", 0)
+
     async def scenario():
         main._LATEST.update(ok=True, version="testver", supported=["x", "y"],
                             data={"battery_level": 42, "charger_plug_status": "Plugged"})
         runner = await main.start_health_server()
-        base = f"http://127.0.0.1:{main.HEALTH_PORT}"
+        base = f"http://127.0.0.1:{_bound_port(runner)}"
         try:
             async with aiohttp.ClientSession() as s:
                 async with s.get(f"{base}/api/state") as r:        # JSON snapshot
@@ -1372,7 +1439,7 @@ def _command_session():
 
 
 def _soc_session():
-    asyncio.run(main.set_soc_level(sorted(main.NUMBER_CMDS)[0], "70"))
+    asyncio.run(main.set_soc_level("soc_min_target", "30"))
 
 
 SESSION_PATHS = {"poll": _poll_session, "command": _command_session, "charge_limit": _soc_session}

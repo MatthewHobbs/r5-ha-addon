@@ -7,6 +7,7 @@ patch/set those on the mqtt module. _on_message dispatches via the injected _COM
 _LOOP (main wires real ones at startup). mqtt.configure(catalog) is run when conftest imports
 main."""
 import json
+import logging
 import pathlib
 
 import catalog
@@ -249,9 +250,14 @@ def test_on_connect_subscribes_and_announces():
     assert (mqtt.AVAIL_TOPIC, "online") in c.pubs
 
 
-def test_on_disconnect_logs_both_paths():
-    mqtt._on_disconnect(None, None, None, 0)   # clean
-    mqtt._on_disconnect(None, None, None, 1)   # unexpected (warns)
+def test_on_disconnect_warns_only_when_unexpected(caplog):
+    with caplog.at_level(logging.DEBUG):
+        mqtt._on_disconnect(None, None, None, 0)   # clean disconnect
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    caplog.clear()
+    with caplog.at_level(logging.DEBUG):
+        mqtt._on_disconnect(None, None, None, 1)   # unexpected
+    assert [r for r in caplog.records if r.levelno == logging.WARNING]
 
 
 def test_mqtt_connect(monkeypatch):
@@ -274,6 +280,8 @@ def test_mqtt_connect(monkeypatch):
     assert c.conn == ("broker", 1884, 60)
     assert c.delay == {"min_delay": 1, "max_delay": 120}
     assert c.started is True
+    # The only source of the `MQTT broker … unreachable — retrying` line the CHANGELOG points users to.
+    assert c.on_connect_fail is mqtt._on_connect_fail
 
 
 def test_runtime_never_writes_the_tracker_state_topic():
