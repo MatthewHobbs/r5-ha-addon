@@ -53,7 +53,7 @@ venv:
     set -euo pipefail
     uv venv --python 3.14 --quiet --allow-existing .venv
     uv pip install --python .venv --quiet -r renault_5/app/requirements.txt
-    uv pip install --python .venv --quiet pytest pytest-cov
+    uv pip install --python .venv --quiet pytest==9.1.1 pytest-cov==7.1.0
     CORE_REF="$(sed -n 's/^ARG CORE_REF=//p' renault_5/Dockerfile)"
     echo "renault-mqtt pinned to ${CORE_REF}"
     uv pip install --python .venv --quiet --no-deps \

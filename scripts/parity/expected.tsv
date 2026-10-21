@@ -141,13 +141,11 @@ local	justfile	a290	re:twin="\$tmp/r5\-ha\-addon"	1	each repo names the OTHER as
 local	justfile	a290	re:git\ clone\ \-\-quiet\ \-\-depth\ 1\ https://github\.com/MatthewHobbs/r5\-ha\-ad	1	each repo names the OTHER as the twin its parity job checks out and compares against
 local	justfile	r5	re:twin="\$tmp/a290\-ha\-addon"	1	each repo names the OTHER as the twin its parity job checks out and compares against
 local	justfile	r5	re:git\ clone\ \-\-quiet\ \-\-depth\ 1\ https://github\.com/MatthewHobbs/a290\-ha\-	1	each repo names the OTHER as the twin its parity job checks out and compares against
-pending	.github/workflows/ci.yaml	both	re:uses: \S+@[0-9a-f]{40} +#	28	pinned-action comments: two spaces on a290, one on r5, and r5 names exact tags (v3.1.1, v2.21.1) where a290 says v3, v2. The house rule wants an exact upstream tag. Target: r5's exact tags into a290, one spacing in both
 pending	.github/workflows/ci.yaml	both	hunk:declared minimum HA must	2	comment wording. Target: converge, either way
 pending	.github/workflows/ci.yaml	both	hunk:a VIN in a test fixture|pair of public add-on repos	5	PII-step comment wording. Target: converge, either way
 pending	.github/workflows/ci.yaml	both	re:BUILD_FROM|FROM ghcr.io/home-assistant/base	4	the same comment on the build step, in a different place. Target: one place in both
 local	.github/workflows/ui-tests.yaml	both	hunk:NOT the prose in there	21	the paths-filter comment names each repo's own prose docs (a290 USER-GUIDE.md and INSTALLATION.md, r5 CUSTOMISING.md) and its own dashboards/ contents; the filter patterns themselves are identical
 local	.github/workflows/release.yaml	both	re:^# `v<version>` being absent \(scripts/release_decision\.py, (a290-ha-addon/)?ADR 0006 row 8\)\. Tag-absent alone is not$	2	each repo cites ADR 0006 from its own side: r5 writes a290-ha-addon/ADR 0006, which re-wraps that comment line
-local	.github/workflows/release.yaml	both	re:check-regexp: '\^\(Lint\|Tests\|Security\|Build \\\(amd64 sanity\\\)\|Docs sync\|Parity with (r5|a290)\)\$'	2	each repo's `validated` job waits for its own parity job by name: a290 waits for `Parity with r5`, r5 for `Parity with a290`
 pending	.github/renovate.json	both	re:"Strict vX\.Y\.Z	4	rule descriptions worded differently for the same strict-tag rule. Target: converge, either way
 pending	.gitignore	both	*	20	section order differs; a290 ignores .bak* backups of settings.local.json; r5 ignores a local reference/ checkout. Target: port .bak* to r5, one section order
 pending	.trivyignore	r5	*	3	r5 still ignores AVD-DS-0026 (no HEALTHCHECK) although its Dockerfile has one (audit H-D2). Target: delete from r5
