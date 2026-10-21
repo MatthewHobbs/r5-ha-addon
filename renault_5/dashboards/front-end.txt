@@ -13,7 +13,7 @@
         heading: Vehicle Status
         heading_style: title
         card_mod:
-          style: .content{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;border-bottom:1px solid var(--divider-color);padding-bottom:6px;text-transform:uppercase;}.content p{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
+          style: .content{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;border-bottom:1px solid var(--divider-color);padding-bottom:6px;text-transform:uppercase;}.content p, .content h2{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
       - type: picture-elements
         image: /local/backgrounds/r5_background.webp
         visibility:
@@ -433,7 +433,7 @@
         heading: Climate/Charging Presets
         heading_style: title
         card_mod:
-          style: .content{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;border-bottom:1px solid var(--divider-color);padding-bottom:6px;text-transform:uppercase;}.content p{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
+          style: .content{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;border-bottom:1px solid var(--divider-color);padding-bottom:6px;text-transform:uppercase;}.content p, .content h2{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
       - type: custom:mushroom-entity-card
         entity: sensor.r5_preconditioning_temperature
         name: Desired Temp
@@ -491,11 +491,11 @@
         heading: Last Charge
         heading_style: title
         card_mod:
-          style: :host{margin-top:40px;display:block;}.content{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;border-bottom:1px solid var(--divider-color);padding-bottom:6px;text-transform:uppercase;}.content p{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
+          style: :host{margin-top:40px;display:block;}.content{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;border-bottom:1px solid var(--divider-color);padding-bottom:6px;text-transform:uppercase;}.content p, .content h2{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
         visibility:
         - condition: state
           entity: binary_sensor.r5_test_show_panel
-          state: 'off'
+          state_not: 'on'
       - type: grid
         square: false
         columns: 3
@@ -618,12 +618,12 @@
         visibility:
         - condition: state
           entity: binary_sensor.r5_test_show_panel
-          state: 'off'
+          state_not: 'on'
       - type: heading
         heading: Test Charge
         heading_style: title
         card_mod:
-          style: :host{margin-top:40px;display:block;}.content{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;border-bottom:1px solid var(--divider-color);padding-bottom:6px;text-transform:uppercase;}.content p{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
+          style: :host{margin-top:40px;display:block;}.content{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;border-bottom:1px solid var(--divider-color);padding-bottom:6px;text-transform:uppercase;}.content p, .content h2{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
         visibility:
         - condition: state
           entity: binary_sensor.r5_test_show_panel
@@ -766,7 +766,7 @@
         heading: Last Activity
         heading_style: title
         card_mod:
-          style: .content{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;border-bottom:1px solid var(--divider-color);padding-bottom:6px;text-transform:uppercase;}.content p{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
+          style: .content{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;border-bottom:1px solid var(--divider-color);padding-bottom:6px;text-transform:uppercase;}.content p, .content h2{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
       - type: horizontal-stack
         cards:
         - type: custom:mushroom-entity-card
@@ -802,7 +802,7 @@
         heading: Current Location
         heading_style: title
         card_mod:
-          style: .content{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;border-bottom:1px solid var(--divider-color);padding-bottom:6px;text-transform:uppercase;}.content p{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
+          style: .content{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;border-bottom:1px solid var(--divider-color);padding-bottom:6px;text-transform:uppercase;}.content p, .content h2{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
       - type: custom:mushroom-template-card
         entity: device_tracker.r5_location
         primary: LOCATION
@@ -836,7 +836,7 @@
         heading: Remote Control
         heading_style: title
         card_mod:
-          style: .content{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;border-bottom:1px solid var(--divider-color);padding-bottom:6px;text-transform:uppercase;}.content p{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
+          style: .content{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;border-bottom:1px solid var(--divider-color);padding-bottom:6px;text-transform:uppercase;}.content p, .content h2{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
       - type: grid
         square: false
         columns: 3
@@ -950,7 +950,7 @@
         heading: Update / Test / Errors
         heading_style: title
         card_mod:
-          style: .content{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;border-bottom:1px solid var(--divider-color);padding-bottom:6px;text-transform:uppercase;}.content p{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
+          style: .content{font-family:"Zen Dots",system-ui,sans-serif !important;font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;border-bottom:1px solid var(--divider-color);padding-bottom:6px;text-transform:uppercase;}.content p, .content h2{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
       - type: grid
         columns: 2
         square: false

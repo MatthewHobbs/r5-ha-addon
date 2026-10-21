@@ -98,8 +98,8 @@ key needed.
   `input_button.r5_test_charge_run`, `binary_sensor.r5_test_show_panel`,
   `sensor.r5_test_ends_countdown`, `sensor.r5_test_panel_hide_countdown`, and the simulated
   last-charge values `sensor.test_last_charge_*` / `sensor.test_charge_*`).
-  A small HA helper/template package; without it those tiles read *unavailable*. (Port
-  from the upstream `Packages/`/`Templates/`/`Helpers/`.)
+  A small HA helper/template package; without it the test panels and the Run Test Charge
+  button stay hidden. (Port from the upstream `Packages/`/`Templates/`/`Helpers/`.)
 - **Pretty location** — `sensor.r5_pretty_location` ("Driveway / Home / town"), a template
   sensor with an optional [`places`](https://github.com/custom-components/places)
   integration. Without it the location card shows the raw tracker.
