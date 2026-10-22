@@ -53,7 +53,7 @@ venv:
     set -euo pipefail
     uv venv --python 3.14 --quiet --allow-existing .venv
     uv pip install --python .venv --quiet -r renault_5/app/requirements.txt
-    uv pip install --python .venv --quiet pytest pytest-cov
+    uv pip install --python .venv --quiet pytest==9.1.1 pytest-cov==7.1.0
     CORE_REF="$(sed -n 's/^ARG CORE_REF=//p' renault_5/Dockerfile)"
     echo "renault-mqtt pinned to ${CORE_REF}"
     uv pip install --python .venv --quiet --no-deps \
@@ -72,7 +72,8 @@ ha-min:
 lint:
     yamllint -c .yamllint renault_5 repository.yaml
     shellcheck renault_5/run.sh scripts/supervisor-pilot.sh
-    ruff check renault_5/app renault_5/tests scripts ui-tests
+    # The ruff ruff.toml requires (required-version), so a local pass means what CI's pinned ruff means.
+    uvx "ruff$(sed -n 's/^required-version = "\(.*\)"$/\1/p' ruff.toml)" check renault_5/app renault_5/tests scripts ui-tests
 
 test: venv
     .venv/bin/python -m pytest renault_5/tests -q --cov=renault_5/app --cov-report=term-missing --cov-fail-under=95
