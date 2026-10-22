@@ -4,10 +4,12 @@
 
 - **Dashboard images load again.** 1.9.0 was published without its `v1.9.0` git tag, and the
   add-on writes that tag into a dashboard's image links when it deploys it, so a dashboard the
-  add-on deployed or redeployed while running 1.9.0 shows no background or car images. If that is
-  yours, update to 1.9.1 and redeploy once more (`redeploy_dashboard: true`, restart, then set it
-  back to `false`). A dashboard deployed on an earlier version, or pasted by hand, is not affected.
-  Nothing else changes from 1.9.0.
+  add-on deployed or redeployed while running 1.9.0 shows none of its images (background, car,
+  charge indicator). If that is yours, update to 1.9.1 and redeploy once more
+  (`redeploy_dashboard: true`, restart, then set it back to `false`); this replaces your edits to
+  that dashboard. To keep them instead, open the dashboard's raw configuration editor and replace
+  `@v1.9.0/` with `@v1.9.1/`. A dashboard deployed on an earlier version, or pasted by hand, is not
+  affected. Nothing else changes from 1.9.0.
 
 ## 1.9.0
 
