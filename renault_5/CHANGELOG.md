@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Dashboard images load again on a newly deployed dashboard.** 1.9.0 was published without its
+  `v1.9.0` git tag, and the dashboards load their images from the CDN by that tag, so a dashboard
+  deployed or redeployed on 1.9.0 showed no background or car images. 1.9.1 has its tag. If you
+  redeployed on 1.9.0, redeploy once more after updating. Nothing else changes from 1.9.0.
+
 ## 1.9.0
 
 - **renault-api 0.6.1.** No change in what the R5 exposes. Renault now requires two-factor
