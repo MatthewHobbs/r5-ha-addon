@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.9.1
 
 - **Dashboard images load again.** 1.9.0 was published without its `v1.9.0` git tag, and the
   add-on writes that tag into a dashboard's image links when it deploys it, so a dashboard the
