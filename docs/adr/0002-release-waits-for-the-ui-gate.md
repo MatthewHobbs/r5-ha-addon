@@ -49,7 +49,7 @@ Copied from the RFC at decision time.
 
 **Watch.**
 - Three places encode "skipped counts as fine": the `changes` job, the `validated` wait, and the `has-render` guard. A change to one without the others is the drift this ADR exists to prevent, and nothing checks them against each other beyond the live tests in row 5.
-- The `validated` wait has now gated real version bumps both ways (row 2): v1.9.0 failed closed and v1.9.1 tagged. The image is published from the PR, so a failed wait leaves a version offered without its tag. The dashboards' image links use that tag, so the recovery is a re-cut as the next version.
+- The `validated` wait has now gated real version bumps both ways (row 2): v1.9.0 failed closed and v1.9.1 tagged. The image is published from the PR, so a failed wait leaves a version offered without its tag. The dashboards' image links use that tag. The recovery is `release.yaml`'s: fix the cause and re-run the failed push run within GitHub's re-run window, or else re-cut as the next version. For v1.9.0 a re-run would still have waited on parity, which that commit could not pass without a change to a290, so I re-cut.
 
 ## References
 
