@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Security: the image moves to Alpine 3.24.3**, with security fixes in musl (1.2.6-r3,
+  CVE-2026-107891), OpenSSL (3.5.9) and zlib (1.3.2-r1, CVE-2026-85091). No change in behaviour.
+
 ## 1.9.1
 
 - **Dashboard images load again.** 1.9.0 was published without its `v1.9.0` git tag, and the
