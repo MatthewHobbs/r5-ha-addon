@@ -235,10 +235,14 @@ dashboard the pilot's options deploy (`deploy_dashboard: standard`, set by the p
 default is `none`, at `dashboard_url_path`) exists in Core with views, read back through Core's
 Lovelace WebSocket API from inside the add-on container (the Supervisor's Core proxy admits only
 an add-on token) with no `Dashboard auto-deploy skipped` in the log, and that AppArmor enforces
-`local_renault_5`. Not a required check. The traps it solves are described in a290's
-CONTRIBUTING.md and ADR 0002. Local run: `PILOT_APPARMOR_CHECK=skip scripts/supervisor-pilot.sh
-all` (`CORE_VERSION=minimum` for the floor; `PILOT_BREAK=start|apparmor|dashboard` breaks it on
-purpose).
+`local_renault_5`. All four legs are **required checks** (a290's ADR 0002 row 5): the trigger is
+unconditional and a `changes` job decides relevance the way `ui-tests.yaml` does, so a PR that
+touches neither the pilot nor the add-on's runtime files still reports four green checks in
+seconds, with every step skipped, instead of leaving a required check pending. The traps it
+solves are described in a290's CONTRIBUTING.md and ADR 0002. Local run: `PILOT_APPARMOR_CHECK=skip
+scripts/supervisor-pilot.sh all` (`CORE_VERSION=minimum` for the floor;
+`PILOT_BREAK=start|apparmor|dashboard` breaks it on purpose, and `PILOT_IMAGE=<ref>` installs an
+already-published image instead of building the checkout).
 
 ## Release / versioning
 
@@ -254,7 +258,9 @@ code to keep in sync.
 Only when the maintainer asks for a release: `just release <version>` (read the entries it
 prints, then choose the number: a new feature is a minor, otherwise a patch), commit the two
 files it changes as their own PR titled `chore(release): <version>`, and let the existing gates
-run. Merging that PR publishes the image and tags `v<version>`. Never put a version bump in a
+run. That PR publishes the image, then installs the **published** per-arch image under a real
+stable Supervisor on four legs before it may merge, so the artefact users pull has been booted on
+both arches at both ends of the Core range. Merging tags `v<version>`. Never put a version bump in a
 feature PR "to get it out". r5 is released separately and never ahead of a290.
 
 **What reaches users on merge, whatever the version.** Batching holds back the container image
