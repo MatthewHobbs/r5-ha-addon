@@ -44,8 +44,10 @@ jobs:
 
       # The patterns the trigger used to filter on, moved here so the workflow
       # (and so every required check-run) always exists. An allow-list missed
-      # dashboards/ once, so it is the whole add-on minus what cannot change a
-      # run: prose and the unit tests, which the image does not contain.
+      # dashboards/ once (a290), so it is the whole add-on minus what cannot
+      # change a run: prose and the unit tests, which the image does not
+      # contain. dashboards/ stays in: the pilot deploys them through Core,
+      # with deploy_dashboard: standard because this add-on's default is none.
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d  # v4.0.3
         id: filter
         if: github.event_name == 'pull_request'
