@@ -173,20 +173,15 @@ def test_invalidate_swallows_close_error():
 # --------------------------------------------------------------------------- #
 # endpoint-support detection
 # --------------------------------------------------------------------------- #
-def test_supports_handles_sync_and_async():
-    class SyncV:
-        def supports_endpoint(self, ep):
-            return True
-
-    class AsyncV:
-        def supports_endpoint(self, ep):
-            async def _a():
-                return True
-            return _a()
+def test_supports_awaits_the_pinned_api():
+    """supports_endpoint() is a coroutine in the pinned renault-api, so its result is awaited."""
+    class V:
+        async def supports_endpoint(self, ep):
+            return ep == "supported"
 
     async def scenario():
-        assert await main._supports(SyncV(), "x") is True
-        assert await main._supports(AsyncV(), "x") is True
+        assert await main._supports(V(), "supported") is True
+        assert await main._supports(V(), "other") is False
 
     asyncio.run(scenario())
 
@@ -195,7 +190,7 @@ def test_detect_supported_probes_endpoints():
     actions = {ep for *_rest, ep in main.ACTION_BUTTONS.values()}
 
     class V:
-        def supports_endpoint(self, ep):
+        async def supports_endpoint(self, ep):
             return ep != "pressure"      # pressure unsupported; charge-mode + all actions ok
 
     class Sess:
@@ -233,7 +228,7 @@ def test_detect_supported_hides_actions_on_failure():
 
 def test_detect_supported_tolerates_a_probe_error():
     class V:
-        def supports_endpoint(self, ep):
+        async def supports_endpoint(self, ep):
             if ep == "pressure":
                 raise RuntimeError("probe blew up")
             return True
@@ -1763,7 +1758,7 @@ def test_ws_cmd_raises_on_unsuccessful_result():
 
 def test_detect_supported_tolerates_action_probe_error():
     class V:
-        def supports_endpoint(self, ep):
+        async def supports_endpoint(self, ep):
             if ep == "actions/horn-start":
                 raise RuntimeError("probe blew up")
             return True
@@ -1977,3 +1972,58 @@ def test_the_climate_sensors_are_availability_gated_not_blanked():
     assert catalog.DATA_GATED_SENSORS == {"r5_climate_schedule_mode", "r5_climate_ready_time"}
     for obj in catalog.DATA_GATED_SENSORS:
         assert obj in catalog.SENSORS, f"{obj} gated but not published"
+
+
+# --------------------------------------------------------------------------- #
+# state file shape, a cancelled login, and a failed location fetch
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("document", ["[]", '"text"', "3", "null", "{}"])
+def test_load_state_ignores_a_document_of_the_wrong_shape(tmp_path, monkeypatch, document):
+    """The poll's own error path calls .get() on this, so a list would raise inside the
+    handler and take the loop down."""
+    path = tmp_path / "state.json"
+    path.write_text(document)
+    monkeypatch.setattr(main, "STATE_FILE", str(path))
+    state = main.load_state()
+    assert state == {}
+    assert isinstance(state, dict)
+
+
+def test_cancelled_login_closes_its_session(monkeypatch):
+    """The poll timeout cancels mid-login; the next call would overwrite the reference."""
+    closed = []
+
+    class Sess:
+        def __init__(self, *a, **k):
+            pass
+
+        async def close(self):
+            closed.append(True)
+
+    async def slow_login(ws, locale):
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(main.aiohttp, "ClientSession", Sess)
+    monkeypatch.setattr(main, "_login_vehicle", slow_login)
+    session = main.VehicleSession("en")
+
+    async def scenario():
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(session.vehicle(), timeout=0.01)
+
+    asyncio.run(scenario())
+    assert closed == [True]
+    assert session._websession is None
+
+
+class _FailingLocationVehicle(_ChargingVehicle):
+    async def get_location(self):
+        raise RuntimeError("location boom")
+
+
+def test_location_failure_carries_the_last_good_timestamp_forward():
+    """The sentinel branch's invariant, reached by the other route: the fetch itself failed."""
+    state = {"gps_last_activity": "2026-09-01T08:00:00Z"}
+    data, loc = asyncio.run(main.poll_once(_Sess(_FailingLocationVehicle()), state, 52.0, set(), "km"))
+    assert loc is None
+    assert data["gps_last_activity"] == "2026-09-01T08:00:00Z"

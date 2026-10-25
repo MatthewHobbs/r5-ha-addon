@@ -99,7 +99,7 @@ pending	alpine_a290/app/deploy.py	both	py:RESERVED_URL_PATHS,_validate_url_path	
 model	alpine_a290/app/deploy.py	both	py:IMG_MAP,_RENDER_TRIMS,_selected_render,_cdnify	18	r5's car_render option swaps the background for the chosen trim render
 model	alpine_a290/app/deploy.py	both	py:_CHARGE_TARGET_REC	4	"Alpine's recommended" vs "The recommended" charge target
 pending	alpine_a290/app/deploy.py	both	py:_fetch_dashboard,_REFRESH_LOCATION_BUTTON,_references,_drop_cards_referencing,_deploy_one,run_deploy	35	comment wording and the unrelated bubble/standard injection branches each add below the shared pruning logic. Target: converge wording
-pending	alpine_a290/app/deploy.py	both	py:_WS	2	one comment. Target: converge, either way
+pending	alpine_a290/app/deploy.py	both	py:_WS	4	one comment. Target: converge, either way
 
 # ---------------------------------------------------------------- dashboards
 pending	alpine_a290/dashboards/front-end.txt	both	re:sensor\.(a290_)?test_	32	a290's test-mode package is namespaced a290_test_*; r5's is bare test_* (audit H-C4). Target: port to r5 with Packages/a290_test.yaml
