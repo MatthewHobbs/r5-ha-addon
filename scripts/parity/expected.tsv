@@ -55,8 +55,6 @@ pending	alpine_a290/config.yaml	both	re:^  deploy_dashboard:	2	r5 defaults to de
 model	alpine_a290/config.yaml	r5	re:car_render	2	r5's render picker (see Images/Models)
 pending	alpine_a290/run.sh	a290	re:PRECONDITION_TEMPERATURE	1	as config.yaml precondition_temperature. Target: same
 model	alpine_a290/run.sh	r5	re:CAR_RENDER	1	r5's render picker
-pending	alpine_a290/Dockerfile	both	hunk:BUILD_VERSION|A290_VERSION	4	comment wording on the version ARG. Target: converge the wording, either way
-pending	alpine_a290/Dockerfile	both	hunk:COPY dashboards|Bundle	4	comment wording on the dashboard COPY. Target: converge the wording, either way
 legacy	alpine_a290/app/panel.html	both	re:num\(d\.	12	the panel reads poll_once's data keys, which r5 keeps under legacy names. Goes with ADR 0001 stage B2 (catalog-driven poll_once)
 
 # ---------------------------------------------------------------- catalog.py
@@ -99,7 +97,7 @@ pending	alpine_a290/dashboards/front-end.txt	r5	hunk:name: Cabin Temp	14	r5's Ca
 pending	alpine_a290/dashboards/front-end.txt	r5	hunk:name: Start Charging	18	r5's standard dashboard keeps a greyed-out Start Charging tile (audit H-D5). Target: owner decision, then one dashboard
 pending	alpine_a290/dashboards/front-end.txt	both	re:API request failed due to an authentication|Auth Failure\*\* card	2	alarm-card wording ("An Alpine API" / "API Auth Failure" on a290). Target: port a290's wording to r5
 model	alpine_a290/dashboards/front-end-bubble.txt	both	re:^  - title:	2	the Bubble view title names the car
-pending	alpine_a290/dashboards/front-end-bubble.txt	both	re:# Ghost tile:	2	comment wording on the disabled charge tile. Target: converge, either way
+model	alpine_a290/dashboards/front-end-bubble.txt	both	re:# Ghost tile|signal the limitation	4	the same sentence wrapped and worded per car (r5 says the API, a290 the A290's API). Only the wording around the car name differs, and both are accurate
 
 # ---------------------------------------------------------------- repo config and CI
 local	justfile	both	hunk:parity	2	each repo's `parity` comment names the OTHER as the twin it needs (r5 the a290 twin, a290 the r5 twin)
@@ -121,10 +119,10 @@ local	justfile	a290	re:twin="\$tmp/r5\-ha\-addon"	1	each repo names the OTHER as
 local	justfile	a290	re:git\ clone\ \-\-quiet\ \-\-depth\ 1\ https://github\.com/MatthewHobbs/r5\-ha\-ad	1	each repo names the OTHER as the twin its parity job checks out and compares against
 local	justfile	r5	re:twin="\$tmp/a290\-ha\-addon"	1	each repo names the OTHER as the twin its parity job checks out and compares against
 local	justfile	r5	re:git\ clone\ \-\-quiet\ \-\-depth\ 1\ https://github\.com/MatthewHobbs/a290\-ha\-	1	each repo names the OTHER as the twin its parity job checks out and compares against
-pending	.github/workflows/ci.yaml	both	hunk:a VIN in a test fixture|pair of public add-on repos	6	PII-step comment wording. Target: converge, either way
-pending	.github/workflows/ci.yaml	both	re:BUILD_FROM|FROM ghcr.io/home-assistant/base	4	the same comment on the build step, in a different place. Target: one place in both
+local	.github/workflows/ci.yaml	both	hunk:a VIN in a test fixture|pair of public add-on repos	6	each repo's own account of the same script (a290 dates its leaks, r5 names the twin); both true, so neither is drift
+local	.github/workflows/ci.yaml	both	re:BUILD_FROM|FROM ghcr.io/home-assistant/base	2	the comment now sits above the step in both, so only this repo's context path differs
 local	docs/adr/0001-what-this-add-on-is-why-and-how.md	both	*	223	each repo's own retrospective record: the decisions and the evidence differ where the two cars and the two histories do
-pending	.gitignore	both	*	18	section order differs; r5 ignores a local reference/ checkout. Target: one section order
+local	.gitignore	both	*	3	one section order now; r5 keeps its local reference/ checkout at the top (never committed), which a290 has no equivalent of
 pending	.yamllint	a290	*	4	a290 exempts dashboards/ because it bundles upstream YAML packages there. Target: follows the Packages/Templates decision
 
 # --- UI gate coverage: dispatching-off pass and all Bubble pop-ups

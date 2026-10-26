@@ -7,8 +7,8 @@
 # together (resolve with `docker buildx imagetools inspect ghcr.io/home-assistant/base:<tag>`).
 FROM ghcr.io/home-assistant/base:3.24@sha256:992dc6a5727b97a30da8dd259b489739299c324407557df540165e2f0dbb7763
 
-# Version, exposed to the app as R5_VERSION (release.yaml passes BUILD_VERSION from
-# config.yaml's version; deploy.py pins dashboard assets to the matching v<version> tag).
+# Single source of truth for the version: the HA builder passes BUILD_VERSION from
+# config.yaml's `version:`. Exposed to the app as R5_VERSION (see main.py).
 ARG BUILD_VERSION="dev"
 ENV R5_VERSION=${BUILD_VERSION}
 
@@ -44,8 +44,8 @@ RUN apk add --no-cache --virtual .core-build git py3-setuptools \
  && apk del .core-build
 
 COPY app/ /app/
-# Bundle the dashboard YAML in the image so deploy.py reads it locally (no runtime
-# dependency on raw.githubusercontent.com). Images are still served via the jsDelivr CDN.
+# Bundle just the deployable dashboard YAMLs; their images load via CDN, so the ~5 MB of
+# image assets stay in the repo and out of the container.
 COPY dashboards/*.txt /app/dashboards/
 COPY run.sh /run.sh
 # The base image's /usr/bin/tempio is flagged by scanners (stale x/crypto) and nothing here

@@ -2,31 +2,30 @@
 # assets, never committed.
 reference/
 
-# macOS / Python / tooling
+# macOS / tooling
 .DS_Store
 ._*
+
+# Python
 __pycache__/
 *.py[cod]
-.ruff_cache/
 .venv/
 venv/
-
-# Secrets / local env (the add-on takes credentials via its config page)
-secrets.yaml
-.env
-*.local
+.ruff_cache/
 
 # Test / coverage artifacts
 .coverage
 htmlcov/
 .pytest_cache/
 
+# Secrets / local env (the add-on takes credentials via its config page)
+secrets.yaml
+.env
+*.local
+
 # Editor / IDE
 .vscode/
 .idea/
-
-# Local `just ci` virtualenv (uv)
-.venv/
 
 # Machine-local *.local.json files never belong in the repo.
 *.local.json
