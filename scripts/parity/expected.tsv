@@ -84,7 +84,7 @@ pending	alpine_a290/app/deploy.py	both	py:_fetch_dashboard,_REFRESH_LOCATION_BUT
 pending	alpine_a290/app/deploy.py	both	py:_WS	4	one comment. Target: converge, either way
 
 # ---------------------------------------------------------------- dashboards
-model	alpine_a290/dashboards/Packages/a290_test.yaml	both	hunk:Every helper	4	each package names the OTHER car's test mode; r5's new namespace also makes a290's unprefixed description obsolete
+model	alpine_a290/dashboards/Packages/a290_test.yaml	both	hunk:Every helper	2	each package names the OTHER car's test mode
 model	alpine_a290/dashboards/INSTALLATION.md	both	hunk:^> \*\*Charging control:	12	r5 retains the greyed-out Start Charging tile and distinguishes the A290's measured scheduling outcome from the R5 inference
 local	alpine_a290/dashboards/INSTALLATION.md	both	hunk:Entities, filter	4	r5's current production range and plug names, plus its entity-picker filter
 model	alpine_a290/dashboards/INSTALLATION.md	r5	re:^\| `car_render`	1	r5's trim and colour dropdown links to its retained customisation guidance
