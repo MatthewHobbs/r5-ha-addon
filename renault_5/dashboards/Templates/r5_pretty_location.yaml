@@ -1,0 +1,16 @@
+##### Renault 5 Pretty Location #####
+#
+# Human-readable location for the dashboard's LOCATION tile (sensor.r5_pretty_location),
+# derived from device_tracker.r5_location: "Driveway" inside zone.driveway, "Home"
+# inside zone.home, otherwise the town from the optional `places` sensor (sensor.r5).
+
+# METRIC ONLY: distance() returns kilometres and a zone radius is in metres, so the `* 1000`
+# converts. On an imperial system it returns miles: change both factors to 1609.344. Templates
+# cannot read the unit system, so this cannot self-detect.
+
+# Optional: zone.driveway (else that branch is skipped) and sensor.r5 from the `places`
+# integration (rename to your own, or remove for coordinates only).
+- sensor:
+    - name: "R5 Pretty Location"
+      unique_id: r5_pretty_location
+      state: "{% set lat = state_attr('device_tracker.r5_location','latitude') %}{% set lon = state_attr('device_tracker.r5_location','longitude') %}{% if lat is none or lon is none %}Unknown{% else %}{% set dd = distance(lat, lon, state_attr('zone.driveway','latitude'), state_attr('zone.driveway','longitude')) %}{% set hd = distance(lat, lon, state_attr('zone.home','latitude'), state_attr('zone.home','longitude')) %}{% if dd is not none and (dd * 1000) <= (state_attr('zone.driveway','radius') | float(0)) %}Driveway{% elif hd is not none and (hd * 1000) <= (state_attr('zone.home','radius') | float(0)) %}Home{% else %}{{ state_attr('sensor.r5','postal_town') or state_attr('sensor.r5','neighbourhood') or state_attr('sensor.r5','city') or (states('sensor.r5') if states('sensor.r5') not in ['unknown','unavailable',''] else 'Away') }}{% endif %}{% endif %}"
