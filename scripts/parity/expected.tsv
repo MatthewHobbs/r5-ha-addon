@@ -101,9 +101,8 @@ pending	alpine_a290/app/deploy.py	both	py:_WS	4	one comment. Target: converge, e
 # ---------------------------------------------------------------- dashboards
 pending	alpine_a290/dashboards/front-end.txt	both	re:sensor\.(a290_)?test_	32	a290's test-mode package is namespaced a290_test_*; r5's is bare test_* (audit H-C4). Target: port to r5 with Packages/a290_test.yaml
 pending	alpine_a290/dashboards/front-end.txt	r5	hunk:name: Cabin Temp	14	r5's Cabin Temp card; the A290 never returns cabin temperature. Target: follows the cabin-temperature decision
-pending	alpine_a290/dashboards/front-end.txt	r5	hunk:^\s+name: (Initial|Uplift)$	16	r5 still has duplicate Initial and Uplift tiles, and Initial is mislabelled (audit H-C5). Target: remove from r5
 pending	alpine_a290/dashboards/front-end.txt	r5	hunk:name: Start Charging	18	r5's standard dashboard keeps a greyed-out Start Charging tile (audit H-D5). Target: owner decision, then one dashboard
-pending	alpine_a290/dashboards/front-end.txt	both	re:API request failed due to an authentication|Auth Failure\*\* card	4	alarm-card wording ("An Alpine API" / "API Auth Failure" on a290). Target: port a290's wording to r5
+pending	alpine_a290/dashboards/front-end.txt	both	re:API request failed due to an authentication|Auth Failure\*\* card	2	alarm-card wording ("An Alpine API" / "API Auth Failure" on a290). Target: port a290's wording to r5
 model	alpine_a290/dashboards/front-end-bubble.txt	both	re:^  - title:	2	the Bubble view title names the car
 pending	alpine_a290/dashboards/front-end-bubble.txt	both	re:# Ghost tile:	2	comment wording on the disabled charge tile. Target: converge, either way
 

@@ -575,28 +575,12 @@
               .: ha-state-icon{ {% if is_state('binary_sensor.r5_charging','on') %}color:grey !important;opacity:0.35;{% else %}color:green;opacity:1;{% endif %}}ha-card{background:none !important;box-shadow:none !important;border:none !important;}
         - type: custom:mushroom-entity-card
           entity: sensor.r5_last_charge_average_power
-          name: Initial
-          card_mod:
-            style:
-              mushroom-shape-icon$: .shape{--icon-size:55px;--icon-symbol-size:28px;}
-              mushroom-state-info$: .container{--card-secondary-color:#FFFF00;}.primary{font-family:system-ui,sans-serif !important;font-size:12px !important;letter-spacing:0.3px;font-weight:400;white-space:normal !important;overflow:visible !important;text-overflow:clip !important;line-height:1.15;}.secondary{font-family:system-ui,sans-serif !important;font-size:11px !important;opacity:0.75;white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
-              .: ha-state-icon{color:orange;}ha-card{background:none !important;box-shadow:none !important;border:none !important;}
-        - type: custom:mushroom-entity-card
-          entity: sensor.r5_last_charge_average_power
           name: Avg.
           card_mod:
             style:
               mushroom-shape-icon$: .shape{--icon-size:55px;--icon-symbol-size:28px;}
               mushroom-state-info$: .container{--card-secondary-color:#FFFF00;}.primary{font-family:system-ui,sans-serif !important;font-size:12px !important;letter-spacing:0.3px;font-weight:400;white-space:normal !important;overflow:visible !important;text-overflow:clip !important;line-height:1.15;}.secondary{font-family:system-ui,sans-serif !important;font-size:11px !important;opacity:0.75;white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
               .: ha-state-icon{ {% if is_state('binary_sensor.r5_charging','on') %}color:grey !important;opacity:0.35;{% endif %}}ha-card{background:none !important;box-shadow:none !important;border:none !important;}
-        - type: custom:mushroom-entity-card
-          entity: sensor.r5_last_charge_energy_recovered
-          name: Uplift
-          card_mod:
-            style:
-              mushroom-shape-icon$: .shape{--icon-size:55px;--icon-symbol-size:28px;}
-              mushroom-state-info$: .container{--card-secondary-color:#FFFF00;}.primary{font-family:system-ui,sans-serif !important;font-size:12px !important;letter-spacing:0.3px;font-weight:400;white-space:normal !important;overflow:visible !important;text-overflow:clip !important;line-height:1.15;}.secondary{font-family:system-ui,sans-serif !important;font-size:11px !important;opacity:0.75;white-space:normal !important;overflow:visible !important;text-overflow:clip !important;}
-              .: ha-state-icon{ {% if is_state('binary_sensor.r5_charging','on') %}color:grey;opacity:0.35;{% else %}color:green;opacity:1;{% endif %}}ha-card{background:none !important;box-shadow:none !important;border:none !important;}
         - type: custom:mushroom-entity-card
           entity: sensor.r5_last_charge_type
           name: Type
@@ -1164,7 +1148,7 @@
                         **What to do?**
 
                         - Check the **Renault 5 add-on** log (Settings → Add-ons → Renault 5 → Log).
-                        - Check for an **Auth Failure** card — expired or changed My Renault credentials are the usual cause.
+                        - Check for an **API Auth Failure** card — expired or changed My Renault credentials are the usual cause.
                         - Restart the add-on to trigger an immediate poll.
               hold_action:
                 action: none
