@@ -16,10 +16,9 @@ OBJ_PREFIX = "r5_"
 # "A290_" here. The ONE place the env prefix is defined.
 ENV_PREFIX = "R5_"
 
-# Per-model MQTT identity, injected into the shared core via mqtt.configure(catalog). NODE is the
-# HA discovery node + topic root; DEVICE is the HA device block (its name drives the entity_id
-# slug — HA ignores object_id); MQTT_KEEPALIVE is the broker keepalive. DIST_UNIT_OBJS names the
-# sensors whose unit follows the locale (mi/km) instead of a fixed one. The a290 twin sets its own.
+# Per-model MQTT identity for mqtt.configure(catalog): NODE is the discovery node and topic
+# root, DEVICE the HA device block (its name drives the entity_id slug), MQTT_KEEPALIVE the
+# broker keepalive, DIST_UNIT_OBJS the sensors whose unit follows the locale.
 NODE = "renault_5"
 DEVICE = {"identifiers": [NODE], "name": "R5", "manufacturer": "Renault", "model": "R5 E-Tech"}
 MQTT_KEEPALIVE = 60
@@ -132,17 +131,14 @@ BUTTON_CMD_OVERRIDES = {
     "r5_stop_air_conditioner": "hvac_stop",
 }
 
-# Writable charge-limit controls. State comes from the poll's soc-levels read (data key =
-# object_id without the r5_ prefix); a slider move writes via set_battery_soc(). Gated on
-# SOC_ENDPOINT, so a model that rejects the write never ships the control. (name, icon, min,
-# max, step); NUMBER_ROLES maps each object_id to its set_battery_soc arg ("min"/"target").
+# Writable charge-limit controls. State comes from the poll's soc-levels read (data keys match
+# object_id[5:]); a press writes via set_battery_soc(). Gated on SOC_ENDPOINT support, so a model
+# that rejects the write never ships it. (name, icon, min, max, step)
 SOC_ENDPOINT = "soc-levels"
-# (CHARGES_ENDPOINT — the authoritative recent-charge-sessions endpoint — moved to
-# renault_mqtt.charge with the reconciliation logic; it's identical across models. main.py
-# imports it from there for the endpoint-support probe.)
-# The refresh-location action endpoint. Names the ACTION_BUTTONS entry that triggers a GPS
-# refresh; the poller gates both the discovery button and the command on it (and on the
-# location opt-out), so it's shared between the control layer and the MQTT discovery layer.
+# CHARGES_ENDPOINT moved to renault_mqtt.charge with the reconciliation logic; main.py imports
+# it for the support probe.
+# The refresh-location action endpoint: names the ACTION_BUTTONS entry that triggers a GPS
+# refresh, gated on it and on the location opt-out, shared by the control and discovery layers.
 REFRESH_LOCATION_EP = "actions/refresh-location"
 NUMBERS = {
     "r5_soc_min_target": ("SOC Min Target", "mdi:battery-arrow-down", 15, 45, 5),
@@ -160,9 +156,8 @@ RETIRED_SENSORS = ["r5_soc_max_target", "r5_soc_min_target"]
 # heated-seat mapping); it adds noise to the entity list. Users who want it can re-enable it.
 DEFAULT_DISABLED_SENSORS = {"r5_drive_side"}
 
-# Sensors whose endpoint can keep failing while the car still advertises it. The
-# hvac-settings circuit breaker stops writing these two keys, and without this they
-# render as EMPTY STRINGS - indistinguishable from 'the car reported nothing'.
-# Declaring them here makes their MQTT availability follow whether the key was
-# actually published (renault-mqtt >= 0.16.0).
+# Sensors whose endpoint can keep failing while the car still advertises it: the breaker stops
+# writing them, and an unwritten key renders as an empty string, indistinguishable from "the
+# car reported nothing". Declaring them here ties their availability to the key being
+# published.
 DATA_GATED_SENSORS = {"r5_climate_schedule_mode", "r5_climate_ready_time"}
