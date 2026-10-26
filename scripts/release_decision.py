@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""release-decision: should this run publish an image? (ADR 0006, row 8)
+"""release-decision: should this run publish an image? (ADR 0001 row 29)
 
 `release.yaml` used to publish whenever the tag `v<version>` was absent. That asks "is this
 version unreleased?" but never "did this change move the version?", so after a release merged

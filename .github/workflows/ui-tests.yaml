@@ -3,7 +3,7 @@ name: UI Tests
 # Renders the bundled dashboards in a real Home Assistant across the top mobile device
 # sizes and fails on text truncation / broken cards.
 #
-# Triggers unconditionally (ADR 0005) so this workflow — and so the render job's own check-run —
+# Triggers unconditionally so this workflow — and so the render job's own check-run —
 # always exists on every push and PR, applicable or not: a required PR check tied to a workflow
 # that never starts stays "Expected" forever and blocks the merge button, and the release
 # pipeline (release.yaml) needs a check it can always wait on. The `changes` job below decides
@@ -53,7 +53,7 @@ jobs:
           fi
           echo "release=$release" | tee -a "$GITHUB_OUTPUT"
 
-      # Same patterns the trigger-level `paths:` filter used before ADR 0005, moved here so the
+      # Same patterns the trigger-level `paths:` filter used while the job could be skipped, so the
       # workflow itself can always start (see the header comment) while still skipping the
       # expensive render when nothing relevant changed.
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d  # v4.0.3
@@ -92,7 +92,7 @@ jobs:
       matrix:
         leg: [stable, minimum]
     # Off, the leg still runs and reports success under its own name (the required check),
-    # only with every step skipped; see the ADR 0005 note below.
+    # only with every step skipped; see the note below.
     env:
       RENDER: ${{ github.event_name == 'workflow_dispatch' || (needs.changes.outputs.relevant == 'true' && (matrix.leg == 'stable' || needs.changes.outputs.release == 'true')) }}
     steps:
@@ -100,7 +100,7 @@ jobs:
       # changes). This job holds NO secrets.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      # ADR 0005: the `if:` that skips a no-op run lives on these steps, not on the job itself.
+      # The `if:` that skips a no-op run lives on these steps, not on the job itself.
       # A job-level `if:` on a matrix job that evaluates false stops the matrix from ever
       # expanding, so GitHub creates exactly one check-run under the raw, unexpanded template
       # name ("...mobile matrix, ${{ matrix.leg }})") instead of the two named ones ("stable" /

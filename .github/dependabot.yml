@@ -4,7 +4,7 @@
 version: 2
 updates:
   - package-ecosystem: pip
-    directory: "/alpine_a290/app"
+    directory: "/renault_5/app"
     schedule:
       interval: weekly
       day: saturday
@@ -30,7 +30,7 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: docker
-    directory: "/alpine_a290"
+    directory: "/renault_5"
     schedule:
       interval: weekly
       day: saturday

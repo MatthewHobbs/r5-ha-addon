@@ -9,17 +9,18 @@
 # Local CI gate - the same commands remote CI runs, for the checks it covers.
 # `parity` itself is not in here: it needs the a290 twin (a sibling checkout or a clone), so
 # only its self-test is. The Parity job in ci.yaml runs the full comparison.
-ci: lint pii ha-min parity-self-test docs-sync-self-test test
+ci: lint adr pii ha-min parity-self-test docs-sync-self-test test
 
 # Proves the release guard, the release script and the publish decision can fail, and that the
 # script writes exactly what the guard accepts. The Docs sync job in ci.yaml runs the same three.
 docs-sync-self-test:
     python3 scripts/docs_sync_check.py --self-test
     python3 scripts/prepare_release.py --self-test
+    python3 scripts/adr_evidence_check.py --self-test
     python3 scripts/release_decision.py --self-test
 
 # Cut a release: turn `## Unreleased` into `## <version>` and move config.yaml's version to match,
-# and nothing else (a290's ADR 0006). Commit the result as its own PR, titled
+# and nothing else. Commit the result as its own PR, titled
 # `chore(release): <version>`; merging it publishes the image and the tag.
 # `just release <version> --dry-run` only prints.
 release version *flags:
@@ -30,7 +31,7 @@ parity-self-test:
     python3 scripts/parity_check.py --self-test
 
 # Same command as the Parity job: diff this add-on against a290-ha-addon through the committed
-# map and expected list (ADR 0001 in a290). PARITY_TWIN=<path> must be a git checkout of a290:
+# map and expected list. PARITY_TWIN=<path> must be a git checkout of a290:
 # its tracked files (content as in its working tree) and tracked modes are compared; anything
 # else is refused rather than silently walked. Unset, it clones a290's main (network).
 parity: parity-self-test
@@ -58,6 +59,10 @@ venv:
     echo "renault-mqtt pinned to ${CORE_REF}"
     uv pip install --python .venv --quiet --no-deps \
       "renault-mqtt @ git+https://github.com/MatthewHobbs/renault-mqtt@${CORE_REF}"
+
+# The decision record cites files and symbols; fail on one the tree no longer has.
+adr:
+    python3 scripts/adr_evidence_check.py
 
 # Same command as the Security job's PII step, so a leak is caught before it is published.
 pii:

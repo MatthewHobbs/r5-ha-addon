@@ -12,7 +12,7 @@ pass above, then every named pass listed by --list-passes. --pass <name> reseeds
 instance for one of them. With --manifest, either writes the dashboards to check in that pass, the
 card labels that must be visible on each, and the Bubble pop-ups to open on each with the labels
 that must be visible inside them and, per card the pop-up renders, the texts it must show before
-the gate scans it (popup_items, a290's ADR 0003).
+the gate scans it (popup_items).
 
 Usage: seed.py --base http://localhost:8123 --token <access_token> [--dashboards <dir>]
                 [--pass <name>] [--manifest <manifest.json>]
@@ -416,7 +416,7 @@ def expected_labels(views, states, effective):
 
 
 # --- The completeness set: what every pop-up's cards must show before the gate scans it
-# (a290's ADR 0003).
+
 
 # A Jinja text field that is exactly the raw state of one entity, which the collector can read.
 STATES_OF = re.compile(r"^\{\{\s*states\(\s*'([^']+)'\s*\)\s*\}\}$")
@@ -453,7 +453,7 @@ _SHORT_DATE_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "S
 
 def _short_date(iso):
     """The short date a button's `styles` override writes into `.bubble-state` (the r5 twin's own
-    mirror of a290's ADR 0004): Intl.DateTimeFormat('en-GB', {timeZone: hass.config.time_zone,
+    short-date mirror): Intl.DateTimeFormat('en-GB', {timeZone: hass.config.time_zone,
     day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit', hourCycle:'h23'}),
     reassembled as 'DD Mon HH:MM'. Uses UTC, matching `_offpeak_window`: hass.config.time_zone is
     the harness's untouched default.
@@ -568,7 +568,7 @@ def _make_short_date(eid):
 
 
 # Bubble state buttons whose `styles` JS overwrites `.bubble-state`'s text after render (the r5
-# twin's own mirror of a290's ADR 0004 short-date templates): keyed by (dashboard, pop-up hash,
+# twin's own short-date templates): keyed by (dashboard, pop-up hash,
 # entity, card name), since Last Charge's Started and Date buttons share an entity and only their
 # name tells them apart. `texts_of` detects the override itself (the styles string targets
 # `.bubble-state` and sets `.textContent`) and requires a matching entry rather than falling back

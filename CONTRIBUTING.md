@@ -16,7 +16,8 @@ Most feature and fix work here should be mirrored there (adjusting for per-model
 differences), and the other way round. a290 leads: r5's changes mirror a290's and never merge
 ahead of them.
 
-**The parity check enforces that** (a290's ADR 0001; this repo's decisions live in `docs/adr/`).
+**The parity check enforces that** (row 31 of
+[ADR 0001](docs/adr/0001-what-this-add-on-is-why-and-how.md), which records this repo's decisions).
 `scripts/parity_check.py` rewrites r5's names onto a290's (`scripts/parity/map.tsv`), diffs the
 trees, and fails on any difference that `scripts/parity/expected.tsv` does not list with a
 category, an exact count and a reason, and on any entry whose difference is gone. Run
@@ -223,7 +224,7 @@ retrying` and then `MQTT connected` once it is up.
 
 Exceptions (CI is enough): docs-only, CI-YAML-only, or test-only changes.
 
-## Supervisor pilot (a290's ADR 0002)
+## Supervisor pilot
 
 `.github/workflows/supervisor.yml` runs `scripts/supervisor-pilot.sh`, a port of the a290
 twin's pilot (keep them in lockstep). It installs this add-on under a real stable Supervisor in
@@ -234,20 +235,21 @@ dashboard the pilot's options deploy (`deploy_dashboard: standard`, set by the p
 default is `none`, at `dashboard_url_path`) exists in Core with views, read back through Core's
 Lovelace WebSocket API from inside the add-on container (the Supervisor's Core proxy admits only
 an add-on token) with no `Dashboard auto-deploy skipped` in the log, and that AppArmor enforces
-`local_renault_5`. All four legs are **required checks** (a290's ADR 0002 row 5): the trigger is
+`local_renault_5`. All four legs are **required checks**: the trigger is
 unconditional and a `changes` job decides relevance the way `ui-tests.yaml` does, so a PR that
 touches neither the pilot nor the add-on's runtime files still reports four green checks in
 seconds, with every step skipped, instead of leaving a required check pending. The traps it
-solves are described in a290's CONTRIBUTING.md and ADR 0002. Local run: `PILOT_APPARMOR_CHECK=skip
+solves are described in a290's CONTRIBUTING.md. Local run: `PILOT_APPARMOR_CHECK=skip
 scripts/supervisor-pilot.sh all` (`CORE_VERSION=minimum` for the floor;
 `PILOT_BREAK=start|apparmor|dashboard` breaks it on purpose, and `PILOT_IMAGE=<ref>` installs an
 already-published image instead of building the checkout).
 
 ## Release / versioning
 
-**Releases are batched and cut on request** ([ADR 0001](docs/adr/0001-release-on-request.md),
-mirroring a290's ADR 0006). A user-facing change adds its entry under `## Unreleased` in
-**`renault_5/CHANGELOG.md`** and **leaves `renault_5/config.yaml` `version` alone**: the
+**Releases are batched and cut on request** (row 29 of
+[ADR 0001](docs/adr/0001-what-this-add-on-is-why-and-how.md)). A user-facing change adds its entry
+under `## Unreleased` in **`renault_5/CHANGELOG.md`** and **leaves `renault_5/config.yaml`
+`version` alone**: the
 Supervisor keys updates on that version and `release.yaml` publishes an image for any PR that
 moves it, so moving it is releasing. The docs-sync check fails a PR that moves the version
 without being exactly a release, and no label waives that. `main.py` reads its version from
