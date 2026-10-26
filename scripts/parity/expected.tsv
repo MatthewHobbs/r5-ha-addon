@@ -143,7 +143,6 @@ pending	alpine_a290/DOCS.md	both	*	*	each add-on's options page; 38% shared. r5'
 pending	README.md	both	*	*	repository README; 44% shared. Target: same as DOCS.md
 pending	CONTRIBUTING.md	both	*	*	each repo's contributor notes, worded for its own car (names, model codes, endpoint facts, the boot recipe's env vars). Target: same as DOCS.md
 pending	alpine_a290/README.md	both	*	39	the add-on's store README. Target: same as DOCS.md
-pending	docs/dashboards-on-mobile.md	both	*	10	line wrapping only; r5's false auto-refresh claim was removed with the drift workflow. Target: rewrap either way
 # ---------------------------------------------------------------- Supervisor pilot + AppArmor pin (a290 #160, r5 #108, ADR 0002)
 # --- pilot dashboard probe (a290 #165, mirrored by r5 in #108)
 # The probe is in both pilots now. Its only per-line residue is r5's deploy_dashboard default,
