@@ -813,6 +813,7 @@ async def main():
             _LATEST.update(ok=False, last_poll=iso(now_ts()), error=redact(err))
             _LATEST["data"].update(api_auth_failure="on" if auth else "off",
                                    last_successful_poll=iso(last_ok), **fresh)
+            save_state(state)
         # exponential backoff on repeated failures (avoid a re-auth storm), capped at 30 min or the interval
         delay = interval if fails == 0 else min(interval * 2 ** (fails - 1), max_backoff)
         try:
@@ -828,5 +829,5 @@ async def main():
     client.disconnect()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     asyncio.run(main())

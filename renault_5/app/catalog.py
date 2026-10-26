@@ -98,6 +98,7 @@ ICONS = {
     "r5_scheduled_charge_duration": "mdi:timer-outline",
     "r5_climate_schedule_mode":  "mdi:fan-clock",
     "r5_climate_ready_time":     "mdi:clock-check-outline",
+    "r5_last_successful_poll":   "mdi:cloud-check-outline",
     "r5_last_charge_type":      "mdi:ev-station",
     "r5_heated_steering_wheel": "mdi:steering",
     "r5_heated_seat_driver":    "mdi:car-seat-heater",
