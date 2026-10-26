@@ -333,7 +333,7 @@ def _poll(vehicle, supported, monkeypatch):
 
 
 def test_poll_once_produces_every_core_sensor_key(monkeypatch):
-    data, _loc = _poll(_FakeVehicle(), {"charge-mode", "pressure"}, monkeypatch)
+    data, _loc = _poll(_FakeVehicle(), {"charge-mode", "hvac-settings", "pressure"}, monkeypatch)
     produced = set(data)
     # every published sensor key (minus r5_) except last_charge_* (needs a completed session)
     # and last_successful_poll, which is OUR clock rather than the car's — the poll loop stamps
