@@ -203,6 +203,7 @@ def test_detect_supported_probes_endpoints():
     async def scenario():
         sup = await main.detect_supported(Sess())
         assert "charge-mode" in sup and "pressure" not in sup
+        assert "hvac-settings" in sup            # pessimistic, but a probe that says yes adds it
         assert actions <= sup
         assert main.SOC_ENDPOINT in sup          # soc-levels probed and supported
 
@@ -220,7 +221,10 @@ def test_detect_supported_hides_actions_on_failure():
     async def scenario():
         sess = Sess()
         sup = await main.detect_supported(sess)
-        assert sup == set(main.OPTIONAL_ENDPOINTS)   # read sensors default on, buttons hidden
+        # Plain data endpoints default on; the pessimistic ones stay dark rather than turn one
+        # failed detection into a 502000 on every poll. Buttons are hidden either way.
+        assert sup == set(main.OPTIONAL_ENDPOINTS) - main.PESSIMISTIC_ENDPOINTS
+        assert "hvac-settings" not in sup
         assert sess.invalidated is True
 
     asyncio.run(scenario())
@@ -994,7 +998,8 @@ class _ChargingVehicle:
 
 
 def test_poll_once_charging_and_no_gps_fix():
-    data, loc = asyncio.run(main.poll_once(_Sess(_ChargingVehicle()), {}, 52.0, set(), "km"))
+    data, loc = asyncio.run(main.poll_once(_Sess(_ChargingVehicle()), {}, 52.0,
+                                           {"hvac-settings"}, "km"))
     assert data["charging"] == "on"
     assert data["charger_status"] == "Charging"
     assert data["available_energy"] == 28.0               # reported by the car, used verbatim
@@ -1895,6 +1900,36 @@ def test_hvac_breaker_trips_after_repeated_failures_then_goes_quiet():
         main._BREAKERS.clear()
         main._BREAKER_FAILS.clear()
         main._BREAKER_SKIPS.clear()
+
+
+def test_an_unlisted_endpoint_is_never_called():
+    """Detection said no, or could not run at all (the pessimistic default). Either way the poll
+    must not call hvac-settings: on the A290 that was 502000 on every poll."""
+    class _HvacCounts(_ChargingVehicle):
+        calls = 0
+
+        async def get_hvac_settings(self):
+            type(self).calls += 1
+            raise AssertionError("hvac-settings was called without support")
+
+    v = _HvacCounts()
+    try:
+        data, _ = asyncio.run(main.poll_once(_Sess(v), {}, 52.0, {"charge-mode"}, "km"))
+        assert _HvacCounts.calls == 0
+        assert "climate_schedule_mode" not in data and "climate_ready_time" not in data
+    finally:
+        _HvacCounts.calls = 0
+
+
+def test_a_failed_detection_leaves_the_pessimistic_endpoint_dark():
+    """The one case the old "always poll behind a breaker" rule got wrong: a login failure at
+    start-up left hvac-settings being called on a car that may not list it."""
+    async def fake_detect(vsession):
+        return set(main.OPTIONAL_ENDPOINTS) - main.PESSIMISTIC_ENDPOINTS
+
+    assert "hvac-settings" not in asyncio.run(fake_detect(None))
+    assert main._hvac_due(set(main.OPTIONAL_ENDPOINTS) - main.PESSIMISTIC_ENDPOINTS) is False
+    assert main._hvac_due({"hvac-settings"}) is True
 
 
 def test_hvac_breaker_never_trips_on_a_car_whose_endpoint_works():

@@ -42,6 +42,7 @@ from catalog import (
     NUMBERS,
     OBJ_PREFIX,
     OPTIONAL_ENDPOINTS,
+    PESSIMISTIC_ENDPOINTS,
     REFRESH_LOCATION_EP,
     SOC_ENDPOINT,
 )
@@ -280,18 +281,23 @@ async def _supports(vehicle, ep):
 async def detect_supported(vsession):
     """Probe which optional endpoints this car exposes (reusing the cached login).
 
-    Returns a set of endpoint names. The GET data endpoints (OPTIONAL_ENDPOINTS) default
-    to supported if detection fails — they're read-only and harmless if empty. The action
-    endpoints behind ACTION_BUTTONS default to *unsupported* so a platform that forbids one
-    never gets a dead control button.
+    Returns a set of endpoint names. Plain data endpoints (OPTIONAL_ENDPOINTS) default to
+    supported if detection fails — read-only, and harmless when empty. A pessimistic one
+    (PESSIMISTIC_ENDPOINTS) defaults the other way, because a repeated failure is not. The
+    action endpoints behind ACTION_BUTTONS also default to unsupported, so a platform that
+    forbids one never gets a dead control button.
     """
-    supported = set(OPTIONAL_ENDPOINTS)
+    supported = set(OPTIONAL_ENDPOINTS) - PESSIMISTIC_ENDPOINTS
     action_eps = {ep for _name, _icon, ep in ACTION_BUTTONS.values()}
     try:
         vehicle = await vsession.vehicle()
         for ep in list(OPTIONAL_ENDPOINTS):
             try:
-                if not await _supports(vehicle, ep):
+                # add AND discard: a pessimistic endpoint starts outside the set, so a
+                # discard-only loop could never put it back on a car that does support it.
+                if await _supports(vehicle, ep):
+                    supported.add(ep)
+                else:
                     supported.discard(ep)
             except Exception as err:  # noqa: BLE001
                 LOG.warning("supports_endpoint(%s) check failed: %s", ep, err)
@@ -516,19 +522,17 @@ async def resolve_account(client):
     raise RuntimeError("No account contains the configured VIN and R5_ACCOUNT_ID is not set")
 
 
-def _hvac_due():
-    """Should this poll call hvac-settings? Yes while the breaker is clear; yes once every
-    BREAKER_RETRY_EVERY polls while tripped, so a server-side recovery is noticed without a
-    restart (the reset lives inside the call, so a breaker that never retried could never clear
-    itself); no otherwise.
+def _hvac_due(supported_eps):
+    """Should this poll call hvac-settings? Yes when the car lists it and the breaker is clear;
+    yes once every BREAKER_RETRY_EVERY polls while tripped, so a server-side recovery is noticed
+    without a restart (the reset lives inside the call, so a breaker that never retried could
+    never clear itself); no otherwise.
 
-    Deliberately NOT gated on advertised support, unlike the A290 twin. hvac-settings is not in
-    this model's OPTIONAL_ENDPOINTS, so it is never probed and would never appear in
-    supported_eps — gating on it here would withhold climate_schedule_mode / climate_ready_time
-    from every R5, which the suite caught. That gate is worth nothing anyway: a290 v1.23.0
-    shipped exactly that check and it changed nothing, because supports_endpoint() reads a static
-    table that returns True for this endpoint on both models. The breaker is the part that works,
-    so the breaker is the part that is mirrored."""
+    Advertised support alone is not enough — it reads a static table that says yes on both
+    models — so the breaker stays. But when detection could not run, the pessimistic default
+    keeps the call dark rather than turning one login failure into 502000 on every poll."""
+    if "hvac-settings" not in supported_eps:
+        return False
     if not _BREAKERS.get("hvac-settings"):
         return True
     n = _BREAKER_SKIPS["hvac-settings"] = _BREAKER_SKIPS.get("hvac-settings", 0) + 1
@@ -591,11 +595,10 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
         data.update(_charge_schedule_fields(p))
     except Exception as err:  # noqa: BLE001
         LOG.warning("ev/settings unavailable: %s", err)
-    # Advertised support is not a usable gate: the A290 twin advertises hvac-settings while the
-    # server answers 502000 to every call. Behaviour is the only signal, so trip a breaker after
-    # consecutive failures: log once, stop calling, retry periodically, reset on success. The R5's
-    # own behaviour is untested.
-    if _hvac_due():
+    # Support is part of the gate, not the whole of it: the A290 advertises hvac-settings while
+    # the server answers 502000 to every call. Behaviour is what works, so trip a breaker after
+    # consecutive failures: log once, stop calling, retry periodically, reset on success.
+    if _hvac_due(supported_eps):
         tripped = bool(_BREAKERS.get("hvac-settings"))
         try:
             data.update(_hvac_schedule_fields(await vehicle.get_hvac_settings()))

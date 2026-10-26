@@ -108,9 +108,17 @@ ICONS = {
 # Optional endpoints some models don't expose — gated on supports_endpoint().
 OPTIONAL_ENDPOINTS = {
     "charge-mode": ["r5_charge_mode"],
+    # hvac-settings serves the climate schedule. Probing it withholds those two sensors on a car
+    # that lacks it, and picks them up on one that gains it.
+    "hvac-settings": ["r5_climate_schedule_mode", "r5_climate_ready_time"],
     "pressure": ["r5_tyre_pressure_fl", "r5_tyre_pressure_fr",
                  "r5_tyre_pressure_rl", "r5_tyre_pressure_rr"],
 }
+
+# Optional endpoints that default to UNSUPPORTED when detection is inconclusive, because calling
+# one when it is absent is not free: hvac-settings answered 502000 on every poll on the A290, and
+# an optimistic default after a transient detection failure restores exactly that log spam.
+PESSIMISTIC_ENDPOINTS = {"hvac-settings"}
 
 # object_id -> (name, icon, action endpoint). Published only when supports_endpoint() is true,
 # so a forbidden control is never shown. The discovery node segment + object_id derive from the
