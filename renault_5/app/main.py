@@ -442,7 +442,7 @@ async def run_command(cmd, payload=""):
         return
     if cmd in LOCATION_CMDS and not mqtt.ENABLE_REFRESH_LOCATION:
         LOG.info("Ignoring '%s' — refresh-location is off (enable_refresh_location: false). "
-                 "On a parked car it can replace the car's recorded position with 'no fix' until "
+                 "On a parked car it replaces the car's recorded position with 'no fix' until "
                  "the next completed journey; see DOCS.md before enabling it.", cmd)
         return
     action = COMMAND_ACTIONS.get(cmd)

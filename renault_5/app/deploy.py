@@ -160,8 +160,8 @@ _BUBBLE_SEP_STYLE = (
     'overflow:visible !important;text-overflow:clip !important;}'
     '.bubble-icon-container{color:#FFFF00 !important;}'
 )
-# The recommended charge target — drawn as a draggable-to reference line on the slider. The
-# marker is positioned by percent assuming a 0–100 number range (the common case); it's a
+# Renault 5's recommended charge target — drawn as a draggable-to reference line on the slider.
+# The marker is positioned by percent assuming a 0–100 number range (the common case); it's a
 # visual guide, not a hard stop.
 _CHARGE_TARGET_REC = 80
 _CHARGE_TARGET_MARKER_STYLE = (
