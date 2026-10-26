@@ -92,16 +92,18 @@ jobs:
           python3 -m pip install --quiet -r renault_5/app/requirements.txt
           python3 scripts/docs_sync_check.py --self-test
           python3 scripts/prepare_release.py --self-test
+          python3 scripts/adr_evidence_check.py --self-test
           python3 scripts/release_decision.py --self-test
           python3 scripts/docs_sync_check.py "$BASE_SHA"
+          python3 scripts/adr_evidence_check.py
 
   parity:
     name: Parity with a290
     runs-on: ubuntu-latest
-    # ADR 0001 (a290) stage A: fail on any difference from a290-ha-addon that scripts/parity/expected.tsv
+    # Fail on any difference from a290-ha-addon that scripts/parity/expected.tsv
     # does not explain, and on any entry there whose difference is gone. It reads a290's main as it
     # is NOW, so a merge on a290 can turn this red without a change here (a stale entry to delete,
-    # usually). That is why it is its own job and not yet a required check; see the ADR.
+    # usually). That is why it is its own job and not yet a required check.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:

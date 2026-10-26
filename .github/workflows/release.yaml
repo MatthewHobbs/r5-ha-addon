@@ -19,7 +19,7 @@ name: Release
 #
 # "Bump" is decided by comparing the version the pinned info helper reads on the comparison base
 # (the PR's base commit, or the commit before this push) with the one it reads here, AND the tag
-# `v<version>` being absent (scripts/release_decision.py, a290-ha-addon/ADR 0006 row 8). Tag-absent alone is not
+# `v<version>` being absent (scripts/release_decision.py). Tag-absent alone is not
 # enough: after a release merges and its post-merge gate fails, the tag never exists, and every
 # later ordinary PR would republish its own unmerged build over the live `<image>:<version>`. A
 # failed `git ls-remote` is an error that blocks the run, never "no such tag". To finish a
@@ -273,7 +273,7 @@ jobs:
   pilot:
     name: Published image (${{ matrix.arch }}, Core ${{ matrix.core }})
     needs: [prepare, build]
-    # The a290 twin's ADR 0002 row 5: the artefact that ships is the one GHCR serves, booted under a
+    # The artefact that ships is the one GHCR serves, booted under a
     # real stable Supervisor on both arches and both Core ends. Runs on the bump PR —
     # which is where the image is published — so a merge cannot ship an unbooted one.
     runs-on: ${{ matrix.os }}
@@ -287,7 +287,7 @@ jobs:
       PILOT_IMAGE: ${{ matrix.image }}:${{ needs.prepare.outputs.version }}
       # Condition on the steps, not the job: a false job-level `if:` stops the
       # matrix expanding, so the legs report under an unexpanded template name
-      # (ui-tests.yaml, ADR 0005). A fork bump PR cannot push, so it has no image.
+      # (ui-tests.yaml). A fork bump PR cannot push, so it has no image.
       PILOT_RUN: ${{ needs.prepare.outputs.publish == 'true' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) }}
     steps:
       # The PR head, not the merge ref: the image was built from this commit.
@@ -323,7 +323,7 @@ jobs:
         run: scripts/supervisor-pilot.sh down
 
   validated:
-    name: Wait for CI + UI Tests on this commit (ADR 0005)
+    name: Wait for CI + UI Tests on this commit
     # The image itself is already live by this point (published from the version-bump PR,
     # before merge — see the header comment), so this gates only the visible "this version is
     # out" signal (the git tag + GitHub Release below), not image availability. Runs only when
@@ -334,12 +334,12 @@ jobs:
     if: ${{ github.event_name == 'push' && needs.prepare.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Wait for UI Tests (both legs; always reports per ADR 0005, applicable or not)
+      - name: Wait for UI Tests (both legs; always reports, applicable or not)
         uses: lewagon/wait-on-check-action@369769072fe522a3a8a85c03c96af1e5242a1994  # v1.9.1
         with:
           ref: ${{ github.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          running-workflow-name: "Wait for CI + UI Tests on this commit (ADR 0005)"
+          running-workflow-name: "Wait for CI + UI Tests on this commit"
           check-regexp: '^Dashboard responsive render'
           wait-interval: 20
           checks-discovery-timeout: 180
@@ -349,7 +349,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          running-workflow-name: "Wait for CI + UI Tests on this commit (ADR 0005)"
+          running-workflow-name: "Wait for CI + UI Tests on this commit"
           check-regexp: '^(Lint|Tests|Security|Build \(amd64 sanity\)|Docs sync)$'
           wait-interval: 20
           checks-discovery-timeout: 180

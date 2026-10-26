@@ -26,7 +26,7 @@ Mushroom tile labels clipping on a phone.
    cuts a non-scrolling name or state at two lines), or any `hui-error-card`. A box that clips
    but owns no text node is measured by its text content: Bubble's scrolling-text marquee keeps
    a name in a child span that never overflows while the container hides it behind a fade, and
-   the gate reported 0 for those names until ADR 0004 (a290 twin). A screenshot is saved per
+   the gate reported 0 for those names until the span was measured. A screenshot is saved per
    device; the run exits non-zero with a report if anything is clipped.
 4. **Bubble pop-ups.** The Bubble dashboard is nothing but pop-ups, and Bubble renders a pop-up
    only while it is open (a closed one is detached from the DOM, measured on 3.4.1), so step 3
@@ -39,9 +39,8 @@ Mushroom tile labels clipping on a phone.
    inside a pop-up are reported with its hash. **Known limit:** the scan starts once the pop-up's
    header is on screen and, for a pop-up whose manifest names expected labels, once those are laid
    out; a pop-up that names none gets no completeness signal before its scan, so a card that paints
-   later than the scan's settle window is not checked. Closing that is
-   [ADR 0003](https://github.com/MatthewHobbs/a290-ha-addon/blob/main/docs/adr/0003-wait-for-every-pop-up-card-before-scanning.md)
-   in the a290 twin (r5 #115). The listing cannot go quietly empty: `seed.py`
+   later than the scan's settle window is not checked. Closing that waited for every card the
+   manifest names (r5 #115). The listing cannot go quietly empty: `seed.py`
    stops on a pop-up without a hash or a name, on two sharing either, on a `navigate` action whose
    target no pop-up defines, and on a Bubble dashboard defining fewer than `MIN_POPUPS`.
 
