@@ -1,10 +1,10 @@
 # Dashboards on mobile
 
-The bundled Renault 5 dashboards are designed for phones and **automatically tested** on every
-change: a CI job renders them in a real Home Assistant across the top mobile device sizes and
-fails the build if any text is truncated or any card fails to render. Typography is the same on
-every screen (no font/size changes between phone and desktop); labels and headings **wrap on
-clean word breaks** rather than getting cut off.
+The bundled Renault 5 dashboards are designed for phones and **automatically tested** on
+every change: a CI job renders them in a real Home Assistant across the top mobile device
+sizes and fails the build if any text is truncated or any card fails to render. Typography is
+the same on every screen (no font/size changes between phone and desktop); labels and headings
+**wrap on clean word breaks** rather than getting cut off.
 
 Devices validated each run: **iPhone 15 Pro Max, iPhone 15 Pro, iPhone SE, Pixel 8,
 Galaxy S24, Galaxy A54, and a 360 px narrow Android bound.**
