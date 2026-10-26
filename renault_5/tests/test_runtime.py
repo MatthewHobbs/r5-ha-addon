@@ -1247,8 +1247,13 @@ def test_main_failure_branch_flags_auth_and_staleness(monkeypatch, tmp_path):
         stop.set()
         raise RuntimeError("HTTP 401 invalid credentials")
 
+    saved = []
+    monkeypatch.setattr(main, "save_state", saved.append)
     fc = _wire_main(monkeypatch, tmp_path, poll)
     asyncio.run(main.main())
+    # A failing poll still persists state: the endpoint probe and the breaker write into it, and a
+    # restart would otherwise re-probe everything the car just refused (a290's P-C2).
+    assert saved, "the failure branch must save state"
     state_payloads = [json.loads(p) for t, p in fc.pubs if t == mqtt.STATE_TOPIC]
     assert any(d.get("api_auth_failure") == "on" for d in state_payloads)
     # poll_failing, not data_stale: the split separates "cannot reach Kamereon" from "the car has
