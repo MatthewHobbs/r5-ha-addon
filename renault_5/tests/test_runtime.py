@@ -1216,10 +1216,9 @@ def test_main_runs_one_successful_cycle(monkeypatch, tmp_path):
     topics = [t for t, _ in fc.pubs]
     assert mqtt.STATE_TOPIC in topics
     assert mqtt.ATTR_TOPIC in topics              # location attrs published
-    # ...and NOTHING on the tracker state topic. A state payload becomes the entity's
-    # location_name, which outranks the lat/lon attributes above and would pin the tracker to that
-    # value forever. This assertion was inverted -- it used to require the write that caused the
-    # bug -- so it now guards the fix rather than the regression.
+    # ...and NOTHING on the tracker state topic: a state payload becomes location_name, which
+    # outranks the lat/lon attributes and pins the tracker to it. This assertion used to require
+    # the write that caused the bug, so it now guards the fix.
     assert mqtt.TRACKER_STATE_TOPIC not in topics
     assert (mqtt.AVAIL_TOPIC, "offline") in fc.pubs   # clean shutdown
     assert fc.stopped is True and fc.disconnected is True
@@ -1252,10 +1251,9 @@ def test_main_failure_branch_flags_auth_and_staleness(monkeypatch, tmp_path):
     asyncio.run(main.main())
     state_payloads = [json.loads(p) for t, p in fc.pubs if t == mqtt.STATE_TOPIC]
     assert any(d.get("api_auth_failure") == "on" for d in state_payloads)
-    # poll_failing, not data_stale: the two were split so that "we cannot reach Kamereon" and
-    # "the car has not reported" stop being the same flag. This process never polled
-    # successfully, so poll_failing is on — and data_stale is OMITTED, because no car timestamp
-    # has ever been seen and publishing "off" would assert freshness we cannot know.
+    # poll_failing, not data_stale: the split separates "cannot reach Kamereon" from "the car has
+    # not reported". This process never polled successfully, so poll_failing is on, and data_stale
+    # is omitted: no car timestamp was seen, and "off" would assert freshness we cannot know.
     assert any(d.get("poll_failing") == "on" for d in state_payloads)
     assert all("data_stale" not in d for d in state_payloads)
 
@@ -1372,10 +1370,9 @@ def _one_failed_poll(monkeypatch, tmp_path, err):
 
 
 def test_kamereon_unauthorized_is_an_auth_failure(monkeypatch, tmp_path):
-    # str() of this exception is "('err.func.wired.unauthorized', 'Not authorized')": none of the
-    # words the keyword match looks for, so it was classified as an ordinary failure. That gap
-    # predates renault-api 0.5.14 (0.5.13 raised the same text under a generic class); 0.5.14 only
-    # gives the reply a class of its own, which is what lets it be recognised by type.
+    # str() is "('err.func.wired.unauthorized', 'Not authorized')", which no keyword match catches,
+    # so it read as an ordinary failure. The gap predates 0.5.14, which only gives the reply its
+    # own class — and that is what lets it be recognised by type.
     err = UnauthorizedException("err.func.wired.unauthorized", "Not authorized")
     published, invalidated = _one_failed_poll(monkeypatch, tmp_path, err)
     assert published and all(d["api_auth_failure"] == "on" for d in published)
@@ -1822,13 +1819,9 @@ def test_run_command_rejects_refresh_location_when_location_disabled(monkeypatch
 # --------------------------------------------------------------------------- #
 # Sentinel coordinates + hvac-settings breaker (mirrored from a290 v1.23.0/v1.23.1).
 #
-# Kamereon signals "no position" with an out-of-band sentinel rather than a null: 91/181,
-# each exactly one unit past the maximum, carried on a genuinely FRESH timestamp. The R5
-# built its tracker attributes inline with an `is not None` check, so it published that as a
-# real coordinate — flipping the car to not_home while parked at home — and advanced
-# gps_last_activity at the same time, disarming binary_sensor.r5_gps_stale with the very
-# payload that broke the position. Observed on the A290 twin; the sentinel is a Kamereon
-# behaviour, not a per-model one.
+# Kamereon signals "no position" with a sentinel, not a null: 91/181, one unit past the maximum,
+# on a FRESH timestamp. The tracker's `is not None` check published it as a real coordinate and
+# disarmed binary_sensor.r5_gps_stale.
 
 class _SentinelVehicle(_ChargingVehicle):
     async def get_location(self):
@@ -1915,10 +1908,8 @@ def test_hvac_breaker_never_trips_on_a_car_whose_endpoint_works():
 
 
 # --- data_stale measures the CAR, poll_failing measures the FEED (mirrors a290 v1.24.0) -------
-# Regression cover for the defect where data_stale was wired to poll success and forced "off" on
-# every successful poll. On the A290 twin a vehicle silent since 2026-09-04 was polled
-# successfully every five minutes for 68 hours and published as healthy, showing 55% while the
-# car was at 83%. This repo carried the identical code.
+# Regression cover for data_stale being wired to poll success and forced "off" on every successful
+# poll: on the A290 twin a car silent for 68 hours published as healthy.
 
 def _fresh(state, payload_iso, last_ok, hours=36):
     return main.freshness_fields(state, payload_iso, hours * 3600, last_ok)

@@ -249,20 +249,17 @@ already-published image instead of building the checkout).
 **Releases are batched and cut on request** (row 29 of
 [ADR 0001](docs/adr/0001-what-this-add-on-is-why-and-how.md)). A user-facing change adds its entry
 under `## Unreleased` in **`renault_5/CHANGELOG.md`** and **leaves `renault_5/config.yaml`
-`version` alone**: the
-Supervisor keys updates on that version and `release.yaml` publishes an image for any PR that
-moves it, so moving it is releasing. The docs-sync check fails a PR that moves the version
-without being exactly a release, and no label waives that. `main.py` reads its version from
-`R5_VERSION`, which the Dockerfile sets from `BUILD_VERSION`, so there is no version literal in
-code to keep in sync.
+`version` alone**. The docs-sync check fails a PR that moves the version without being exactly a
+release, and no label waives that. `main.py` reads its version from `R5_VERSION`, which the
+Dockerfile sets from `BUILD_VERSION`, so there is no version literal in code to keep in sync.
 
-Only when the maintainer asks for a release: `just release <version>` (read the entries it
-prints, then choose the number: a new feature is a minor, otherwise a patch), commit the two
-files it changes as their own PR titled `chore(release): <version>`, and let the existing gates
-run. That PR publishes the image, then installs the **published** per-arch image under a real
-stable Supervisor on four legs before it may merge, so the artefact users pull has been booted on
-both arches at both ends of the Core range. Merging tags `v<version>`. Never put a version bump in a
-feature PR "to get it out". r5 is released separately and never ahead of a290.
+Only when the maintainer asks for a release: `just release <version>` (read the entries it prints,
+then choose the number: a new feature is a minor, otherwise a patch), commit the two files it
+changes as their own PR titled `chore(release): <version>`, and let the existing gates run. Merging
+that PR publishes nothing. `just tag <version>` then signs and pushes `v<version>` on the merge
+commit; that run installs the per-arch image under a real stable Supervisor on four legs, waits for
+CI and the render gate, and only then publishes the image users pull and cuts the Release. Never put
+a version bump in a feature PR "to get it out". r5 is released separately and never ahead of a290.
 
 **What reaches users on merge, whatever the version.** Batching holds back the container image
 only. The Supervisor reads the add-on's *files* straight from `main`, so a merge that changes

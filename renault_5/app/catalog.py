@@ -137,8 +137,8 @@ BUTTON_CMD_OVERRIDES = {
 SOC_ENDPOINT = "soc-levels"
 # CHARGES_ENDPOINT moved to renault_mqtt.charge with the reconciliation logic; main.py imports
 # it for the support probe.
-# The refresh-location action endpoint: names the ACTION_BUTTONS entry that triggers a GPS
-# refresh, gated on it and on the location opt-out, shared by the control and discovery layers.
+# The refresh-location action endpoint: the poller gates the button and the command on it, and
+# on the location opt-out.
 REFRESH_LOCATION_EP = "actions/refresh-location"
 NUMBERS = {
     "r5_soc_min_target": ("SOC Min Target", "mdi:battery-arrow-down", 15, 45, 5),

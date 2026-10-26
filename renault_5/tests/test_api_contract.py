@@ -117,11 +117,10 @@ def test_soc_levels_model_contract():
     assert main.SOC_ENDPOINT == "soc-levels"
 
 
-# What the library declares for the R5 (model R5E1VE): every key, including the ones set to
-# None. The add-on probes supports_endpoint() at startup and publishes only what this allows, and a
-# key that DISAPPEARS falls back to renault-api's default map, which reads as supported (that is
-# how hvac-settings was polled into 502000 errors on the A290). Dependabot proposes renault-api like
-# any dependency; this fails CI on any change to the map until someone has looked at it.
+# What the library declares for the R5 (R5E1VE), every key included. The add-on publishes
+# only what supports_endpoint() allows; a key that DISAPPEARS falls back to the library's default
+# map and reads as supported, which is how hvac-settings got polled into 502000 errors. CI fails on
+# any change until someone looks.
 _KCA = "/kca/car-adapter/v1/cars/{vin}"
 R5E1VE_MAP = {
     "actions/charge-set-mode": None,

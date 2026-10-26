@@ -89,10 +89,9 @@ def _read_dashboard(style):
         return fh.read()
 
 
-# Optional Smart Charging controls: the user maps their own charger entities (any integration)
-# via the charger_* options, and a blank slot is skipped. The standard dashboard renders them as
-# Mushroom cards matching the presets; the bubble one as a pop-up of native controls. Both
-# builders unpack them in this order.
+# Optional Smart Charging controls: the user maps charger_* entities, blank slots are skipped.
+# Mushroom cards on the standard dashboard, a pop-up tab of Bubble controls on the bubble one.
+# Order matters: both builders unpack these as smart, bump, soc, ttime, dispatch.
 _CHARGER_ENTITIES = (
     "R5_CHARGER_SMART_CHARGE",
     "R5_CHARGER_BUMP_CHARGE",
@@ -103,9 +102,8 @@ _CHARGER_ENTITIES = (
 _CHARGER_HASH = "#r5-charging"
 # The heading the standard-dashboard card is inserted directly beneath.
 _CHARGER_ANCHOR_HEADING = "Climate/Charging Presets"
-# The standard dashboard renders every control as a Mushroom card with a 55px coloured icon and
-# Zen Dots styling. These constants mirror that, so the Smart Charging controls match the
-# Climate/Charging Presets above them instead of plain MDC inputs.
+# Mirrors the standard dashboard's Mushroom card look (55px coloured icon, Zen Dots) so the
+# Smart Charging controls match the presets and avoid a plain entities card's light inputs.
 _MUSH_SHAPE = ".shape{--icon-size:55px;--icon-symbol-size:28px;}"
 _MUSH_INFO = (".container{--card-secondary-color:#FFFF00;}"
               ".primary{font-family:system-ui,sans-serif !important;font-size:12px !important;"
@@ -131,7 +129,7 @@ _TILE_STYLE = ("ha-tile-icon{--tile-icon-size:55px;--mdc-icon-size:28px;}"
 _HEADING_STYLE = ('.content{font-family:"Zen Dots",system-ui,sans-serif !important;'
                   'font-size:13px !important;letter-spacing:2px !important;color:#FFFF00 !important;'
                   'border-bottom:1px solid var(--divider-color);padding-bottom:6px;'
-                  'text-transform:uppercase;}.content p{white-space:normal !important;'
+                  'text-transform:uppercase;}.content p,.content h2{white-space:normal !important;'
                   'overflow:visible !important;text-overflow:clip !important;}')
 # Bubble Card separator styling, matched to the bundled bubble dashboard's other separators.
 _BUBBLE_SEP_STYLE = (

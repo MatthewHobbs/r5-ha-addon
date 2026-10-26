@@ -56,8 +56,8 @@ the changelog like any other.
 | 26 | Documentation is held to the code by a check. A change to the options or the published entities fails unless the docs change with it; a change to the version fails unless it is exactly a release; changelog history is append-above only | r5 | Done | `scripts/docs_sync_check.py`; the `Docs sync` job in `.github/workflows/ci.yaml` |
 | 27 | The dashboards are rendered in a real Home Assistant on seven phone sizes, and a truncated label or an error card fails the run. It has two legs, current stable and the declared minimum read from `config.yaml`; its inputs are pinned and bumped together; it always reports so it can be required | r5 | Done | `ui-tests/run.sh`; `ui-tests/seed.py`; `ui-tests/check_overflow.py`; `ui-tests/devices.json`; `.github/workflows/ui-tests.yaml` |
 | 28 | The add-on is installed under a real stable Supervisor before it ships. A pilot installs it on both architectures at current stable Core and at the declared minimum, and checks the versions, the image's provenance, `/healthz`, the retained discovery and availability topics, that Renault was tried and refused, the deployed dashboard in Core, and AppArmor enforcement. The release run repeats it on the published per-arch image before the tag | r5 | Done | `scripts/supervisor-pilot.sh`; `.github/workflows/supervisor.yml`; the `pilot` job in `.github/workflows/release.yaml` |
-| 29 | A release is requested, then published. Ordinary changes add a changelog entry under `## Unreleased` and leave `version` alone; a release PR changes only `version` and that heading. An image is published only for a PR or push that moves the version to one with no tag yet; the tag and GitHub Release wait for CI and both UI legs on the same commit, and a PR that bumps the version cannot merge until its image is pullable | r5 | Done | `scripts/prepare_release.py`; `scripts/docs_sync_check.py`; `scripts/release_decision.py`; `.github/workflows/release.yaml` (`prepare`, `validated`, `tag`, `release-gate`); `justfile` (`release`) |
-| 30 | `main` takes only signed, linear, squashed history through twelve required checks, and the rules bind administrators. The checks are Lint, Tests, Security, Build, Release image published, Docs sync, both UI legs and the four pilot legs. Parity is not one of them | r5 | Done | Branch protection on `main`, read with `gh api` on 2026-10-25: `api.strict`, `api.enforce_admins`, `api.required_signatures` and `api.required_linear_history` all on |
+| 29 | A release is requested, then published from a tag I sign. Ordinary changes add a changelog entry under `## Unreleased` and leave `version` alone; a release PR changes only `version` and that heading, and publishes nothing. `just tag <version>` signs `v<version>` on the merge commit, and that run builds both arches, boots them under a stable Supervisor, waits for CI and both render legs on the same commit, and only then publishes the manifest, the attestation and the GitHub Release. The version is refused unless it is above every existing tag | r5 | Done | `scripts/prepare_release.py`; `scripts/check-version-order.sh`; `.github/workflows/release.yaml` (`prepare`, `build`, `manifest`, `pilot`, `validated`, `release`); `justfile` (`release`, `tag`) |
+| 30 | `main` takes only signed, linear, squashed history through twelve required checks, and the rules bind administrators: Lint, Tests, Security, Build, Docs sync, Comment length, both UI legs and the four pilot legs. Parity is not one of them | r5 | Done | Branch protection on `main`, read with `gh api` on 2026-10-26: `api.strict`, `api.enforce_admins`, `api.required_signatures` and `api.required_linear_history` all on |
 | 31 | The twin is derived and checked. This repository is held to `a290-ha-addon` by a script that rewrites its names onto a290's, diffs the trees, and fails on any difference not listed with a category, an exact count and a reason. a290 leads; r5 mirrors its changes and does not release ahead of it | r5 | Done | `scripts/parity_check.py`; `scripts/parity/map.tsv`; `scripts/parity/expected.tsv`; the `parity` job in `.github/workflows/ci.yaml` |
 
 Status is one of **Open**, **Done**, **Blocked**, **Dropped**. A **Done** row carries Evidence.
@@ -115,11 +115,12 @@ both copies agree; `docs_sync_check.py` is not yet, and `expected.tsv` lists tha
 mask that stops matching is the signal a pin has moved.
 
 **Releasing.** A change adds its entry under `## Unreleased` and leaves `version` alone. On
-request, `just release <version>` turns that heading into the version and moves the manifest. The
-image publishes from that PR, and the PR cannot merge until the image is pullable; the tag and the
-GitHub Release wait for CI and both render legs on the same commit. This is where r5 differs from
-a290, which now publishes from a signed tag: r5 has not taken that flow, and `expected.tsv` carries
-it as pending.
+request, `just release <version>` turns that heading into the version and moves the manifest; that
+PR is merged, then `just tag <version>` signs `v<version>` on the merge commit. The tag run does the
+rest: it checks the tag, pushes the images, boots them under a stable Supervisor, waits for CI and
+the render gate, and only then publishes the manifest and the Release. Tags are immutable and
+signing is on by default, so `git tag` needs `-m` or it hangs, and a tag pushed early burns the
+version.
 
 **Traps, in the order they have cost time.** Home Assistant derives an entity's id from the device
 and friendly names, not from the discovery `object_id`, so tests and dashboards must derive ids the
@@ -146,9 +147,8 @@ users while they still run the previous image.
 - The shared core is a pinned commit of another repository. A fix there does not reach this add-on
   until `CORE_REF` moves, and nothing bumps it automatically (row 23).
 - r5 differs from a290 where the cars do. It polls `hvac-settings` always behind a breaker where
-  a290 treats it as optional (row 7); it publishes Cabin Temperature; it defaults
-  `deploy_dashboard` to `none`; and it still publishes its image from the version-bump pull
-  request, where a290 publishes from a tag I sign. `scripts/parity/expected.tsv` lists each.
+  a290 treats it as optional (row 7); it publishes Cabin Temperature; and it defaults
+  `deploy_dashboard` to `none`. `scripts/parity/expected.tsv` lists each.
 - Start Charging is published, and is documented as possibly doing nothing under scheduling
   outside the car. `set_charge_start()` works by switching off the car's own charge programs. On
   an A290 on Octopus Intelligent that left the car waiting to charge. For the R5 the same outcome
