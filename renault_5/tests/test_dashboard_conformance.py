@@ -38,7 +38,10 @@ import yaml
 from renault_mqtt import mqtt
 
 _REPO = Path(__file__).resolve().parents[2]
-_DASHBOARDS = sorted((_REPO / "renault_5" / "dashboards").glob("*.txt"))
+_DASH_DIR = _REPO / "renault_5" / "dashboards"
+_DASHBOARDS = sorted(_DASH_DIR.glob("*.txt"))
+# Only the optional helpers actually defined by the shipped YAML may be absent from discovery.
+_HELPER_FILES = sorted([*(_DASH_DIR / "Packages").glob("*.yaml"), *(_DASH_DIR / "Templates").glob("*.yaml")])
 _SEED = _REPO / "ui-tests" / "seed.py"
 
 
@@ -56,29 +59,13 @@ _DEVICE_SLUG = _slug(catalog.DEVICE["name"])  # "r5"
 _PREFIXES = sorted({_DEVICE_SLUG + "_", catalog.OBJ_PREFIX, _DEVICE_SLUG.split("_")[0] + "_"})
 # ANY domain, not a listed few: a fixed list made ``switch.r5_battery_level`` (or ``climate.``,
 # ``select.``) invisible below while the >= 20 guard stayed satisfied. Legitimate domains are
-# derived from discovery and _NOT_PUBLISHED; Core admits digits in a domain, so ``sensor2.`` is
+# derived from discovery and the helper packages; Core admits digits in a domain, so ``sensor2.`` is
 # caught too.
 _REF = re.compile(r"\b([a-z0-9_]+)\.((?:" + "|".join(_PREFIXES) + r")[a-z0-9_]+)")
-# Domains a dashboard may reference although neither discovery nor _NOT_PUBLISHED defines
+# Domains a dashboard may reference although neither discovery nor a helper package defines
 # them, each with the reason. Empty today: the core's device_tracker comes out of discovery and
-# the input_* helpers are listed by id in _NOT_PUBLISHED, so nothing needs listing by hand.
+# the input_* helpers come from the packages, so nothing needs listing by hand.
 _ALLOWED_DOMAINS: dict[str, str] = {}
-
-# Referenced but never published by the add-on. The A290 twin derives this set from the helper
-# packages it ships (Packages/, Templates/); this add-on ships none (README "Optional": users
-# port them from upstream), so it is hand-kept. Each entry needs a reason, and
-# test_allowlist_has_no_stale_entries removes the ones that stop being true.
-_NOT_PUBLISHED = {
-    # The optional test-mode preview package (README "Optional"): user-installed HA helpers and
-    # template sensors, never published by the add-on.
-    "input_boolean.r5_test_mode",
-    "input_button.r5_test_charge_run",
-    "binary_sensor.r5_test_show_panel",
-    "sensor.r5_test_ends_countdown",
-    "sensor.r5_test_panel_hide_countdown",
-    # The optional "pretty location" user template sensor (README "Optional").
-    "sensor.r5_pretty_location",
-}
 
 
 class _Recorder:
@@ -126,6 +113,25 @@ def published(configs) -> set[str]:
     return {_name_derived_id(key.split("/")[0], conf) for key, conf in configs.items()}
 
 
+def _defined_helper_ids(paths) -> set[str]:
+    """Input helpers use their keys; template entities use slug(name), not unique_id."""
+    ids = set()
+    for path in paths:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        blocks = doc if isinstance(doc, list) else doc.get("template", [])
+        if isinstance(doc, dict):
+            ids |= {f"{dom}.{key}" for dom, items in doc.items() if dom.startswith("input_") for key in items}
+        for block in blocks:
+            for dom in ("sensor", "binary_sensor"):
+                ids |= {f"{dom}.{_slug(ent['name'])}" for ent in block.get(dom, [])}
+    return ids
+
+
+def _helper_ids() -> set[str]:
+    """Ids defined by the shipped packages and standalone templates."""
+    return _defined_helper_ids(_HELPER_FILES)
+
+
 def _dashboard_refs() -> set[tuple[str, str]]:
     """(source file, entity_id) for every add-on-prefixed entity the dashboards reference."""
     found = set()
@@ -169,6 +175,7 @@ def test_inputs_are_not_empty(published) -> None:
     assert all(n >= 20 for n in per_file.values()), per_file
     assert len(_seeded()) >= 20, sorted(_seeded())
     assert len(published) >= 20, sorted(published)
+    assert len(_helper_ids()) >= 20, sorted(_helper_ids())
 
 
 def test_entity_ids_are_derived_from_names(published) -> None:
@@ -219,7 +226,7 @@ def test_dashboard_entities_are_the_pinned_ids(configs) -> None:
     unpinned = sorted(
         f"{src}: {eid}"
         for src, eid in _dashboard_refs()
-        if eid not in pinned and eid not in _NOT_PUBLISHED and not _allowed(eid)
+        if eid not in pinned and eid not in _helper_ids() and not _allowed(eid)
     )
     assert not unpinned, "Dashboards reference ids no discovery config pins:\n  " + "\n  ".join(unpinned)
 
@@ -235,16 +242,16 @@ def test_entity_names_keep_the_slug_valid() -> None:
 
 
 def test_dashboard_entities_exist(published) -> None:
-    """Every dashboard entity is one this build publishes, or a documented user helper."""
+    """Every dashboard entity is published or defined by a shipped helper file."""
     unknown = sorted(
         f"{src}: {eid}"
         for src, eid in _dashboard_refs()
-        if eid not in published and eid not in _NOT_PUBLISHED and not _elsewhere(eid, published) and not _allowed(eid)
+        if eid not in published and eid not in _helper_ids() and not _elsewhere(eid, published) and not _allowed(eid)
     )
     assert not unknown, (
         "Dashboards reference entity ids this build does not publish. Home Assistant names "
         "entities slug(device name + entity NAME), so check the catalog's names, not its "
-        "object_ids. If the entity is a user helper, add it to _NOT_PUBLISHED with a reason:\n  "
+        "object_ids. Optional helpers must be defined by the shipped YAML:\n  "
         + "\n  ".join(unknown)
     )
 
@@ -267,11 +274,11 @@ def test_dashboard_references_use_a_domain_this_build_publishes(published) -> No
     """A prefixed reference in a domain nothing here defines (``switch.``, ``climate.``, ``select.``)
     is named, not skipped: such an id can resolve on no install, and the specific checks above
     only ever compare against ids that do exist."""
-    known = _domains(published) | _domains(_NOT_PUBLISHED) | set(_ALLOWED_DOMAINS)
+    known = _domains(published) | _domains(_helper_ids()) | set(_ALLOWED_DOMAINS)
     assert {"sensor", "binary_sensor", "number", "button", "device_tracker", "input_boolean"} <= known
     foreign = sorted(f"{src}: {eid}" for src, eid in _dashboard_refs() if eid.split(".", 1)[0] not in known)
     assert not foreign, (
-        "Dashboards reference add-on entities in a domain neither discovery nor _NOT_PUBLISHED "
+        "Dashboards reference add-on entities in a domain neither discovery nor a helper package "
         f"defines (known: {', '.join(sorted(known))}). Fix the reference, or add the domain to "
         "_ALLOWED_DOMAINS with its reason:\n  " + "\n  ".join(foreign)
     )
@@ -310,19 +317,28 @@ def test_dashboards_do_not_reference_retired_sensors() -> None:
     )
 
 
-def test_allowlist_has_no_stale_entries(published) -> None:
-    """An allowlist entry that is now published would collide on install and exempt nothing
-    real; one no longer referenced is hiding nothing today and will hide the next drift."""
-    referenced = {eid for _, eid in _dashboard_refs()}
-    assert not _NOT_PUBLISHED & published, sorted(_NOT_PUBLISHED & published)
-    assert _NOT_PUBLISHED <= referenced, sorted(_NOT_PUBLISHED - referenced)
+def test_helper_packages_do_not_shadow_published_ids(published) -> None:
+    """A helper id the add-on also publishes would collide on install and exempt nothing real."""
+    assert not _helper_ids() & published, sorted(_helper_ids() & published)
+
+
+def test_helper_references_resolve_from_names() -> None:
+    """Catch stale bare ids and name/unique_id mismatches, including the Energy Stored tile."""
+    package = _package_ids()
+    assert "sensor.r5_test_last_charge_energy_stored" in package
+    assert "sensor.r5_test_charge_energy_stored" not in package
+    for path in [*_DASHBOARDS, *(_DASH_DIR / "Packages").glob("*.yaml")]:
+        text = path.read_text(encoding="utf-8")
+        assert not re.search(r"\b[a-z_]+\.test_", text), path
+        refs = {f"{domain}.{rest}" for domain, rest in _REF.findall(text) if rest.startswith("r5_test_")}
+        assert refs <= package, (path.name, sorted(refs - package))
 
 
 def test_ui_gate_seeds_what_the_add_on_publishes(published) -> None:
     """The seed must not invent entities, or the UI gate validates a fiction (#50 was seeded)."""
     bad = []
     for eid in sorted(_seeded()):
-        if eid in published or eid in _NOT_PUBLISHED:
+        if eid in published or eid in _helper_ids():
             continue
         other = _elsewhere(eid, published)
         bad.append(f"{eid} — published as {', '.join(other)}" if other else f"{eid} — not published")
@@ -359,10 +375,10 @@ def _unknown_doc_ids(text: str, known: set[str]) -> list[str]:
 
 
 def test_documented_entities_exist(published) -> None:
-    """Every add-on entity id the docs name is one this build publishes (or a documented
-    user-installed helper in _NOT_PUBLISHED). Docs that name a renamed id leave an automation
+    """Every add-on entity id the docs name is one this build publishes (or a shipped
+    helper defines). Docs that name a renamed id leave an automation
     targeting nothing; the A290 twin once documented the R5's soc_*_target ids under its own name."""
-    known = published | _NOT_PUBLISHED
+    known = published | _helper_ids()
     docs = _doc_files()
     assert {str(p.relative_to(_REPO)) for p in docs} >= {
         "README.md", "renault_5/README.md", "renault_5/DOCS.md", "docs/dashboards-on-mobile.md"}, docs
@@ -389,7 +405,7 @@ def test_unknown_documented_entity_is_reported(published) -> None:
         "and a user's own `sensor.octopus_charger`.\n"
     )
     assert real in published
-    assert _unknown_doc_ids(sample, published | _NOT_PUBLISHED) == [
+    assert _unknown_doc_ids(sample, published | _helper_ids()) == [
         "button.r5_battery_level",
         "number.r5_minimum_soc",
         "sensor.r5_battery_levl",
@@ -401,14 +417,16 @@ def test_unknown_documented_entity_is_reported(published) -> None:
 # The frontend's checkStateCondition reads a missing entity as "unknown". A condition needing
 # 'off' on a package-only entity therefore never matches on a default install (the package is
 # optional), and the UI gate cannot see it because ui-tests/seed.py seeds those entities too.
-_DASH_DIR = _REPO / "renault_5" / "dashboards"
 _PANEL = "binary_sensor.r5_test_show_panel"
 
 
+def _package_ids() -> set[str]:
+    """Ids only the optional Packages/ define; standalone Templates/ are not test-mode."""
+    return _defined_helper_ids(sorted((_DASH_DIR / "Packages").glob("*.yaml")))
+
+
 def _is_package(entity: str) -> bool:
-    """The optional test-mode package (README "Optional"): the r5_test_* helpers listed in
-    _NOT_PUBLISHED, and the upstream package's simulated sensor.test_* values."""
-    return (entity in _NOT_PUBLISHED and ".r5_test_" in entity) or entity.startswith("sensor.test_")
+    return entity in _package_ids()
 
 
 def _as_list(value) -> list:
@@ -489,6 +507,7 @@ def _card_lists(node):
 def test_no_visible_card_needs_the_test_package_when_absent(name) -> None:
     """Default install (no package): nothing visible binds to a package-only entity, which would
     render a not-found card or a tap that does nothing."""
+    assert len(_package_ids()) >= 10, sorted(_package_ids())
     every = {e for c, _ in _walk_cards(_load(name), {}) for e in _entity_refs(c)}
     assert any(_is_package(e) for e in every), f"{name}: no package entity found; the check is blind"
     bad = sorted({e for c in _visible_cards(name, {}) for e in _entity_refs(c) if _is_package(e)})

@@ -537,14 +537,12 @@ cmd_install() {
   ha_ok store apps install "$SLUG" || fail "install of $SLUG failed"
   log "Setting stub options through the Supervisor API"
   # The Supervisor validates the whole set, so change keys of the current one.
-  # r5 defaults deploy_dashboard to none (a290 defaults to standard), so the
-  # pilot sets standard here: the dashboard probe reads the options back from
-  # the Supervisor and requires that deploy to have happened, and on none it
-  # fails outright. dashboard_url_path stays at config.yaml's default, so what
-  # a user gets by switching the option on is what the pilot tests.
+  # deploy_dashboard and dashboard_url_path stay at config.yaml's defaults:
+  # the dashboard probe reads them back and requires that deploy to have
+  # happened, so a user's first start is what the pilot tests.
   options="$(ha_cli apps info "$SLUG" --raw-json |
     jq -ce --arg u "$username" --arg p "$STUB_PASSWORD" --arg a "$STUB_ACCOUNT_ID" --arg v "$STUB_VIN" --argjson x "$extra" \
-      '{options: (.data.options + {username: $u, password: $p, account_id: $a, vin: $v, log_level: "debug", deploy_dashboard: "standard"} + $x)}')" ||
+      '{options: (.data.options + {username: $u, password: $p, account_id: $a, vin: $v, log_level: "debug"} + $x)}')" ||
     fail "could not read the add-on's current options"
   supervisor_post "/addons/$SLUG/options" "$options" >/dev/null || fail "Supervisor rejected the options"
   # The baseline the egress check diffs against: taken immediately before the
@@ -722,9 +720,8 @@ lovelace_query() {
 }
 
 # The url_paths the add-on's options, as the Supervisor holds them, deploy to
-# (deploy.py's _deploy_targets). The pilot sets deploy_dashboard to standard
-# (r5's default is none) and leaves dashboard_url_path at config.yaml's
-# default, so this is what a user who switches the option on gets.
+# (deploy.py's _deploy_targets). The pilot leaves both options at config.yaml's
+# defaults, so this is what a user's first start deploys.
 dashboard_targets() {
   local options style url_path
   options="$(ha_cli apps info "$SLUG" --raw-json | jq -ce '.data.options')" ||

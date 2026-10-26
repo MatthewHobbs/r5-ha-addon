@@ -17,8 +17,9 @@ are entered once on the **Configuration** tab.
   GPS from the broker, for a zero location footprint.
 - **Bundled dashboards** — a **modified version of Topolino65's UI** built for this app's
   entities, ported from the maintainer's [Alpine A290 app](https://github.com/MatthewHobbs/a290-ha-addon).
-  Set `deploy_dashboard` and the app installs a **standard** or **Bubble Card** dashboard for
-  you (both phone-verified in CI). It is off by default.
+  New installs deploy the **standard** dashboard by default; choose `bubble`, `both` or `none`
+  in `deploy_dashboard` (both styles are phone-verified in CI). Existing `none` selections stay
+  `none`. See [Installation](dashboards/INSTALLATION.md) and the [User Guide](dashboards/USER-GUIDE.md).
 - **Pre-built multi-arch image** pulled by the Supervisor — no slow on-device build (with a
   keyless build-provenance attestation; verify with `gh attestation verify`).
 

@@ -26,7 +26,7 @@ Topolino65's dashboards use differently named entities (template sensors ending 
 `script.` controls), so they **do not bind to this app** without editing.
 
 The entities appear under the **R5** device like any other; for a ready-made view, use the
-app's **bundled dashboards** (`deploy_dashboard`, off by default): a
+app's **bundled dashboards** (`deploy_dashboard: standard` by default for new installs): a
 **modified version of Topolino65's UI**, built for these entities and ported from the maintainer's
 [Alpine A290 app](https://github.com/MatthewHobbs/a290-ha-addon) (the R5 E-Tech and Alpine
 A290 share the same Renault EV platform).
@@ -60,7 +60,8 @@ location) — **you do not need Home Assistant's `renault` integration**.
   (`deploy_dashboard: standard|bubble|both`), or copy them in manually. Assets (R5 renders,
   map markers, Zen Dots font) live under `renault_5/dashboards/`. To show the render matching your
   trim/colour, see
-  **[Customising your R5](renault_5/dashboards/CUSTOMISING.md)**. Both are built for phones and
+  **[Installation and customisation](renault_5/dashboards/INSTALLATION.md)**; the
+  **[User Guide](renault_5/dashboards/USER-GUIDE.md)** explains the tiles. Both are built for phones and
   [**verified on the top mobile devices**](docs/dashboards-on-mobile.md) by CI.
 
 ## Requirements
@@ -97,12 +98,14 @@ key needed.
 - **Test-mode preview** — the charge-simulation panels (`input_boolean.r5_test_mode`,
   `input_button.r5_test_charge_run`, `binary_sensor.r5_test_show_panel`,
   `sensor.r5_test_ends_countdown`, `sensor.r5_test_panel_hide_countdown`, and the simulated
-  last-charge values `sensor.test_last_charge_*` / `sensor.test_charge_*`).
+  last-charge values `sensor.r5_test_last_charge_*` / `sensor.r5_test_charge_*`).
   A small HA helper/template package; without it the test panels and the Run Test Charge
-  button stay hidden. (Port from the upstream `Packages/`/`Templates/`/`Helpers/`.)
+  button stay hidden. Install the bundled `renault_5/dashboards/Packages/r5_test.yaml`
+  manually as described in [Optional extras](renault_5/dashboards/INSTALLATION.md#optional-extras).
 - **Pretty location** — `sensor.r5_pretty_location` ("Driveway / Home / town"), a template
   sensor with an optional [`places`](https://github.com/custom-components/places)
-  integration. Without it the location card shows the raw tracker.
+   integration. Install the bundled `renault_5/dashboards/Templates/r5_pretty_location.yaml`
+   manually using the same guide. Without it the location card shows the raw tracker.
 
 ## Install
 
@@ -120,10 +123,12 @@ key needed.
    you have multiple accounts — it's auto-discovered otherwise), then **Start**. The
    `sensor.r5_*` / `binary_sensor.r5_*` entities and `button.r5_*` controls appear under an
    **R5** device within a minute.
-4. **Get a dashboard:** set `deploy_dashboard` to `standard`, `bubble`, or `both` to have this
-   app install its bundled dashboard (a modified version of Topolino65's UI, built for these
-   entities) and restart — it installs the dashboard + assets via CDN, nothing to copy — **or**
-   copy `renault_5/dashboards/front-end*.txt` into a new dashboard's raw config manually. With
+4. **Get a dashboard:** new installs deploy the standard dashboard on first start. Choose
+   `bubble` or `both` in `deploy_dashboard` and restart to use another layout. Switching an
+   existing dashboard to `bubble` also needs `redeploy_dashboard: true` for one restart, then
+   restore `false`; this overwrites layout edits. Existing users
+   who selected `none` keep `none`; set it explicitly to opt in. For manual setup, select
+   `none` before first start and follow the [installation guide](renault_5/dashboards/INSTALLATION.md). With
    `both`, the standard dashboard lands at your `dashboard_url_path` and the bubble one gets a
    `-bubble` suffix (e.g. `renault-5` and `renault-5-bubble`).
 

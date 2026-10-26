@@ -51,7 +51,7 @@ renault_5/                   the add-on (this is what HA installs)
   apparmor.txt               the add-on's AppArmor profile
   DOCS.md / CHANGELOG.md     the add-on's HA docs page + changelog
   dashboards/                front-end.txt (standard) + front-end-bubble.txt (Bubble Card) +
-                             Images/, CUSTOMISING.md. Bundled into the image (COPYed in the
+                             Images/, INSTALLATION.md, USER-GUIDE.md. Bundled into the image (COPYed in the
                              Dockerfile); deploy.py reads the *.txt locally, images are served
                              from the jsDelivr CDN
 ui-tests/                    containerized HA + Playwright responsive/overflow gate
@@ -231,8 +231,8 @@ twin's pilot (keep them in lockstep). It installs this add-on under a real stabl
 the official devcontainer on amd64 and aarch64, with current stable Core and the
 `homeassistant:` minimum from `config.yaml`. It checks versions, provenance, `/healthz`, the
 HEALTHCHECK, retained MQTT discovery and availability, refused Renault egress, that the standard
-dashboard the pilot's options deploy (`deploy_dashboard: standard`, set by the pilot because r5's
-default is `none`, at `dashboard_url_path`) exists in Core with views, read back through Core's
+dashboard the manifest defaults deploy (`deploy_dashboard: standard`, at `dashboard_url_path`)
+exists in Core with views, read back through Core's
 Lovelace WebSocket API from inside the add-on container (the Supervisor's Core proxy admits only
 an add-on token) with no `Dashboard auto-deploy skipped` in the log, and that AppArmor enforces
 `local_renault_5`. All four legs are **required checks**: the trigger is

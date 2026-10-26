@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- **Test Charge now ships as a self-contained optional package.** Manually install
+  `dashboards/Packages/r5_test.yaml` under `/config/packages/`, enable packages in
+  `configuration.yaml`, check the configuration and restart Home Assistant to load its helpers,
+  templates and automations. The app's dashboard auto-deploy does not install packages. See
+  [Installation](dashboards/INSTALLATION.md#optional-extras) for the package and template setup.
+- **Test-mode sensor IDs are now `sensor.r5_test_*`.** If you used an upstream test package,
+  remove its R5 test definitions before loading the bundled replacement, then migrate references
+  in your dashboards and automations from bare `sensor.test_*` to the matching `sensor.r5_test_*`
+  names. Energy Stored is `sensor.r5_test_last_charge_energy_stored`. Remove obsolete bare
+  test entities from the entity registry after replacing their definitions; do not remove helpers
+  still used by another dashboard. Reload/restart after your YAML changes. Re-copy the dashboard
+  or set `redeploy_dashboard: true` for one app restart, then restore `false` (redeploy overwrites
+  layout edits). Production sensors and controls keep their existing IDs.
+- **New installs deploy the standard dashboard by default.** Existing `deploy_dashboard: none`
+  selections remain `none`. Choose `none` before first start if you manage dashboards manually.
+- **Dashboard setup and usage now have separate guides**, including R5 trim/colour renders,
+  colour-matched map markers, and manual installation of the bundled pretty-location template.
+
 ## 1.9.2
 
 - **Security: the image moves to Alpine 3.24.3**, with security fixes in musl (1.2.6-r3,
@@ -823,7 +843,7 @@ Review fixes (security / privacy / reliability / QA) before first release.
   render from the repo CDN, so there's nothing to copy or hand-edit. All 22 R5 renders
   (Evolution / Iconic / Roland Garros / Techno × colours) are selectable; change it and
   re-deploy (`redeploy_dashboard: true`) to update. Manual installs can still swap the
-  images by hand — see [`dashboards/CUSTOMISING.md`](dashboards/CUSTOMISING.md).
+  images by hand — see [`dashboards/INSTALLATION.md`](dashboards/INSTALLATION.md#customising-your-r5-trim--colour).
 
 ## 0.3.0
 
