@@ -314,15 +314,24 @@ async def detect_supported(vsession):
     return supported
 
 
+def _precondition_temp():
+    """Target cabin temperature (°C) for Start Climate, or None to use the car's own setting.
+
+    Unset on the Configuration page means the car decides: its preconditioning temperature is
+    the one its own schedule uses, and it is what the dashboard shows as "Desired Temp"."""
+    raw = (cfg("R5_PRECONDITION_TEMPERATURE", "") or "").strip()
+    return float(raw) if raw else None
+
+
 async def _hvac_start_action(vehicle):
-    """set_ac_start needs a target temp; use the car's configured preconditioning
-    temperature (what the dashboard shows as "Desired Temp"), falling back to 21°C."""
-    temp = 21.0
-    try:
-        p = _find_precond(await vehicle.get_charge_schedule())
-        temp = float(p.get("preconditioningTemperature") or 21)
-    except Exception:  # noqa: BLE001
-        pass
+    """Start Climate at the configured temperature, or at the car's own when none is set."""
+    temp = _precondition_temp()
+    if temp is None:
+        try:
+            temp = float(_find_precond(await vehicle.get_charge_schedule())
+                         .get("preconditioningTemperature") or 21)
+        except Exception:  # noqa: BLE001
+            temp = 21.0
     await vehicle.set_ac_start(temp)
 
 

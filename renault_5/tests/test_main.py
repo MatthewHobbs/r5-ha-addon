@@ -140,7 +140,7 @@ def test_command_actions_cover_every_button():
     assert cmds == set(main.COMMAND_ACTIONS)
 
 
-def test_command_actions_dispatch_to_real_methods():
+def test_command_actions_dispatch_to_real_methods(monkeypatch):
     import asyncio
 
     class FakeVehicle:
@@ -175,12 +175,35 @@ def test_command_actions_dispatch_to_real_methods():
             v = FakeVehicle()
             await main.COMMAND_ACTIONS[cmd](v)
             assert expect in v.calls
-        # hvac_start reads the car's preconditioning temp, then starts the AC
+        # with no option set, hvac_start reads the car's preconditioning temp, then starts the AC
         v = FakeVehicle()
         await main.COMMAND_ACTIONS["hvac_start"](v)
         assert ("set_ac_start", 19.0) in v.calls
 
+    monkeypatch.delenv("R5_PRECONDITION_TEMPERATURE", raising=False)
     asyncio.run(scenario())
+
+
+def test_start_climate_sends_the_option_when_set(monkeypatch):
+    import asyncio
+    monkeypatch.setenv("R5_PRECONDITION_TEMPERATURE", "23")
+
+    class V:
+        sent = None
+
+        async def get_charge_schedule(self):
+            raise AssertionError("the car's schedule is not read when the option is set")
+
+        async def set_ac_start(self, temp):
+            type(self).sent = temp
+
+    asyncio.run(main._hvac_start_action(V()))
+    assert V.sent == 23.0
+
+
+def test_precondition_temp_unset_means_the_car_decides(monkeypatch):
+    monkeypatch.delenv("R5_PRECONDITION_TEMPERATURE", raising=False)
+    assert main._precondition_temp() is None
 
 
 # --------------------------------------------------------------------------- #

@@ -255,7 +255,9 @@ def test_detect_supported_tolerates_a_probe_error():
 # --------------------------------------------------------------------------- #
 # command dispatch
 # --------------------------------------------------------------------------- #
-def test_hvac_start_falls_back_to_21_on_schedule_error():
+def test_hvac_start_falls_back_to_21_on_schedule_error(monkeypatch):
+    monkeypatch.delenv("R5_PRECONDITION_TEMPERATURE", raising=False)
+
     class V:
         def __init__(self):
             self.temp = None

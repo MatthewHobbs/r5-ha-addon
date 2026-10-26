@@ -32,6 +32,7 @@ export R5_STALE_HOURS="$(bashio::config 'stale_hours')"
 export R5_PUBLISH_LOCATION="$(bashio::config 'publish_location')"
 export R5_ENABLE_REFRESH_LOCATION="$(bashio::config 'enable_refresh_location')"
 export R5_GPS_PRECISION="$(bashio::config 'gps_precision')"
+export R5_PRECONDITION_TEMPERATURE="$(bashio::config 'precondition_temperature' '')"
 export R5_LOG_LEVEL="$(bashio::config 'log_level')"
 export R5_DEBUG_DUMP="$(bashio::config 'debug_dump')"
 
