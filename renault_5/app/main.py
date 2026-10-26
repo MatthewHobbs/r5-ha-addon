@@ -347,10 +347,9 @@ def _debounce_now():
     return time.monotonic()
 
 
-# Command-topic suffixes that trigger a location refresh — rejected unless the user has opted in
-# AND location publishing is on (publish_discovery clears the button in the same cases). Gating the
-# command as well as the button is the point: the entity is pressable from voice, automations and
-# any dashboard, so hiding it alone would leave every other path working.
+# Command suffixes that trigger a location refresh, refused unless the user opted in and location
+# publishing is on (publish_discovery clears the button in the same cases). Gating the command
+# matters: the entity is pressable from voice, automations and dashboards.
 LOCATION_CMDS = {oid.removeprefix(OBJ_PREFIX) for oid, vals in ACTION_BUTTONS.items()
                  if vals[-1] == REFRESH_LOCATION_EP}
 
@@ -458,9 +457,8 @@ async def run_command(cmd, payload=""):
         LOG.error("Command '%s' failed: %s", cmd, redact(err))
     finally:
         # Also on cancellation, so a cancelled press cannot wedge the button. If nothing reached
-        # the car, drop the stamp too so a retry goes straight through; once the action has
-        # started its outcome is unknown and a retry could send it twice, so the stamp stays. A
-        # press ignored while this one was in flight is not replayed; that is accepted.
+        # the car, drop the stamp so a retry goes through; once started the outcome is unknown, so
+        # the stamp stays and a retry cannot send it twice. An in-flight press is not replayed.
         _in_flight.discard(cmd)
         if not dispatched:
             _last_command.pop(cmd, None)
@@ -488,11 +486,9 @@ async def resolve_account(client):
     account_id = cfg("R5_ACCOUNT_ID")
     if account_id:
         return account_id
-    # Match the account whose garage actually contains our VIN rather than keying on account type.
-    # The R5 is under a MYRENAULT account so the old type match happened to work here, but a login
-    # can carry several account types (MYRENAULT / MYALPINE / SFDC / …) and the sibling A290 lives
-    # under MYALPINE — matching by VIN is model-agnostic and keeps both add-ons in lockstep. Falls
-    # back to a MYRENAULT account if no garage matches (preserves the old behaviour as a safety net).
+    # Match the account whose garage holds our VIN, not the account type: a login can carry
+    # several types and the sibling A290 sits under MYALPINE. Falls back to a MYRENAULT account
+    # when no garage matches.
     vin = (cfg("R5_VIN") or "").strip().upper()
     person = await client.get_person()
     fallback = None
@@ -595,14 +591,10 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
         data.update(_charge_schedule_fields(p))
     except Exception as err:  # noqa: BLE001
         LOG.warning("ev/settings unavailable: %s", err)
-    # Advertised support is not a usable gate for this endpoint: the A290 twin advertises
-    # hvac-settings as supported while the server answers errorCode 502000 to every call, and a
-    # gate on supports_endpoint() shipped there changed nothing. What the endpoint DOES is the
-    # only reliable signal, so trip a breaker after a few consecutive failures: log once, stop
-    # calling, and retry periodically. Reset on any success, so a car whose endpoint works (or
-    # recovers server-side) is unaffected and never trips it. Mirrored from a290 v1.23.1 — the
-    # R5's own behaviour here is untested, which is exactly why the breaker reads behaviour
-    # rather than assuming this model matches the A290.
+    # Advertised support is not a usable gate: the A290 twin advertises hvac-settings while the
+    # server answers 502000 to every call. Behaviour is the only signal, so trip a breaker after
+    # consecutive failures: log once, stop calling, retry periodically, reset on success. The R5's
+    # own behaviour is untested.
     if _hvac_due():
         tripped = bool(_BREAKERS.get("hvac-settings"))
         try:
@@ -648,23 +640,16 @@ async def poll_once(vsession, state, capacity_kwh, supported_eps, dist_unit):
     if mqtt.PUBLISH_LOCATION:   # skipped entirely when the user opts out of location publishing
         try:
             loc = await vehicle.get_location()
-            # build_location_attrs returns None when the payload carries no usable fix, which
-            # Kamereon signals with an out-of-band sentinel rather than a null: the A290 twin
-            # returned 91/181 on a fresh timestamp, and the `is not None` check this replaces
-            # published it as a real position, flipping the car to not_home while parked at home.
-            # The sentinel is a Kamereon behaviour, not a per-model one, so the R5 is exposed to
-            # the same payload even though the fault was observed on the A290.
+            # None means no usable fix, which Kamereon signals with a sentinel rather than a
+            # null: the A290 twin returned 91/181 on a fresh timestamp, and the check this
+            # replaces published it as a real position. That is Kamereon's behaviour, so the R5
+            # is exposed to it too.
             location_attrs = build_location_attrs(loc, GPS_PRECISION)
             if location_attrs is None:
-                # gps_last_activity must be neither ADVANCED nor DROPPED here, and both failure
-                # modes disarm binary_sensor.r5_gps_stale, which templates on this sensor:
-                #   advanced -> the sentinel's fresh timestamp says the fix is current;
-                #   dropped  -> `data` is published as a COMPLETE retained state document with
-                #               value_template "{{ value_json.gps_last_activity }}", so a missing
-                #               key renders empty, `as_datetime` yields none, and the guard's
-                #               `t is not none` short-circuits to False, i.e. "not stale".
-                # Carrying the last USABLE fix time forward is the only option that leaves the
-                # guard armed, and it does not depend on how HA treats an absent key.
+                # Neither advance nor drop it: both disarm binary_sensor.r5_gps_stale, which
+                # templates on this sensor. An advanced timestamp says the fix is current; a
+                # dropped key renders empty, as_datetime yields none, and the guard reads
+                # not-stale. Carrying the last usable fix forward leaves the guard armed.
                 prev = (state.get("gps_last_activity")
                         or (_LATEST.get("data") or {}).get("gps_last_activity"))
                 if prev:
@@ -807,12 +792,10 @@ async def main():
             # the exact rule data_stale used to carry here, so the connectivity alarm users
             # already have is preserved, not dropped.
             fresh = freshness_fields(state, None, stale_secs, last_ok)
-            # Prefer the exception type (an HTTP 401/403, or Kamereon's unauthorized reply); fall
-            # back to the message text for gigya/library errors that aren't raised as one of those.
-            # The text match cannot catch Kamereon's reply: str() of it is "('err.func.wired.
-            # unauthorized', 'Not authorized')", none of the words below. Upstream says it can also
-            # mean a permissions problem, and it drops the session every poll while it lasts. An
-            # account Renault holds behind two-factor sign-in cannot sign in here at all.
+            # Prefer the exception type (HTTP 401/403, or Kamereon's unauthorized reply); fall back
+            # to the message text for library errors not raised as one. str() of Kamereon's reply
+            # is "('err.func.wired.unauthorized', 'Not authorized')", which those words miss. An
+            # account behind two-factor sign-in cannot sign in here at all.
             auth = isinstance(err, (UnauthorizedException, PendingTwoFactorAuthenticationException)) or \
                 (isinstance(err, aiohttp.ClientResponseError) and err.status in (401, 403)) or \
                 any(s in str(err).lower() for s in ("login", "password", "credential", "401", "403"))

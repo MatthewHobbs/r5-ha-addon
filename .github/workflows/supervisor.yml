@@ -1,10 +1,9 @@
 name: Supervisor pilot
 
-# Ported from the a290 twin: install, configure and run
-# the add-on under a real stable-channel Supervisor and Core, in the official
-# add-on devcontainer, on both arches, with AppArmor enforced by the runner's
-# kernel. Required on every PR. All of the
-# logic is in scripts/supervisor-pilot.sh.
+# Install, configure and run the add-on under a real stable-channel
+# Supervisor and Core, in the official add-on devcontainer, on both arches,
+# with AppArmor enforced by the runner's kernel. Required on every PR. All of
+# the logic is in scripts/supervisor-pilot.sh.
 
 on:
   # Unconditional, as ui-tests.yaml is: a required check on a
@@ -44,10 +43,8 @@ jobs:
 
       # The patterns the trigger used to filter on, moved here so the workflow
       # (and so every required check-run) always exists. An allow-list missed
-      # dashboards/ once (a290), so it is the whole add-on minus what cannot
-      # change a run: prose and the unit tests, which the image does not
-      # contain. dashboards/ stays in: the pilot deploys them through Core,
-      # with deploy_dashboard: standard because this add-on's default is none.
+      # dashboards/ once, so it is the whole add-on minus what cannot change a
+      # run: prose and the unit tests, which the image does not contain.
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d  # v4.0.3
         id: filter
         if: github.event_name == 'pull_request'
@@ -103,7 +100,7 @@ jobs:
           PILOT_WORKDIR: ${{ runner.temp }}/pilot
         run: scripts/supervisor-pilot.sh diagnostics "$PILOT_WORKDIR/diagnostics"
 
-      # The kernel's AppArmor verdict is the evidence this check turns on,
+      # The kernel's AppArmor verdict is the evidence the AppArmor check turns on,
       # so it goes in the log itself, not only in the artifact.
       - name: Show AppArmor denials
         if: failure() && env.PILOT_RUN == 'true'

@@ -362,9 +362,8 @@ def test_unauthorized_on_the_battery_request_escapes_poll_once(monkeypatch):
 
 
 def test_unauthorized_on_an_optional_request_is_swallowed_by_poll_once(monkeypatch):
-    # Every optional request catches its own errors, so the same reply on one of them is logged and
-    # the poll carries on: it never reaches the classifier, and the sensor is not turned on. The
-    # changelog says exactly this; a claim that the sensor covers every endpoint was caught in review.
+    # Every optional request catches its own errors, so the same reply is logged, the poll carries
+    # on, and the sensor is not turned on: it never reaches the classifier.
     data, _loc = _poll(_UnauthorizedVehicle(fail={"cockpit"}), set(), monkeypatch)
     assert data["battery_level"] == 80
     assert "vehicle_mileage" not in data

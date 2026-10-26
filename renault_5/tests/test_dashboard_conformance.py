@@ -54,11 +54,10 @@ _DEVICE_SLUG = _slug(catalog.DEVICE["name"])  # "r5"
 # Entity-id prefix, object_id prefix, and the brand word. Matching only the entity-id prefix
 # would silently skip an id written as an object_id wherever the two differ.
 _PREFIXES = sorted({_DEVICE_SLUG + "_", catalog.OBJ_PREFIX, _DEVICE_SLUG.split("_")[0] + "_"})
-# ANY domain, not a listed few: a fixed domain list made ``switch.r5_battery_level`` (or
-# ``climate.``, ``select.`` ...) invisible to every check below, while the >= 20 guard stayed
-# satisfied. Which domains are legitimate is derived (from discovery and _NOT_PUBLISHED) and
-# checked in test_dashboard_references_use_a_domain_this_build_publishes. Core's
-# valid_entity_id admits digits in the domain, so ``sensor2.`` must be caught too.
+# ANY domain, not a listed few: a fixed list made ``switch.r5_battery_level`` (or ``climate.``,
+# ``select.``) invisible below while the >= 20 guard stayed satisfied. Legitimate domains are
+# derived from discovery and _NOT_PUBLISHED; Core admits digits in a domain, so ``sensor2.`` is
+# caught too.
 _REF = re.compile(r"\b([a-z0-9_]+)\.((?:" + "|".join(_PREFIXES) + r")[a-z0-9_]+)")
 # Domains a dashboard may reference although neither discovery nor _NOT_PUBLISHED defines
 # them, each with the reason. Empty today: the core's device_tracker comes out of discovery and

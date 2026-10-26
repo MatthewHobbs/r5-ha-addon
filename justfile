@@ -9,29 +9,41 @@
 # Local CI gate - the same commands remote CI runs, for the checks it covers.
 # `parity` itself is not in here: it needs the a290 twin (a sibling checkout or a clone), so
 # only its self-test is. The Parity job in ci.yaml runs the full comparison.
-ci: lint adr pii ha-min parity-self-test docs-sync-self-test test
+ci: lint comments adr pii ha-min parity-self-test docs-sync-self-test test
 
-# Proves the release guard, the release script and the publish decision can fail, and that the
+# Proves the release guard, the release script and the version-order check can fail, and that the
 # script writes exactly what the guard accepts. The Docs sync job in ci.yaml runs the same three.
 docs-sync-self-test:
     python3 scripts/docs_sync_check.py --self-test
     python3 scripts/prepare_release.py --self-test
     python3 scripts/adr_evidence_check.py --self-test
-    python3 scripts/release_decision.py --self-test
+    scripts/test-check-version-order.sh
 
 # Cut a release: turn `## Unreleased` into `## <version>` and move config.yaml's version to match,
-# and nothing else. Commit the result as its own PR, titled
-# `chore(release): <version>`; merging it publishes the image and the tag.
-# `just release <version> --dry-run` only prints.
+# and nothing else. Commit the result as its own PR, titled `chore(release): <version>`;
+# merging it publishes nothing; `just tag` does. `--dry-run` only prints.
 release version *flags:
     python3 scripts/prepare_release.py {{version}} {{flags}}
+
+# Sign and push the tag for a merged release; release.yaml then publishes it. Tags the
+# release PR's merge commit on origin/main, not whatever main is now.
+tag version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    git fetch --quiet origin main
+    sha="$(git log origin/main -1 --format=%H --grep="^chore(release): {{version}} ")"
+    [[ -n "$sha" ]] || { echo "no merged chore(release): {{version}} commit on origin/main"; exit 1; }
+    [[ "$(git show "$sha:renault_5/config.yaml" | awk -F'"' '/^version:/{print $2}')" == "{{version}}" ]] ||
+        { echo "config.yaml at $sha is not version {{version}}"; exit 1; }
+    git tag -s "v{{version}}" -m "Renault 5 {{version}}" "$sha"
+    git push origin "v{{version}}"
 
 # Proves the parity check can fail on each kind of drift; needs nothing outside this repo.
 parity-self-test:
     python3 scripts/parity_check.py --self-test
 
 # Same command as the Parity job: diff this add-on against a290-ha-addon through the committed
-# map and expected list. PARITY_TWIN=<path> must be a git checkout of a290:
+# map and expected list. PARITY_TWIN=<path> must be a git checkout of r5: its
 # its tracked files (content as in its working tree) and tracked modes are compared; anything
 # else is refused rather than silently walked. Unset, it clones a290's main (network).
 parity: parity-self-test
@@ -60,6 +72,11 @@ venv:
     uv pip install --python .venv --quiet --no-deps \
       "renault-mqtt @ git+https://github.com/MatthewHobbs/renault-mqtt@${CORE_REF}"
 
+# Scope matches the sibling pair: the ui-tests harness keeps its measured findings.
+# Code comment blocks stay under 50 words.
+comments:
+    python3 scripts/check_comment_length.py renault_5 scripts .github
+
 # The decision record cites files and symbols; fail on one the tree no longer has.
 adr:
     python3 scripts/adr_evidence_check.py
@@ -76,7 +93,7 @@ ha-min:
 
 lint:
     yamllint -c .yamllint renault_5 repository.yaml
-    shellcheck renault_5/run.sh scripts/supervisor-pilot.sh
+    shellcheck renault_5/run.sh scripts/supervisor-pilot.sh scripts/check-version-order.sh scripts/test-check-version-order.sh
     # The ruff ruff.toml requires (required-version), so a local pass means what CI's pinned ruff means.
     uvx "ruff$(sed -n 's/^required-version = "\(.*\)"$/\1/p' ruff.toml)" check renault_5/app renault_5/tests scripts ui-tests
 
