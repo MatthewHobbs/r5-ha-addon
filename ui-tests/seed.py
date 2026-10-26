@@ -20,6 +20,7 @@ Usage: seed.py --base http://localhost:8123 --token <access_token> [--dashboards
 """
 import argparse
 import asyncio
+import functools
 import html
 import json
 import os
@@ -123,11 +124,6 @@ KNOWN = {
     "sensor.r5_battery_last_activity": (None, {"device_class": "timestamp"}),
     "sensor.r5_hvac_last_activity": (_ago(hours=5, minutes=12), {"device_class": "timestamp"}),
     "sensor.r5_gps_last_activity": (_ago(hours=4, minutes=12), {"device_class": "timestamp"}),
-    # The optional "pretty location" user template sensor (README "Optional"), seeded at a
-    # realistic length so the LOCATION tiles' wrap is exercised — the per-domain "42" fallback
-    # never could be clipped by any style. Unlike the a290 twin, r5 ships no bundled Templates
-    # dir to derive this from (its own is user-installed), so it is a plain KNOWN entry.
-    "sensor.r5_pretty_location": ("Trafalgar Square, Westminster, London", {"icon": "mdi:map-marker"}),
     # Demo Octopus Intelligent charger entities (Smart Charging block / bubble pop-up).
     "switch.demo_intelligent_smart_charge": ("on", {"icon": "mdi:ev-station"}),
     "switch.demo_intelligent_bump_charge": ("off", {"icon": "mdi:battery-plus-variant"}),
@@ -168,6 +164,15 @@ TOGGLES = {
 # gate opens each by hash (check_overflow.py). Fewer than this many found is a harness fault (the
 # card_type/hash keys moved), not a dashboard with fewer pop-ups: lower it deliberately with one.
 MIN_POPUPS = 9
+# Bundled dashboard templates that produce entities the dashboards read: the value is seeded here,
+# keyed by the template's `name`, and its entity id is derived from that name below, as HA derives
+# it, so a renamed template cannot leave a stale id behind. The pretty location is the LOCATION
+# tiles' sub-line: a zone name, a town, or the `places` sensor's formatted address, seeded at that
+# longest form for the landmark the device_tracker default sits on, so the tiles' wrap is exercised.
+TEMPLATE_DIR = os.path.join(HERE, "..", "renault_5", "dashboards", "Templates")
+HELPER_STATES = {
+    "R5 Pretty Location": ("Trafalgar Square, Westminster, London", {"icon": "mdi:map-marker"}),
+}
 DEFAULTS = {
     "binary_sensor": ("off", {}),
     "number": ("50", {"min": 15, "max": 100, "step": 5, "mode": "slider", "unit_of_measurement": "%"}),
@@ -214,11 +219,35 @@ def option_default(option):
         return yaml.safe_load(fh)["options"][option]
 
 
+@functools.cache
+def helper_states():
+    """{entity_id: (state, attrs)} for HELPER_STATES, each id slug(name) of a template sensor found
+    in dashboards/Templates; a name no template defines is an error, not a silent "42"."""
+    found = {}
+    for fname in sorted(os.listdir(TEMPLATE_DIR)):
+        if not fname.endswith(".yaml"):
+            continue
+        with open(os.path.join(TEMPLATE_DIR, fname), encoding="utf-8") as fh:
+            doc = yaml.safe_load(fh)
+        blocks = doc if isinstance(doc, list) else (doc or {}).get("template", [])
+        for blk in blocks:
+            for dom in ("sensor", "binary_sensor"):
+                for ent in blk.get(dom, []):
+                    if ent.get("name") in HELPER_STATES:
+                        found[f"{dom}.{_slug(ent['name'])}"] = HELPER_STATES[ent["name"]]
+    if len(found) != len(HELPER_STATES):
+        raise SystemExit(f"HELPER_STATES names a template sensor no file in {TEMPLATE_DIR} defines: "
+                         f"{sorted(HELPER_STATES)} vs {sorted(found)}")
+    return found
+
+
 def state_for(eid, problems=frozenset(), states=None):
     """The seeded state. A pass's `states` {problem sensor: state} win over KNOWN/DEFAULTS, and a
     DERIVED_AGE timestamp takes the age its sensor's state in that pass needs."""
     if eid in KNOWN:
         st, attrs = KNOWN[eid]
+    elif eid in (helpers := helper_states()):
+        st, attrs = helpers[eid]
     else:
         st, attrs = DEFAULTS.get(eid.split(".")[0], ("42", {}))
     attrs = dict(attrs)
