@@ -43,7 +43,7 @@ It needs **Home Assistant 2026.8.1 or newer** (tested at that version and at the
 release). The app only needs the **Mosquitto broker** app (its MQTT connection is auto-discovered
 from it). It publishes the entities under an **R5** device; for a ready-made view, use one of
 this app's **bundled dashboards**: set `deploy_dashboard` to `standard`, `bubble`, or `both`
-(off by default).
+(new installs default to `standard`; an existing `none` selection stays `none`).
 
 If you use a card-based dashboard you must **first install its frontend cards via
 HACS → Frontend** — otherwise it renders as *"Custom element doesn't exist"* with broken tiles.
@@ -86,10 +86,10 @@ start**, so everything renders correctly the first time.
 | `gps_precision` | Decimal places the car's GPS is rounded to before publishing (1–6, default **4** ≈ 11 m). Coarsens the location on the retained MQTT topic for privacy; raise to 5–6 for a more precise map pin, lower to 2–3 for more privacy. Only relevant when `publish_location: true`. |
 | `log_level` | `info` normally; `debug` adds the app's own diagnostic lines. To inspect API responses use `debug_dump` (below), which is redacted. |
 | `debug_dump` | `true` logs every readable API endpoint to the app Log **once per restart**. Redaction is **best-effort** — it masks IDs, credentials, contact fields, location, vehicle delivery/registration dates, privacy-mode settings and the build-spec render URLs — but can't guarantee every field, so treat the whole dump as personal data and **do not paste it publicly** (share privately if you need help). Off by default. |
-| `deploy_dashboard` | `none` (default), `standard`, `bubble`, or `both`. Off by default; set it to install a bundled dashboard. Auto-installs the chosen dashboard(s) for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. With `both`, the standard dashboard lands at `dashboard_url_path` and the bubble one at the same path with `-bubble` appended. |
+| `deploy_dashboard` | `standard` (default), `bubble`, `both`, or `none` for manual management. New installs auto-deploy the standard dashboard; existing users who opted for `none` keep that setting. Auto-installs the chosen dashboard(s) for you (CDN assets — nothing to copy into `/config/www`). Install the HACS cards first. With `both`, the standard dashboard lands at `dashboard_url_path` and the bubble one at the same path with `-bubble` appended. |
 | `dashboard_url_path` | URL slug for the deployed dashboard (default `renault-5`). With `deploy_dashboard: both` the bubble dashboard is installed at `<this>-bubble` (e.g. `renault-5-bubble`). |
 | `redeploy_dashboard` | Deployment is create-once: a dashboard that already exists is left untouched. `true` re-pushes the dashboard config on every start while it stays on (to pick up a layout update, or to switch an already-deployed `standard` to `bubble` at the same `dashboard_url_path`), overwriting your edits; set it back to `false` afterwards. Default `false` so your edits are never overwritten. |
-| `car_render` | The trim/colour render shown on the dashboard (e.g. `midnight-blue-iconic`), used when auto-deploying. Default `pop-yellow-techno`. See [Customising](https://github.com/MatthewHobbs/r5-ha-addon/tree/main/renault_5/dashboards/CUSTOMISING.md). |
+| `car_render` | The trim/colour render shown on the dashboard (e.g. `midnight-blue-iconic`), used when auto-deploying. Default `pop-yellow-techno`. See [Installation and customisation](https://github.com/MatthewHobbs/r5-ha-addon/blob/main/renault_5/dashboards/INSTALLATION.md#customising-your-r5-trim--colour). |
 | `charger_smart_charge` | *(optional)* entity id of your EV charger's **smart-charge** switch — see [Smart Charging](#smart-charging-card) below. |
 | `charger_bump_charge` | *(optional)* entity id of your charger's **bump/boost-charge** switch. |
 | `charger_target_soc` | *(optional)* entity id of your charger's **charge-target %** number. |
@@ -312,8 +312,13 @@ R5 goes through identical code, so expect the same, though it hasn't been tested
 external scheduling, start the charge from your charger or tariff instead (e.g. Octopus **Bump
 Charge**).
 
-The optional **test-mode** preview and **pretty-location** sensor are separate HA helper
-packages (not Home Assistant's `renault` integration) — install them only if you want those extras.
+The optional **test-mode** preview and **pretty-location** sensor ship in this repo under
+`dashboards/Packages/` and `dashboards/Templates/`. They are not auto-deployed — merge them into
+your HA config manually, only if you want those extras. See
+[Installation](https://github.com/MatthewHobbs/r5-ha-addon/blob/main/renault_5/dashboards/INSTALLATION.md#optional-extras)
+for setup and migration from bare `sensor.test_*` IDs, and the
+[User Guide](https://github.com/MatthewHobbs/r5-ha-addon/blob/main/renault_5/dashboards/USER-GUIDE.md)
+for the dashboard tiles. No Home Assistant `renault` integration is needed.
 
 ### Kamereon account id
 

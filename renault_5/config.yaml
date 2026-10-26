@@ -39,7 +39,7 @@ options:
   gps_precision: 4
   log_level: info
   debug_dump: false
-  deploy_dashboard: none
+  deploy_dashboard: standard
   dashboard_url_path: renault-5
   redeploy_dashboard: false
   car_render: pop-yellow-techno
