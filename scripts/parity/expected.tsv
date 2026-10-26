@@ -91,8 +91,6 @@ pending	alpine_a290/app/main.py	both	py:main	43	main loop: r5 installs signal ha
 
 # ---------------------------------------------------------------- deploy.py
 pending	alpine_a290/app/deploy.py	both	py:<docstring>	11	docstring wording. Target: converge the wording, or B (deploy engine into the core)
-pending	alpine_a290/app/deploy.py	both	py:_REF,REF,CDN	4	the tag constant is _REF on a290 and REF on r5. Target: one name in both
-pending	alpine_a290/app/deploy.py	both	py:RESERVED_URL_PATHS,_validate_url_path	34	identical code at a different place in the file (a290 near the top, r5 beside run_deploy). Target: one position in both
 model	alpine_a290/app/deploy.py	both	py:IMG_MAP,_RENDER_TRIMS,_selected_render,_cdnify	18	r5's car_render option swaps the background for the chosen trim render
 model	alpine_a290/app/deploy.py	both	py:_CHARGE_TARGET_REC	4	"Alpine's recommended" vs "The recommended" charge target
 pending	alpine_a290/app/deploy.py	both	py:_fetch_dashboard,_REFRESH_LOCATION_BUTTON,_references,_drop_cards_referencing,_deploy_one,run_deploy	35	comment wording and the unrelated bubble/standard injection branches each add below the shared pruning logic. Target: converge wording
