@@ -37,11 +37,32 @@ REPO = "MatthewHobbs/r5-ha-addon"
 # dashboard is reproducible per version; fall back to main for a dev/untagged build.
 # (R5_VERSION defaults to "dev"; release.yaml passes the real version as BUILD_VERSION.)
 _VERSION = os.environ.get("R5_VERSION", "dev")
-REF = f"v{_VERSION}" if _VERSION not in ("", "dev") else "main"
-CDN = f"https://cdn.jsdelivr.net/gh/{REPO}@{REF}/renault_5/dashboards"
+_REF = f"v{_VERSION}" if _VERSION not in ("", "dev") else "main"
+CDN = f"https://cdn.jsdelivr.net/gh/{REPO}@{_REF}/renault_5/dashboards"
 FONT_URL = "https://fonts.googleapis.com/css2?family=Zen+Dots&display=swap"
 DASHBOARDS = {"standard": "front-end.txt", "bubble": "front-end-bubble.txt"}
 DASHBOARD_DIR = "/app/dashboards"
+
+# Built-in HA panels / dashboards we must never create-or-overwrite. (A custom dashboard
+# url_path must also contain a hyphen, which already excludes most single-word panels —
+# this set covers the hyphenated/underscored ones too.)
+RESERVED_URL_PATHS = {
+    "lovelace", "energy", "map", "logbook", "history", "config", "developer-tools",
+    "profile", "todo", "calendar", "media-browser", "default_view", "hassio", "shopping-list",
+}
+
+
+def _validate_url_path(url_path):
+    """Return a safe, lowercased dashboard url_path or raise ValueError. Guards against a
+    typo'd/hostile value silently overwriting a built-in HA panel via lovelace/config/save."""
+    p = url_path.strip().lower()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", p) or "-" not in p:
+        raise ValueError(f"invalid dashboard_url_path {url_path!r}: must be lowercase "
+                         "letters/digits/'-'/'_', start alphanumeric, and contain a hyphen")
+    if p in RESERVED_URL_PATHS:
+        raise ValueError(f"dashboard_url_path {url_path!r} is a reserved Home Assistant path")
+    return p
+
 
 # /local/backgrounds/<file> -> repo path (the dashboards reference images as
 # /local/backgrounds/<file>; the repo keeps them in typed subfolders under dashboards/).
@@ -492,27 +513,6 @@ async def _deploy_one(api, style, url_path, title, redeploy, refresh_location=Fa
         raise
     LOG.info("Deployed '%s' dashboard to '%s' (%d views, CDN assets)",
              style, url_path, len(config["views"]))
-
-
-# Built-in HA panels / dashboards we must never create-or-overwrite. (A custom dashboard
-# url_path must also contain a hyphen, which already excludes most single-word panels —
-# this set covers the hyphenated/underscored ones too.)
-RESERVED_URL_PATHS = {
-    "lovelace", "energy", "map", "logbook", "history", "config", "developer-tools",
-    "profile", "todo", "calendar", "media-browser", "default_view", "hassio", "shopping-list",
-}
-
-
-def _validate_url_path(url_path):
-    """Return a safe, lowercased dashboard url_path or raise ValueError. Guards against a
-    typo'd/hostile value silently overwriting a built-in HA panel via lovelace/config/save."""
-    p = url_path.strip().lower()
-    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", p) or "-" not in p:
-        raise ValueError(f"invalid dashboard_url_path {url_path!r}: must be lowercase "
-                         "letters/digits/'-'/'_', start alphanumeric, and contain a hyphen")
-    if p in RESERVED_URL_PATHS:
-        raise ValueError(f"dashboard_url_path {url_path!r} is a reserved Home Assistant path")
-    return p
 
 
 async def run_deploy(refresh_location=False):
