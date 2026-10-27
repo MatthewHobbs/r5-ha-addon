@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The latest poll reaches MQTT after a delayed broker connection or reconnect, without waiting for another poll.
 - **Climate Start and Stop keep their order**, even when login is slow; other controls remain independent.
 - **Temporary capability-check failures recover automatically** after healthy polls, restoring supported controls without a restart.
 - **Failed polls retain the last good readings** in MQTT and the status panel, with original vehicle timestamps and updated diagnostics.

@@ -94,6 +94,37 @@ def test_save_state_swallows_oserror(monkeypatch, tmp_path):
 class _FakeClient:
     def __init__(self, *a, **k):
         self.subs, self.pubs, self.attrs = [], [], {}
+        self.snapshots = self
+        self.connected = True
+        self.latest = None
+        self.location = None
+        self.closed = False
+
+    def update(self, data, **kwargs):
+        self.latest = json.dumps(data)
+        if not mqtt.PUBLISH_LOCATION:
+            self.location = ""
+        elif "location" in kwargs:
+            self.location = json.dumps(kwargs["location"]) if kwargs["location"] else ""
+        self.replay()
+
+    def replay(self):
+        if self.connected and self.latest is not None and not self.closed:
+            self.publish(mqtt.STATE_TOPIC, self.latest, retain=True)
+            if self.location is not None:
+                self.publish(mqtt.ATTR_TOPIC, self.location, retain=True)
+            self.publish(mqtt.AVAIL_TOPIC, "online", retain=True)
+
+    def connect(self):
+        self.connected = True
+        mqtt.publish_discovery(self, mqtt._MQTT_CTX["supported"], mqtt._MQTT_CTX["dist_unit"])
+        self.replay()
+
+    async def close(self):
+        self.closed = True
+        self.publish(mqtt.AVAIL_TOPIC, "offline", retain=True)
+        self.disconnect()
+        self.loop_stop()
 
     def __setattr__(self, name, value):
         object.__setattr__(self, name, value)
@@ -1371,7 +1402,11 @@ def _wire_main(monkeypatch, poll):
         monkeypatch.setenv(k, v)
     fc = _FakeClient()
     # main() calls these qualified as mqtt.mqtt_connect() / mqtt.publish_discovery().
-    monkeypatch.setattr(mqtt, "mqtt_connect", lambda: fc)
+    def connect(*, snapshots=False):
+        assert snapshots, "The app must opt into startup snapshot delivery"
+        return fc
+
+    monkeypatch.setattr(mqtt, "mqtt_connect", connect)
     monkeypatch.setattr(mqtt, "publish_discovery", lambda *a, **k: None)
 
     async def fake_detect(vs, *, unresolved=None):
@@ -1462,9 +1497,16 @@ def test_main_recovers_discovery_after_transient_detection_failure(monkeypatch, 
     monkeypatch.setattr(main, "VehicleSession", VS)
     monkeypatch.setattr(main, "detect_supported", real_detect)
     monkeypatch.setattr(mqtt, "publish_discovery", real_discovery)
+    fc.connected = False
     snapshots = []
 
     async def after_cycle(n):
+        if n == 0:
+            fc.connect()
+            if failure == "probe":
+                configs = {t: p for t, p, _ in fc.pubs if t.endswith("/config")}
+                assert not configs[f"{mqtt.DISCOVERY_PREFIX}/button/{mqtt.NODE}/sound_horn/config"]
+                assert configs[f"{mqtt.DISCOVERY_PREFIX}/button/{mqtt.NODE}/flash_lights/config"]
         snapshots.append((dict(mqtt._MQTT_CTX, supported=set(mqtt._MQTT_CTX["supported"])),
                           json.loads((await main._panel_state(None)).text)))
 
@@ -1591,6 +1633,76 @@ def test_main_failure_before_first_success_does_not_invent_vehicle_data(monkeypa
     assert data["poll_failing"] == "on" and data["api_auth_failure"] == "off"
     assert not data.get("last_successful_poll")
     assert {"battery_level", "battery_last_activity", "gps_last_activity", "data_stale"}.isdisjoint(data)
+
+
+@pytest.mark.parametrize("first_failure", [False, True])
+def test_main_delayed_connect_delivers_latest_poll_without_another_poll(monkeypatch, wire_main, first_failure):
+    cycle = {"n": 0}
+    location = {"latitude": 1, "longitude": 2}
+
+    async def poll(*args):
+        if first_failure or cycle["n"] == 1:
+            raise RuntimeError("temporary outage")
+        return {"battery_level": 50, "battery_last_activity": "2026-01-01T00:00:00Z"}, location
+
+    fc = wire_main(poll)
+    monkeypatch.setattr(main, "poll_once", poll)
+    fc.connected = False
+    monkeypatch.setattr(mqtt, "PUBLISH_LOCATION", True)
+
+    async def after_cycle(n):
+        assert not [p for t, p, _ in fc.pubs if t == mqtt.STATE_TOPIC]
+        if n == 1:
+            fc.connect()
+            data = json.loads([p for t, p, _ in fc.pubs if t == mqtt.STATE_TOPIC][-1])
+            assert data == main._LATEST["data"]
+            assert main._LATEST["ok"] is False
+            if first_failure:
+                assert "battery_level" not in data and fc.location is None
+            else:
+                assert data["battery_level"] == 50
+                assert data["battery_last_activity"] == "2026-01-01T00:00:00Z"
+                assert json.loads(fc.location) == location
+        cycle["n"] += 1
+
+    _main_cycles(monkeypatch, 2, after_cycle)
+    assert fc.closed and fc.disconnected and fc.stopped
+    assert fc.pubs[-1] == (mqtt.AVAIL_TOPIC, "offline", True)
+
+
+@pytest.mark.parametrize("location_enabled", [False, True])
+def test_main_snapshot_location_no_fix_and_optout(monkeypatch, wire_main, location_enabled):
+    real_poll = main.poll_once
+    cycle = {"n": 0}
+
+    class V(_ChargingVehicle):
+        async def get_location(self):
+            assert location_enabled, "Privacy opt-out must not fetch coordinates"
+            if cycle["n"]:
+                raise RuntimeError("no new fix")
+            return _obj(gpsLatitude=1, gpsLongitude=2, lastUpdateTime="2026-01-01T00:00:00Z")
+
+    fc = wire_main(real_poll)
+    monkeypatch.setattr(main, "poll_once", real_poll)
+    fc.connected = False
+    monkeypatch.setattr(main, "VehicleSession", lambda locale: _Sess(V(), locale))
+    monkeypatch.setattr(mqtt, "PUBLISH_LOCATION", location_enabled)
+    fixes = []
+
+    async def after_cycle(n):
+        fixes.append(fc.location)
+        if n == 1:
+            fc.connect()
+        cycle["n"] += 1
+
+    _main_cycles(monkeypatch, 2, after_cycle)
+    assert fixes[0] == fixes[1]
+    attrs = [p for t, p, _ in fc.pubs if t == mqtt.ATTR_TOPIC]
+    assert attrs == [fixes[0]]
+    if location_enabled:
+        assert set(json.loads(attrs[0])) >= {"latitude", "longitude"}
+    else:
+        assert attrs == [""]
 
 
 def test_main_runs_one_successful_cycle(wire_main):
