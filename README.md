@@ -2,7 +2,6 @@
 
 [![CI](https://github.com/MatthewHobbs/r5-ha-addon/actions/workflows/ci.yaml/badge.svg)](https://github.com/MatthewHobbs/r5-ha-addon/actions/workflows/ci.yaml)
 [![Version](https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FMatthewHobbs%2Fr5-ha-addon%2Fmain%2Frenault_5%2Fconfig.yaml&query=%24.version&label=version&color=41BDF5)](renault_5/config.yaml)
-[![Coverage](https://img.shields.io/badge/coverage-%E2%89%A590%25-brightgreen)](https://github.com/MatthewHobbs/r5-ha-addon/actions/workflows/ci.yaml)
 [![License: MIT](https://img.shields.io/github/license/MatthewHobbs/r5-ha-addon?color=blue)](LICENSE)
 [![Home Assistant App](https://img.shields.io/badge/Home%20Assistant-App-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/addons/)
 [![Architectures](https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-informational)](renault_5/config.yaml)

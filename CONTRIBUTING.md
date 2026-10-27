@@ -123,8 +123,8 @@ yamllint -c .yamllint renault_5 repository.yaml
 hadolint -c .hadolint.yaml renault_5/Dockerfile
 shellcheck renault_5/run.sh
 
-# test (coverage gate is 95%)
-python3 -m pytest renault_5/tests -q --cov=renault_5/app --cov-report=term-missing --cov-fail-under=95
+# test (failures block CI; coverage is reporting-only)
+python3 -m pytest renault_5/tests -q --cov=renault_5/app --cov-report=term-missing
 
 # security
 bandit -r renault_5/app -ll

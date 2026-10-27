@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Climate Start and Stop keep their order**, even when login is slow; other controls remain independent.
+- **Temporary capability-check failures recover automatically** after healthy polls, restoring supported controls without a restart.
+- **Failed polls retain the last good readings** in MQTT and the status panel, with original vehicle timestamps and updated diagnostics.
+- **Expired API sessions trigger API Auth Failure immediately** and force a fresh login on the next poll.
+
 - **Test Charge now ships as a self-contained optional package.** Manually install
   `dashboards/Packages/r5_test.yaml` under `/config/packages/`, enable packages in
   `configuration.yaml`, check the configuration and restart Home Assistant to load its helpers,
@@ -102,7 +107,7 @@
 
 ## 1.8.14
 
-Matches the a290 twin's policy (ADR 0001).
+Matches the a290 twin's policy.
 
 - **MQTT keepalive is now 60s, not 30s.** Halves the keepalive pings the poller sends its
   broker; no behaviour change users would notice, other than slightly less MQTT chatter.
@@ -124,7 +129,7 @@ Matches the a290 twin's 1.28.8.
 
 ## 1.8.12
 
-Matches the a290 twin's 1.28.9 (ADR 0004).
+Matches the a290 twin's 1.28.9.
 
 - **Pop-up button names no longer scroll and clip; they wrap instead.** The Presets "Steering
   Wheel" toggle, the main menu's "Smart Charging" button, and the Diagnostics and Last Charge

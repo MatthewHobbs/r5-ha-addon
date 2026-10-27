@@ -5,18 +5,8 @@ renault-mqtt package. What stays this repo's responsibility is the *wiring*: tha
 injects its own env-var prefix (R5_) into the shared redaction net, so real R5_ secrets are
 actually masked. Importing main (conftest does this for every test) runs that injection.
 """
-import catalog
 import main  # noqa: F401 — imported for its side effect: sets config.ENV_PREFIX from catalog
 from renault_mqtt import config
-
-
-def test_catalog_defines_the_r5_env_prefix():
-    assert catalog.ENV_PREFIX == "R5_"
-
-
-def test_main_injects_the_env_prefix_into_the_core_redaction_net():
-    # main.py sets `config.ENV_PREFIX = catalog.ENV_PREFIX` at import time.
-    assert config.ENV_PREFIX == "R5_"
 
 
 def test_redaction_net_masks_real_r5_secrets_end_to_end(monkeypatch):

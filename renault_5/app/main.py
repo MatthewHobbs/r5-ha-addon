@@ -30,6 +30,7 @@ import os
 import signal
 import sys
 import time
+from contextlib import nullcontext
 
 import aiohttp
 import catalog
@@ -46,6 +47,7 @@ from catalog import (
     REFRESH_LOCATION_EP,
     SOC_ENDPOINT,
 )
+from renault_api.exceptions import NotAuthenticatedException
 from renault_api.gigya.exceptions import PendingTwoFactorAuthenticationException
 from renault_api.kamereon.enums import ChargeState, PlugState
 from renault_api.kamereon.exceptions import UnauthorizedException
@@ -278,20 +280,24 @@ async def _supports(vehicle, ep):
     return await vehicle.supports_endpoint(ep)
 
 
-async def detect_supported(vsession):
-    """Probe which optional endpoints this car exposes (reusing the cached login).
+SUPPORT_ENDPOINTS = (set(OPTIONAL_ENDPOINTS) | {ep for _name, _icon, ep in ACTION_BUTTONS.values()}
+                     | {SOC_ENDPOINT, CHARGES_ENDPOINT})
 
-    Returns a set of endpoint names. Plain data endpoints (OPTIONAL_ENDPOINTS) default to
-    supported if detection fails — read-only, and harmless when empty. A pessimistic one
-    (PESSIMISTIC_ENDPOINTS) defaults the other way, because a repeated failure is not. The
-    action endpoints behind ACTION_BUTTONS also default to unsupported, so a platform that
-    forbids one never gets a dead control button.
+
+async def detect_supported(vsession, supported=None, unresolved=None):
+    """Return supported endpoints, resolving only unknown probes when retrying.
+
+    Passed sets are updated together after each definite answer, so a later timeout cannot
+    forget a successful probe. Exceptions preserve prior support and leave the probe pending.
     """
-    supported = set(OPTIONAL_ENDPOINTS) - PESSIMISTIC_ENDPOINTS
-    action_eps = {ep for _name, _icon, ep in ACTION_BUTTONS.values()}
+    # Unknown data endpoints stay optimistic except hvac-settings; unknown controls stay hidden.
+    if supported is None:
+        supported = set(OPTIONAL_ENDPOINTS) - PESSIMISTIC_ENDPOINTS
+    if unresolved is None:
+        unresolved = set(SUPPORT_ENDPOINTS)
     try:
         vehicle = await vsession.vehicle()
-        for ep in list(OPTIONAL_ENDPOINTS):
+        for ep in sorted(unresolved):
             try:
                 # add AND discard: a pessimistic endpoint starts outside the set, so a
                 # discard-only loop could never put it back on a car that does support it.
@@ -299,18 +305,13 @@ async def detect_supported(vsession):
                     supported.add(ep)
                 else:
                     supported.discard(ep)
-            except Exception as err:  # noqa: BLE001
-                LOG.warning("supports_endpoint(%s) check failed: %s", ep, err)
-        for ep in sorted(action_eps | {SOC_ENDPOINT, CHARGES_ENDPOINT}):
-            try:
-                if await _supports(vehicle, ep):
-                    supported.add(ep)
+                unresolved.discard(ep)
             except Exception as err:  # noqa: BLE001
                 LOG.warning("supports_endpoint(%s) check failed: %s", ep, err)
         LOG.info("Supported optional endpoints: %s", sorted(supported))
     except Exception as err:  # noqa: BLE001
-        await vsession.invalidate()   # don't keep a half-broken login
-        LOG.warning("Endpoint-support detection failed (publishing sensors, hiding action buttons): %s", err)
+        await vsession.invalidate()
+        LOG.warning("Endpoint-support detection failed (keeping prior support): %s", redact(err))
     return supported
 
 
@@ -374,19 +375,20 @@ _NUMBER_ROLE = {oid.removeprefix(OBJ_PREFIX): role for oid, role in NUMBER_ROLES
 # The sliders' (min, max, step), enforced on the command too: any MQTT client can publish to the topic.
 NUMBER_RANGES = {oid.removeprefix(OBJ_PREFIX): (lo, hi, step) for oid, (_n, _i, lo, hi, step) in NUMBERS.items()}
 
-_soc_lock = None
-_soc_lock_loop = None
+_command_locks = {}
+_command_lock_loop = None
 
 
-def _soc_lock_get():
-    """One lock per event loop, serialising charge-limit writes so two quick slider moves
-    can't interleave a read-modify-write and clobber each other. Re-created if the running
-    loop changes (so per-test event loops don't trip cross-loop binding)."""
-    global _soc_lock, _soc_lock_loop
+def _command_lock_get(group):
+    """Separate climate and charge-limit locks, recreated when the event loop changes."""
+    global _command_lock_loop
     loop = asyncio.get_running_loop()
-    if _soc_lock is None or _soc_lock_loop is not loop:
-        _soc_lock, _soc_lock_loop = asyncio.Lock(), loop
-    return _soc_lock
+    if _command_lock_loop is not loop:
+        _command_locks.clear()
+        _command_lock_loop = loop
+    if group not in _command_locks:
+        _command_locks[group] = asyncio.Lock()
+    return _command_locks[group]
 
 
 async def set_soc_level(which, payload):
@@ -408,7 +410,7 @@ async def set_soc_level(which, payload):
         LOG.warning("Ignoring %s=%s: not %s-%s in steps of %s", which, value, lo, hi, step)
         return
     locale = cfg("R5_LOCALE", "en_GB")
-    async with _soc_lock_get():
+    async with _command_lock_get("soc"):
         try:
             async with aiohttp.ClientSession(timeout=API_TIMEOUT) as websession:
                 vehicle = await _login_vehicle(websession, locale)
@@ -463,17 +465,19 @@ async def run_command(cmd, payload=""):
     locale = cfg("R5_LOCALE", "en_GB")
     dispatched = False
     try:
-        async with aiohttp.ClientSession(timeout=API_TIMEOUT) as websession:
-            vehicle = await _login_vehicle(websession, locale)
-            dispatched = True
-            await action(vehicle)
+        lock = _command_lock_get("climate") if cmd in {"hvac_start", "hvac_stop"} else nullcontext()
+        async with lock:
+            async with aiohttp.ClientSession(timeout=API_TIMEOUT) as websession:
+                vehicle = await _login_vehicle(websession, locale)
+                dispatched = True
+                await action(vehicle)
         LOG.info("Command '%s' sent", cmd)
     except Exception as err:  # noqa: BLE001
         LOG.error("Command '%s' failed: %s", cmd, redact(err))
     finally:
-        # Also on cancellation, so a cancelled press cannot wedge the button. If nothing reached
-        # the car, drop the stamp so a retry goes through; once started the outcome is unknown, so
-        # the stamp stays and a retry cannot send it twice. An in-flight press is not replayed.
+        # Also on cancellation, so a cancelled press cannot wedge the button. If nothing reached the
+        # car, drop the stamp so a retry goes through; once started, the outcome is unknown and a
+        # retry could send it twice, so the stamp stays. A press ignored in flight is not replayed.
         _in_flight.discard(cmd)
         if not dispatched:
             _last_command.pop(cmd, None)
@@ -755,8 +759,12 @@ async def main():
 
     health = await start_health_server()
     state = load_state()
+    # Only this process's successful polls seed the snapshot; never reuse another run's car data.
+    last_data = {}
+    _LATEST.update(ok=False, last_poll=None, data={})
     vsession = VehicleSession(locale)
-    supported = await detect_supported(vsession)
+    unresolved = set(SUPPORT_ENDPOINTS)
+    supported = await detect_supported(vsession, unresolved=unresolved)
     mqtt._MQTT_CTX["supported"], mqtt._MQTT_CTX["dist_unit"] = supported, dist_unit
     _LATEST["supported"] = sorted(supported)
     _LATEST["dist_unit"] = dist_unit  # so the status panel can label range/mileage
@@ -774,6 +782,17 @@ async def main():
             data, location_attrs = await asyncio.wait_for(   # a hung poll can't stall the loop
                 poll_once(vsession, state, capacity, supported, dist_unit),
                 timeout=max(30, interval - 10))
+            if unresolved:
+                previous = set(supported)
+                try:
+                    await asyncio.wait_for(detect_supported(vsession, supported, unresolved),
+                                           timeout=min(API_TIMEOUT.total, max(30, interval - 10)))
+                except Exception as err:  # noqa: BLE001
+                    LOG.warning("Endpoint-support retry failed: %s", redact(err))
+                if supported != previous:
+                    mqtt._MQTT_CTX["supported"] = supported
+                    _LATEST["supported"] = sorted(supported)
+                    mqtt.publish_discovery(client, supported, dist_unit)
             state["last_success"] = now_ts()
             data["api_auth_failure"] = "off"
             data["last_successful_poll"] = iso(state["last_success"])
@@ -782,6 +801,7 @@ async def main():
             # precisely the defect being fixed.
             data.update(freshness_fields(state, data.get("battery_last_activity"), stale_secs,
                                          state["last_success"]))
+            last_data = data
             client.publish(mqtt.STATE_TOPIC, json.dumps(data), retain=True)
             _LATEST.update(ok=True, last_poll=iso(now_ts()), data=data)
             if location_attrs:
@@ -808,7 +828,8 @@ async def main():
             # to the message text for library errors not raised as one. str() of Kamereon's reply
             # is "('err.func.wired.unauthorized', 'Not authorized')", which those words miss. An
             # account behind two-factor sign-in cannot sign in here at all.
-            auth = isinstance(err, (UnauthorizedException, PendingTwoFactorAuthenticationException)) or \
+            auth = isinstance(err, (NotAuthenticatedException, UnauthorizedException,
+                                    PendingTwoFactorAuthenticationException)) or \
                 (isinstance(err, aiohttp.ClientResponseError) and err.status in (401, 403)) or \
                 any(s in str(err).lower() for s in ("login", "password", "credential", "401", "403"))
             # Re-login on a confirmed auth error, or every 3rd failure otherwise (a290 twin's
@@ -816,15 +837,14 @@ async def main():
             # blips that had nothing to do with the login itself.
             if auth or fails % 3 == 0:
                 await vsession.invalidate()
-            client.publish(mqtt.STATE_TOPIC, json.dumps({
+            data = {**last_data,
                 "api_auth_failure": "on" if auth else "off",
                 "last_successful_poll": iso(last_ok),
                 **fresh,
-            }), retain=True)
+            }
+            client.publish(mqtt.STATE_TOPIC, json.dumps(data), retain=True)
             client.publish(mqtt.AVAIL_TOPIC, "online", retain=True)
-            _LATEST.update(ok=False, last_poll=iso(now_ts()), error=redact(err))
-            _LATEST["data"].update(api_auth_failure="on" if auth else "off",
-                                   last_successful_poll=iso(last_ok), **fresh)
+            _LATEST.update(ok=False, last_poll=iso(now_ts()), error=redact(err), data=data)
             save_state(state)
         # exponential backoff on repeated failures (avoid a re-auth storm), capped at 30 min or the interval
         delay = interval if fails == 0 else min(interval * 2 ** (fails - 1), max_backoff)
