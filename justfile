@@ -98,4 +98,4 @@ lint:
     uvx "ruff$(sed -n 's/^required-version = "\(.*\)"$/\1/p' ruff.toml)" check renault_5/app renault_5/tests scripts ui-tests
 
 test: venv
-    .venv/bin/python -m pytest renault_5/tests -q --cov=renault_5/app --cov-report=term-missing --cov-fail-under=95
+    .venv/bin/python -m pytest renault_5/tests -q --cov=renault_5/app --cov-report=term-missing

@@ -23,9 +23,11 @@ class StubClient:
 
     def __init__(self):
         self.pub = {}
+        self.events = []
 
     def publish(self, topic, payload, retain=False):
         self.pub[topic] = payload
+        self.events.append((topic, payload, retain))
 
 
 class _FakeClient:
@@ -47,13 +49,25 @@ class _FakeClient:
         self.subs.append(topic)
 
     def publish(self, topic, payload="", retain=False):
-        self.pubs.append((topic, payload))
+        self.pubs.append((topic, payload, retain))
 
     def connect_async(self, host, port, keepalive=60):   # v0.20.0: retries a broker that is down at boot
         self.conn = (host, port, keepalive)
 
     def loop_start(self):
         self.started = True
+
+
+def _assert_retired(c, topic, required):
+    """Core first disables legacy entities live, then erases their retained discovery."""
+    events = [(p, r) for t, p, r in c.events if t == topic]
+    assert len(events) == 2
+    payload, retain = events[0]
+    assert retain is False
+    conf = json.loads(payload)
+    assert conf["enabled_by_default"] is False
+    assert all(conf[key] == value for key, value in required.items())
+    assert events[1] == ("", True)
 
 
 # --------------------------------------------------------------------------- #
@@ -159,6 +173,7 @@ def test_publish_discovery_location_enabled_vs_disabled(monkeypatch):
     c = StubClient()
     mqtt.publish_discovery(c, set(catalog.OPTIONAL_ENDPOINTS), "km")
     assert '"source_type": "gps"' in c.pub[tracker_topic]
+    assert [(p, r) for t, p, r in c.events if t == tracker_topic] == [(c.pub[tracker_topic], True)]
 
     # disabled: the tracker is cleared AND the retained GPS topics are wiped off the broker
     monkeypatch.setattr(mqtt, "PUBLISH_LOCATION", False)
@@ -167,6 +182,10 @@ def test_publish_discovery_location_enabled_vs_disabled(monkeypatch):
     assert c.pub[tracker_topic] == ""
     assert c.pub[mqtt.ATTR_TOPIC] == ""
     assert c.pub[mqtt.TRACKER_STATE_TOPIC] == ""
+    _assert_retired(c, tracker_topic, {"json_attributes_topic": mqtt.ATTR_TOPIC})
+    assert [(p, r) for t, p, r in c.events if t == mqtt.ATTR_TOPIC] == [("", True)]
+    assert [(p, r) for t, p, r in c.events if t == mqtt.TRACKER_STATE_TOPIC] == [
+        ("None", True), ("", True)]
 
 
 def test_refresh_location_button_cleared_when_location_disabled(monkeypatch):
@@ -182,12 +201,14 @@ def test_refresh_location_button_cleared_when_location_disabled(monkeypatch):
     c = StubClient()
     mqtt.publish_discovery(c, eps, "km")
     assert "command_topic" in c.pub[btn_topic]
+    assert [(p, r) for t, p, r in c.events if t == btn_topic] == [(c.pub[btn_topic], True)]
 
     # location off: the button is cleared even though the endpoint is supported
     monkeypatch.setattr(mqtt, "PUBLISH_LOCATION", False)
     c = StubClient()
     mqtt.publish_discovery(c, eps, "km")
     assert c.pub[btn_topic] == ""
+    _assert_retired(c, btn_topic, {"command_topic": mqtt.CMD_PREFIX + short})
 
     # opted out (the shipped default): cleared even with location on and the endpoint supported.
     # This is the case an existing install upgrades into, so the button must be actively cleared
@@ -197,6 +218,7 @@ def test_refresh_location_button_cleared_when_location_disabled(monkeypatch):
     c = StubClient()
     mqtt.publish_discovery(c, eps, "km")
     assert c.pub[btn_topic] == ""
+    _assert_retired(c, btn_topic, {"command_topic": mqtt.CMD_PREFIX + short})
 
 
 def test_refresh_location_is_off_when_the_option_is_unset():
@@ -210,23 +232,39 @@ def test_refresh_location_is_off_when_the_option_is_unset():
 # broker client + callbacks
 # --------------------------------------------------------------------------- #
 def test_on_message_dispatches(monkeypatch):
-    captured = {}
-    monkeypatch.setattr(mqtt, "_LOOP", object())
-    monkeypatch.setattr(mqtt, "_COMMAND_HANDLER", lambda cmd, payload="": ("CO", cmd, payload))
-    monkeypatch.setattr(mqtt.asyncio, "run_coroutine_threadsafe",
-                        lambda coro, loop: captured.update(coro=coro, loop=loop))
-    mqtt._on_message(None, None, _obj(topic=mqtt.CMD_PREFIX + "horn", payload=b"PRESS", retain=False))
-    assert captured["coro"] == ("CO", "horn", "PRESS")
+    recorded, created, scheduled = [], [], []
 
-    # Since core v0.20.0 a retained command is never replayed, and an empty payload (how a
-    # retained command is cleared, delivered live) does not fire it either.
-    captured.clear()
-    mqtt._on_message(None, None, _obj(topic=mqtt.CMD_PREFIX + "horn", payload=b"PRESS", retain=True))
-    mqtt._on_message(None, None, _obj(topic=mqtt.CMD_PREFIX + "horn", payload=b"", retain=False))
-    assert captured == {}
+    def handler(cmd, payload=""):
+        async def dispatch():
+            recorded.append((cmd, payload))
 
-    mqtt._on_message(None, None, _obj(topic=mqtt.CMD_PREFIX + "soc_max_target", payload=b"90", retain=False))
-    assert captured["coro"] == ("CO", "soc_max_target", "90")
+        coro = dispatch()
+        created.append(coro)
+        return coro
+
+    def schedule(coro, loop):
+        scheduled.append((coro, loop))
+        mqtt.asyncio.run(coro)
+
+    loop = object()
+    monkeypatch.setattr(mqtt, "_LOOP", loop)
+    monkeypatch.setattr(mqtt, "_COMMAND_HANDLER", handler)
+    monkeypatch.setattr(mqtt.asyncio, "run_coroutine_threadsafe", schedule)
+    try:
+        mqtt._on_message(None, None, _obj(topic=mqtt.CMD_PREFIX + "horn", payload=b"PRESS", retain=False))
+        assert recorded == [("horn", "PRESS")]
+        # Retained commands and live empty clears must not reach the car.
+        mqtt._on_message(None, None, _obj(topic=mqtt.CMD_PREFIX + "horn", payload=b"PRESS", retain=True))
+        mqtt._on_message(None, None, _obj(topic=mqtt.CMD_PREFIX + "horn", payload=b"", retain=False))
+        assert recorded == [("horn", "PRESS")]
+        mqtt._on_message(None, None, _obj(topic=mqtt.CMD_PREFIX + "soc_max_target", payload=b"90", retain=False))
+        mqtt._on_message(None, None, _obj(topic="unrelated/topic", payload=b"PRESS", retain=False))
+        assert recorded == [("horn", "PRESS"), ("soc_max_target", "90")]
+        assert len(created) == len(scheduled) == 2
+        assert scheduled == [(coro, loop) for coro in created]
+    finally:
+        for coro in created:
+            coro.close()  # also clean up a coroutine a broken scheduler never submitted
 
 
 def test_on_message_ignores_non_command_and_no_loop(monkeypatch):
@@ -247,7 +285,7 @@ def test_on_connect_subscribes_and_announces():
     # Core v0.19.0 also listens for Home Assistant's birth message, so a restarted HA gets the
     # discovery (and every retirement) re-published instead of missing it.
     assert c.subs == [f"{mqtt.CMD_PREFIX}#", "homeassistant/status"]
-    assert (mqtt.AVAIL_TOPIC, "online") in c.pubs
+    assert [(p, r) for t, p, r in c.pubs if t == mqtt.AVAIL_TOPIC] == [("online", True)]
 
 
 def test_on_disconnect_warns_only_when_unexpected(caplog):
