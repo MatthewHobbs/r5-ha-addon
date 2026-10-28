@@ -265,6 +265,29 @@ def test_detection_wires_catalog_defaults_probe_logging_and_pending_retry(caplog
     ]
 
 
+def test_detection_preserves_model_defaults_and_completed_answers_on_cancellation():
+    class V:
+        async def supports_endpoint(self, ep):
+            if ep == "actions/charge-start":
+                return True
+            raise asyncio.CancelledError
+
+    class Session:
+        async def vehicle(self):
+            return V()
+
+        async def invalidate(self):
+            pass
+
+    defaults = set(main.OPTIONAL_ENDPOINTS) - main.PESSIMISTIC_ENDPOINTS
+    supported, pending = set(defaults), {"actions/charge-start", main.SOC_ENDPOINT}
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(main.detect_supported(Session(), supported, pending))
+    assert defaults | {"actions/charge-start"} <= supported
+    assert "actions/charge-start" not in pending
+    assert main.SOC_ENDPOINT in pending
+
+
 @pytest.mark.parametrize("cancelled", [False, True])
 def test_detection_outer_failure_adapters_preserve_sets_and_propagate_cancellation(monkeypatch, caplog, cancelled):
     error = asyncio.CancelledError() if cancelled else RuntimeError("synthetic outer failure")
@@ -822,10 +845,12 @@ def _wire_main(monkeypatch, poll):
     monkeypatch.setattr(mqtt, "mqtt_connect", connect)
     monkeypatch.setattr(mqtt, "publish_discovery", lambda *a, **k: None)
 
-    async def fake_detect(vs, *, unresolved=None):
+    async def fake_detect(vs, supported=None, unresolved=None):
+        if supported is None:
+            supported = set(main.OPTIONAL_ENDPOINTS)
         if unresolved is not None:
             unresolved.clear()
-        return set(main.OPTIONAL_ENDPOINTS)
+        return supported
 
     monkeypatch.setattr(main, "detect_supported", fake_detect)
 

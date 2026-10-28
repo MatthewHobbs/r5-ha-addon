@@ -436,6 +436,7 @@ async def main():
         latest=_LATEST,
         vsession_factory=VehicleSession,
         support_endpoints=SUPPORT_ENDPOINTS,
+        initial_supported=set(OPTIONAL_ENDPOINTS) - PESSIMISTIC_ENDPOINTS,
         detect_supported=detect_supported,
         run_deploy=deploy.run_deploy,
         poll_once=poll_once,
