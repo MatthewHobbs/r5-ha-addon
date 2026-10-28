@@ -836,7 +836,7 @@ def _wire_main(monkeypatch, poll):
 
     monkeypatch.setattr(main.deploy, "run_deploy", fake_deploy)
 
-    async def fake_health():                       # don't bind a real port in the loop test
+    async def fake_health(health_state=None):      # don't bind a real port in the loop test
         class _Runner:
             async def cleanup(self):
                 pass
