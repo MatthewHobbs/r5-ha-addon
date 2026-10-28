@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Base image updated** to the current Home Assistant 3.24 build (Python 3.14.10, curl 8.23.0). No change in behaviour.
+
 - **Climate Start and Stop keep their order**, even when login is slow; other controls remain independent.
 - **Temporary capability-check failures recover automatically** after healthy polls, restoring supported controls without a restart.
 - **Failed polls retain the last good readings** in MQTT and the status panel, with original vehicle timestamps and updated diagnostics.
