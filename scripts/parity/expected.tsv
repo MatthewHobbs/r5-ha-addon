@@ -42,6 +42,7 @@ model	alpine_a290/dashboards/Images/Map Markers/*	r5	only	6	r5's map markers per
 
 # ---------------------------------------------------------------- one repository only
 local	BACKLOG.md	a290	only	1	a290's own backlog; r5 tracks work in its issues
+local	docs/adr/0001-what-this-add-on-is-why-and-how.md	both	*	227	each repo's own retrospective record: the decisions and the evidence differ where the two cars and the two histories do
 
 # ---------------------------------------------------------------- add-on config
 model	alpine_a290/config.yaml	r5	re:car_render	2	r5's render picker (see Images/Models)
@@ -62,24 +63,21 @@ legacy	alpine_a290/app/catalog.py	both	py:SOC_ENDPOINT,NUMBER_ROLES	7	r5 maps it
 # ---------------------------------------------------------------- main.py
 model	alpine_a290/app/main.py	both	py:<docstring>	27	each docstring states its own car's platform caveats, and r5's describes itself as Topolino65's data layer. Shared runtime extraction will leave main.py as model configuration
 pending	alpine_a290/app/main.py	both	py:<imports>	1	NUMBER_ROLES is r5's legacy role table, which goes with the naming migration. Target: move the role table into model data
-pending	alpine_a290/app/main.py	both	py:_P,LOCATION_CMDS,NUMBER_CMDS,NUMBER_RANGES	21	a290 strips the object-id prefix with obj[_P:]; r5 uses str.removeprefix(OBJ_PREFIX), the better form. Target: port removeprefix to a290
-pending	alpine_a290/app/main.py	both	py:VERSION,CHARGE_STATUS_LABELS,RHD_LOCALES,MILES_LOCALES,PLUG_KM_DELTA,PLUG_SOC_DROP,PLUG_MIN_AGE,PLUG_MAX_AGE,setup_logging,API_TIMEOUT,start_health_server,save_state	26	comment and docstring wording only, plus an f-string vs concatenation in save_state; no behaviour differs. Target: converge when moving this code into the core, or when next touched
-pending	alpine_a290/app/main.py	both	py:freshness_fields	12	docstring wording (a290 cites its v1.24.0 history, r5 adds the parked-car note). Target: move freshness_fields into the core
-pending	alpine_a290/app/main.py	both	py:VehicleSession	16	docstring and comment wording only. Target: move VehicleSession into the core
-pending	alpine_a290/app/main.py	both	py:resolve_account	7	comment wording on which account type each car sits under. Target: move resolve_account into the core
-pending	alpine_a290/app/main.py	both	py:_hvac_due	5	both now refuse the call when the car does not list it and keep the breaker; the docstrings differ in length. Target: move the breaker into the core
-pending	alpine_a290/app/main.py	both	py:_precondition_temp,_hvac_start_action,COMMAND_ACTIONS	11	the same Start Climate option and fallback now; what differs is r5's legacy command keys. Target: move command keys into model data
-legacy	alpine_a290/app/main.py	both	re:lock = _command_lock_get\("climate"\) if cmd in \{"(?:climate|hvac)_start", "(?:climate|hvac)_stop"\} else nullcontext\(\)	2	the climate ordering guard uses each model's existing MQTT button suffixes
-legacy	alpine_a290/app/main.py	both	py:_NUMBER_ROLE,set_soc_level	4	r5 resolves its legacy number names to roles through NUMBER_ROLES; a290 compares the name. Goes with moving number roles into model data
-pending	alpine_a290/app/main.py	both	py:poll_once	57	r5 publishes legacy data keys (battery_autonomy, charger_status, ...) and cabin temperature, plus comment wording. Target: move the keys into model data; cabin temperature follows its own decision
-pending	alpine_a290/app/main.py	both	py:main	43	main loop: r5 installs signal handlers before startup and logs poll duration; the failure path now saves state as a290 does, so what remains is wording and order. Target: move the main loop into the core
+pending	alpine_a290/app/main.py	both	py:_P,LOCATION_CMDS,NUMBER_CMDS	19	a290 strips the object-id prefix with obj[_P:]; r5 uses str.removeprefix(OBJ_PREFIX), the better form. Target: port removeprefix to a290
+pending	alpine_a290/app/main.py	both	py:VERSION,CHARGE_STATUS_LABELS,PLUG_KM_DELTA,PLUG_SOC_DROP,PLUG_MIN_AGE,PLUG_MAX_AGE,setup_logging,API_TIMEOUT,save_state	21	comment and docstring wording only, plus an f-string vs concatenation in save_state; no behaviour differs. Target: converge when moving this code into the core, or when next touched
+pending	alpine_a290/app/main.py	both	py:_precondition_temp,_hvac_start_action,COMMAND_ACTIONS	11	both now resolve the temperature the same way; what remains is r5's legacy command keys. Target: move command keys into model data
+legacy	alpine_a290/app/main.py	both	re:climate_cmds=frozenset\(\{"(?:climate|hvac)_start", "(?:climate|hvac)_stop"\}\),	2	the climate ordering guard uses each model's existing MQTT button suffixes
+pending	alpine_a290/app/main.py	both	py:NUMBER_RANGES	2	the sliders' (min, max, step) table those bounds read. Target: r5 ports a290's runtime-hardening PR (charge-limit bounds)
+legacy	alpine_a290/app/main.py	both	py:_NUMBER_ROLE,set_soc_level	3	r5 resolves its legacy number names to roles through NUMBER_ROLES; a290 uses the shared default role mapping. Goes with moving number roles into model data
+pending	alpine_a290/app/main.py	both	py:_POLL_KEYS,poll_once	14	r5 maps its legacy data keys (_POLL_KEYS) and enables cabin temperature in poll_once; a290 uses the shared default keys. Target: move the keys into model data; cabin temperature follows its own decision
+pending	alpine_a290/app/main.py	both	py:main	4	both now delegate startup, poll loop, backoff, relogin cadence and shutdown to core run_main; r5 passes its legacy plug/timestamp keys, log_duration=True and early_signals=True. Target: move keys and runtime flags into model data
 
 # ---------------------------------------------------------------- deploy.py
 pending	alpine_a290/app/deploy.py	both	py:<docstring>	11	docstring wording. Target: converge the wording, or move the deploy engine into the core
 model	alpine_a290/app/deploy.py	both	py:IMG_MAP,_RENDER_TRIMS,_selected_render,_cdnify	18	r5's car_render option swaps the background for the chosen trim render
 model	alpine_a290/app/deploy.py	both	py:_CHARGE_TARGET_REC	2	one marker comment, now worded the same way apart from the car's name
-pending	alpine_a290/app/deploy.py	both	py:_fetch_dashboard,_REFRESH_LOCATION_BUTTON,_references,_drop_cards_referencing,_deploy_one,run_deploy	35	comment wording and the unrelated bubble/standard injection branches each add below the shared pruning logic. Target: converge wording
-pending	alpine_a290/app/deploy.py	both	py:_WS	4	one comment. Target: converge, either way
+pending	alpine_a290/app/deploy.py	both	py:_fetch_dashboard,_REFRESH_LOCATION_BUTTON,_references,_drop_cards_referencing,_deploy_one,run_deploy	35	comment wording and the unrelated bubble/standard injection branches each add below the shared pruning logic. Target: converge wording.
+pending	alpine_a290/app/deploy.py	both	py:_WS	4	one comment. Target: converge, either way.
 
 # ---------------------------------------------------------------- dashboards
 model	alpine_a290/dashboards/Packages/a290_test.yaml	both	hunk:Every helper	2	each package names the OTHER car's test mode
@@ -90,7 +88,7 @@ local	alpine_a290/dashboards/INSTALLATION.md	r5	re:^Existing users who selected	
 model	alpine_a290/dashboards/INSTALLATION.md	both	hunk:start_air_conditioner	11	r5 keeps its production control names and greyed-out charge tile; refresh-location evidence is from an A290, not an R5
 model	alpine_a290/dashboards/INSTALLATION.md	both	hunk:never clashes	2	each guide names the OTHER car's test-mode namespace
 local	alpine_a290/dashboards/INSTALLATION.md	r5	hunk:^### Migrating an existing	7	r5-only instructions for migrating the previously bare test sensor IDs and reloading the replacement package
-local	alpine_a290/dashboards/INSTALLATION.md	both	hunk:^- \*\*No `	2	the entity-picker prefix is r5 here and alpine_a290 in the twin
+local	alpine_a290/dashboards/INSTALLATION.md	both	hunk:^- \*\*No `	2	the entity-picker prefix is r5 in r5's guide and alpine_a290 in a290's
 model	alpine_a290/dashboards/INSTALLATION.md	r5	hunk:^## Customising your	44	r5's trim and colour renders and map markers, preserved from CUSTOMISING in the installation guide; a290 has one render
 model	alpine_a290/dashboards/USER-GUIDE.md	both	hunk:^> unreliable	3	cabin temperature is still published on R5 with support unestablished; a290 retired it
 local	alpine_a290/dashboards/USER-GUIDE.md	both	hunk:^\| Range \|	14	abbreviated production sensor tails retain R5's existing names; full entity-ID normalisation intentionally does not rewrite prose suffixes
@@ -98,63 +96,47 @@ local	alpine_a290/dashboards/USER-GUIDE.md	both	hunk:…_gps_last_activity	2	r5'
 model	alpine_a290/dashboards/USER-GUIDE.md	r5	hunk:That observation is from	1	the parked-car measurements are from an A290, not an R5
 local	alpine_a290/dashboards/USER-GUIDE.md	both	hunk:button\.alpine_a290_sound_horn	2	r5 keeps start_air_conditioner and stop_air_conditioner production control names
 model	alpine_a290/dashboards/USER-GUIDE.md	both	hunk:Refresh Location is off by default	18	r5's retained greyed-out tile and climate naming/temperature fallback; observed A290 refresh and charge behaviour is explicitly inferred for R5
-model	alpine_a290/dashboards/USER-GUIDE.md	both	hunk:`soc-levels` endpoint	2	the twin states A290 support; R5's guide leaves the displayed control gated on the car's supported endpoint
+model	alpine_a290/dashboards/USER-GUIDE.md	both	hunk:`soc-levels` endpoint	2	a290's guide states A290 support; R5's guide leaves the displayed control gated on the car's supported endpoint
 local	alpine_a290/dashboards/USER-GUIDE.md	both	hunk:screen are real but old	7	r5's guide states the actual stale_hours threshold rather than promising an overnight stale warning with a 36-hour default
 local	alpine_a290/dashboards/USER-GUIDE.md	both	hunk:battery percentage on the dashboard	2	r5's current production battery timestamp remains battery_last_activity
-model	alpine_a290/dashboards/USER-GUIDE.md	both	hunk:The same entities and data, styled	5	r5 retains the standard dashboard's greyed-out charge tile, so the twin's neither-dashboard statement cannot be copied; charger controls remain separate
+model	alpine_a290/dashboards/USER-GUIDE.md	both	hunk:The same entities and data, styled	5	r5 retains the standard dashboard's greyed-out charge tile, so a290's neither-dashboard statement cannot be copied; charger controls remain separate
 pending	alpine_a290/dashboards/front-end.txt	r5	hunk:name: Cabin Temp	14	r5's Cabin Temp card; the A290 never returns cabin temperature. Target: follows the cabin-temperature decision
 pending	alpine_a290/dashboards/front-end.txt	r5	hunk:name: Start Charging	18	r5's standard dashboard keeps a greyed-out Start Charging tile. Target: owner decision, then one dashboard
 pending	alpine_a290/dashboards/front-end.txt	both	re:API request failed due to an authentication|Auth Failure\*\* card	2	alarm-card wording ("An Alpine API" / "API Auth Failure" on a290). Target: port a290's wording to r5
 model	alpine_a290/dashboards/front-end-bubble.txt	both	re:^  - title:	2	the Bubble view title names the car
-model	alpine_a290/dashboards/front-end-bubble.txt	both	re:# Ghost tile|signal the limitation	4	the same sentence wrapped and worded per car (r5 says the API, a290 the A290's API). Only the wording around the car name differs, and both are accurate
+model	alpine_a290/dashboards/front-end-bubble.txt	both	re:# Ghost tile|signal the limitation	4	the same sentence wrapped and worded per car (a290 says the A290's API, r5 the API). Only the wording around the car name differs, and both are accurate
 
 # ---------------------------------------------------------------- repo config and CI
-local	justfile	both	hunk:parity	2	each repo's `parity` comment names the OTHER as the twin it needs (r5 the a290 twin, a290 the r5 twin)
-local	.github/workflows/ci.yaml	a290	re:name:\ Parity\ with\ r5	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	.github/workflows/ci.yaml	r5	re:name:\ Parity\ with\ a290	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	.github/workflows/ci.yaml	a290	re:\-\ name:\ Check\ out\ r5\-ha\-addon\ main\ \(read\-only\)	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	.github/workflows/ci.yaml	r5	re:\-\ name:\ Check\ out\ a290\-ha\-addon\ main\ \(read\-only\)	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	.github/workflows/ci.yaml	a290	re:repository:\ MatthewHobbs/r5\-ha\-addon	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	.github/workflows/ci.yaml	r5	re:repository:\ MatthewHobbs/a290\-ha\-addon	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	.github/workflows/ci.yaml	a290	re:\-\ name:\ a290\ and\ r5\ differ\ only\ as\ listed	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	.github/workflows/ci.yaml	r5	re:\-\ name:\ r5\ and\ a290\ differ\ only\ as\ listed	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	justfile	a290	re:\#\ Same\ command\ as\ the\ Parity\ job:\ diff\ this\ add\-on\ against\ r5\-ha\-	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	justfile	a290	re:\#\ tracked\ files\ \(content\ as\ in\ its\ working\ tree\)\ and\ tracked\ modes	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	justfile	a290	re:\#\ is\ refused\ rather\ than\ silently\ walked\.\ Unset,\ it\ clones\ r5's\ mai	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	justfile	r5	re:\#\ Same\ command\ as\ the\ Parity\ job:\ diff\ this\ add\-on\ against\ a290\-ha	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	justfile	r5	re:\#\ its\ tracked\ files\ \(content\ as\ in\ its\ working\ tree\)\ and\ tracked\ 	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	justfile	r5	re:\#\ else\ is\ refused\ rather\ than\ silently\ walked\.\ Unset,\ it\ clones\ a29	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	justfile	a290	re:twin="\$tmp/r5\-ha\-addon"	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	justfile	a290	re:git\ clone\ \-\-quiet\ \-\-depth\ 1\ https://github\.com/MatthewHobbs/r5\-ha\-ad	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	justfile	r5	re:twin="\$tmp/a290\-ha\-addon"	1	each repo names the OTHER as the twin its parity job checks out and compares against
-local	justfile	r5	re:git\ clone\ \-\-quiet\ \-\-depth\ 1\ https://github\.com/MatthewHobbs/a290\-ha\-	1	each repo names the OTHER as the twin its parity job checks out and compares against
+pending	.github/workflows/ci.yaml	both	hunk:name: Parity with r5|name: Parity with a290|fail on any difference from|Check out r5-ha-addon main|Check out a290-ha-addon main|differ only as listed|repository: MatthewHobbs/	8	r5 added its own reciprocal job (#126): symmetric wording (each names the other repo, checks out the other's main, names its own check "differ only as listed" the other way round). Target: converge wording; whether r5's parity job becomes a required check is a separate owner decision once it has run stably
+pending	justfile	both	hunk:parity|against r5-ha-addon through|against a290-ha-addon through|twin=	8	r5 added its own reciprocal parity recipes (#126), symmetric wording (each names the other repo as its twin). Target: converge wording
+local	.github/workflows/ci.yaml	both	re:BUILD_FROM|FROM ghcr.io/home-assistant/base	2	the same comment on the build step, in a different place. Target: one place in both
 local	.github/workflows/ci.yaml	both	hunk:a VIN in a test fixture|pair of public add-on repos	6	each repo's own account of the same script (a290 dates its leaks, r5 names the twin); both true, so neither is drift
-local	.github/workflows/ci.yaml	both	re:BUILD_FROM|FROM ghcr.io/home-assistant/base	2	the comment now sits above the step in both, so only this repo's context path differs
-local	docs/adr/0001-what-this-add-on-is-why-and-how.md	both	*	227	each repo's own retrospective record: the decisions and the evidence differ where the two cars and the two histories do
-local	.gitignore	both	*	3	one section order now; r5 keeps its local reference/ checkout at the top (never committed), which a290 has no equivalent of
+local	.gitignore	both	*	3	section order differs; r5 ignores a local reference/ checkout. Target: one section order
 
 # --- UI gate coverage: dispatching-off pass and all Bubble pop-ups
 # Listed before the whole-file harness entries below so these lines are taken here, not there.
-pending	ui-tests/seed.py	both	py:<docstring>,<imports>,TOGGLES,MIN_POPUPS,TEMPLATE_DIR,HELPER_STATES,helper_states,state_for,derive_passes,TEXT_KEYS,IF_IS_STATE,ACTION_KEYS,_reads_state,expected_labels,popups_in,write_manifest,main	17	the pretty-location helper is derived from the bundled template in both now; what remains is a pass per TOGGLES entry and comment wording. Target: the pass-per-toggle change, then the wording
-pending	ui-tests/check_overflow.py	both	py:<docstring>,JS_POPUP_SHOWS,_missing_labels,POPUP_SHOT_NAMES,_open_popup,_capture_popup,run	89	the service-worker barrier, fresh-document pop-up recovery and card-mod retry are ported; residue is comment wording and the JS_POPUP_SHOWS pop-up-by-hash match, which a290 has and r5 has not ported. Target: converge wording; port the hash match
+local	ui-tests/seed.py	both	py:self_test	4	each repo's short-date self-test indexes its own bubble dashboard by name (a290 alpine-bubble, r5 renault-5-bubble); the function is otherwise identical
+pending	ui-tests/seed.py	both	py:<docstring>,<imports>,TOGGLES,MIN_POPUPS,TEMPLATE_DIR,HELPER_STATES,helper_states,state_for,derive_passes,TEXT_KEYS,IF_IS_STATE,ACTION_KEYS,_reads_state,expected_labels,popups_in,write_manifest,main	17	both derive and seed the bundled pretty-location template; residue is MIN_POPUPS (a290 8, r5 9), template-seeding comment wording and helper_states's block/blk variable name. Target: retain each dashboard's pop-up floor until the dashboards converge; converge wording and variable naming
+pending	ui-tests/check_overflow.py	both	py:<docstring>,JS_POPUP_SHOWS,_missing_labels,POPUP_SHOT_NAMES,_open_popup,_capture_popup,run	89	r5 ported the harness updates (#124) and the service-worker barrier and recoveries (#139, from a290 #218); residue is comment wording and JS_POPUP_SHOWS's match-by-hash, which r5 has not ported. Target: converge wording; r5 ports the match-by-hash
 
 # ---------------------------------------------------------------- UI harness (r5's harness PR is in flight)
-pending	ui-tests/check_overflow.py	both	*	78	residue after r5 #105 ported the harness: dashboard slugs, diag comments and wording. Target: converge wording; slugs follow r5's naming migration release
-pending	ui-tests/seed.py	both	*	103	residue after r5 #105: dashboard slugs, the r5 ids in KNOWN/DERIVED_AGE/IMPLIES, comment wording, and the date templates. Target: converge wording
-pending	ui-tests/README.md	both	*	75	tile and timestamp names in the prose, after the completeness paragraph was ported (#115). Target: converge the remaining wording; names follow r5's naming migration release
+pending	ui-tests/check_overflow.py	both	*	78	residue after r5 #105 and #124 ported the harness: dashboard slugs, diag comments and wording. Target: converge wording; slugs follow r5's naming migration release
+pending	ui-tests/seed.py	both	*	99	residue after r5 #105, #124 and #201: dashboard slugs, KNOWN's charging-time entity and number-state formatting, and comment/docstring wording (including legacy timestamp names). Target: converge wording and formatting; ids follow r5's naming migration release
+pending	ui-tests/README.md	both	*	75	residue after r5 #105: tile and timestamp names in the prose. Target: converge wording; names follow r5's naming migration release
 
 # ---------------------------------------------------------------- prose and tests, excused wholesale
 # These are the only unguarded entries (count *): drift inside them is not caught. They are
 # hand-maintained per repo today, and pinning a count would make every edit bump it blindly.
 pending	alpine_a290/tests/test_*.py	both	*	*	tests are largely rewritten per repo (test_runtime.py is 14% line-identical). Target: move shared runtime tests into the core; before that, port stronger behavioural assertions between the two suites
 pending	alpine_a290/DOCS.md	both	*	*	each add-on's options page; 38% shared. r5's claim that its entities bind straight to Topolino65 was corrected in r5 #102. Target: reconcile with r5's naming migration release
-pending	README.md	both	*	*	repository README; 44% shared. Target: same as DOCS.md
 pending	CONTRIBUTING.md	both	*	*	each repo's contributor notes, worded for its own car (names, model codes, endpoint facts, the boot recipe's env vars). Target: same as DOCS.md
+pending	README.md	both	*	*	repository README; 44% shared. Target: same as DOCS.md
 pending	alpine_a290/README.md	both	*	40	the add-on's store README. Target: same as DOCS.md
 # ---------------------------------------------------------------- Supervisor pilot + AppArmor pin (a290 #160, r5 #108)
 # --- pilot dashboard probe (a290 #165, mirrored by r5 in #108)
 # Both pilots now test the manifest's dashboard default without overriding it.
 # ---------------------------------------------------------------- Supervisor pilot as mirrored by r5 (#108, 4dd52bf)
 model	scripts/supervisor-pilot.sh	both	re:a290-supervisor|r5-supervisor|local_alpine_a290|local_renault_5|pilot-registry|pilot-build|pilot-no-egress	16	the pilot's container, registry, provenance-label and egress-rule names carry each add-on's own short name
-local	scripts/supervisor-pilot.sh	both	hunk:Published	4	r5's poll-success log line is "Published in <s>s" where a290's is "Published: ", so each pilot greps its own; the guard follows each repo's main.py and r5 keeps its line (confirmed on r5 2026-09-27)
+local	scripts/supervisor-pilot.sh	both	hunk:poll-success line is|addon_log_has "Published	4	r5's poll-success log line is "Published in <s>s" where a290's is "Published: ", so each pilot greps its own; the guard follows each repo's main.py and r5 keeps its line (confirmed on r5 2026-09-27)
 local	ui-tests/run.sh	both	re:^\# hand, together, when the gate's HA floor allows it	2	each copy names the other as the twin it must match; the sentence is otherwise the same
+pending	justfile	both	*	4	same comment rewrite on both sides (word cap); no behaviour change. Target: r5 takes the rewrite; and a290 has a `tag` recipe. Target: r5 takes it
