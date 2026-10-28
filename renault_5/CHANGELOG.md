@@ -5,11 +5,16 @@
 - **Fixed: clearing Account ID auto-detects the account again.** Clearing `account_id` used to send
   the literal word `null` as the account id instead of auto-detecting the account.
 - **Base image updated** to the current Home Assistant 3.24 build (Python 3.14.10, curl 8.23.0). No change in behaviour.
+- **Start Air Conditioner can be set to a fixed target temperature.** Leave `precondition_temperature` empty to keep using the car's own preconditioning temperature (shown as Desired Temp on the dashboard, with a 21 °C fallback when the setting cannot be read), or enter 16–27 °C to override it.
 - The latest poll reaches MQTT after a delayed broker connection or reconnect, without waiting for another poll.
 - **Climate Start and Stop keep their order**, even when login is slow; other controls remain independent.
 - **Temporary capability-check failures recover automatically** after healthy polls, restoring supported controls without a restart.
 - **Failed polls retain the last good readings** in MQTT and the status panel, with original vehicle timestamps and updated diagnostics.
 - **Expired API sessions trigger API Auth Failure immediately** and force a fresh login on the next poll.
+- **Climate schedule polling waits until the endpoint is confirmed** instead of calling it after a failed startup check.
+- **Startup and recovery fixes:** dashboard auto-deploy times out on a silent Home Assistant proxy instead of hanging before polling starts and removes an empty dashboard if saving its layout fails; a failed location fetch keeps the last usable GPS timestamp; and a failed poll saves state so a restart no longer re-probes everything the car just refused.
+- **Standard dashboard clean-up:** the Last Charge section drops the duplicate Initial and Uplift tiles, the troubleshooting card names **API Auth Failure** consistently, and deployed section headings wrap long titles on Home Assistant 2026.10 too.
+- **Last Successful Poll now uses a cloud-check icon** instead of the generic eye.
 
 - **Test Charge now ships as a self-contained optional package.** Manually install
   `dashboards/Packages/r5_test.yaml` under `/config/packages/`, enable packages in
