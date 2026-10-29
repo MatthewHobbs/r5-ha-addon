@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.10.0
 
 - **Fixed: clearing Account ID auto-detects the account again.** Clearing `account_id` used to send
   the literal word `null` as the account id instead of auto-detecting the account.
