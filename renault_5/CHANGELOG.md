@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Fixed: clearing Account ID auto-detects the account again.** Clearing `account_id` used to send
+  the literal word `null` as the account id instead of auto-detecting the account.
 - **Base image updated** to the current Home Assistant 3.24 build (Python 3.14.10, curl 8.23.0). No change in behaviour.
 - The latest poll reaches MQTT after a delayed broker connection or reconnect, without waiting for another poll.
 - **Climate Start and Stop keep their order**, even when login is slow; other controls remain independent.
