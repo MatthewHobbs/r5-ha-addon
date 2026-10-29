@@ -53,10 +53,10 @@ export R5_CAR_RENDER="$(bashio::config 'car_render')"
 
 # Optional EV-charger entities for the dashboard's "Smart Charging" card (any charger
 # integration, e.g. Octopus Intelligent). Blank ones are skipped; all blank => no card.
-export R5_CHARGER_SMART_CHARGE="$(bashio::config 'charger_smart_charge')"
-export R5_CHARGER_BUMP_CHARGE="$(bashio::config 'charger_bump_charge')"
-export R5_CHARGER_TARGET_SOC="$(bashio::config 'charger_target_soc')"
-export R5_CHARGER_TARGET_TIME="$(bashio::config 'charger_target_time')"
-export R5_CHARGER_DISPATCHING="$(bashio::config 'charger_dispatching')"
+export R5_CHARGER_SMART_CHARGE="$(opt 'charger_smart_charge')"
+export R5_CHARGER_BUMP_CHARGE="$(opt 'charger_bump_charge')"
+export R5_CHARGER_TARGET_SOC="$(opt 'charger_target_soc')"
+export R5_CHARGER_TARGET_TIME="$(opt 'charger_target_time')"
+export R5_CHARGER_DISPATCHING="$(opt 'charger_dispatching')"
 
 exec python3 -u /app/main.py
