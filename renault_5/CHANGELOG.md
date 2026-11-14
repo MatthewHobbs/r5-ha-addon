@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Dependencies updated:** the Home Assistant base image, `renault-api` (0.6.3) and `paho-mqtt` (2.2.0). No change in behaviour.
+- **Security scan fix:** the image now upgrades `krb5-libs` to 1.22.3 or later, which clears 16 high-severity findings reported against the base image. The add-on does not use Kerberos, so nothing was exposed in normal use.
+
 ## 1.10.0
 
 - **Fixed: clearing Account ID auto-detects the account again.** Clearing `account_id` used to send
