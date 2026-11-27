@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Dashboards no longer reference a personal theme. Bubble pop-ups keep their dark design and readable text even when Home Assistant uses a light theme. For an auto-deployed dashboard, enable `redeploy_dashboard` and restart the app; redeploying replaces dashboard edits. For a manually pasted dashboard, paste the updated dashboard YAML again, preserving any personal edits first.
+- Updated the bundled XML library. No change to vehicle polling or controls.
+
 ## 1.10.1
 
 - **Dependencies updated:** the Home Assistant base image, `renault-api` (0.6.3) and `paho-mqtt` (2.2.0). No change in behaviour.
