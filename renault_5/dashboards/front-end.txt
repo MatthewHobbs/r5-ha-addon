@@ -3,7 +3,6 @@
     path: car-r5
     title: Renault 5
     icon: mdi:car
-    theme: poplars-dark
     sections:
     - type: grid
       card_mod:
